@@ -20,6 +20,7 @@ struct SSaveEntry
 	std::string m_Key;
 	std::string m_ServerAddress;
 	std::string m_Map;
+	long long m_SavedAtUnix = 0;
 	std::vector<std::string> m_vPlayers;
 };
 
@@ -130,7 +131,20 @@ public:
 			Entry.m_Key = Unescape(vFields[0]);
 			Entry.m_ServerAddress = Unescape(vFields[1]);
 			Entry.m_Map = Unescape(vFields[2]);
-			for(size_t i = 3; i < vFields.size(); ++i)
+
+			size_t PlayersStart = 3;
+			if(vFields.size() >= 5)
+			{
+				char *pEnd = nullptr;
+				const long long SavedAt = std::strtoll(vFields[3].c_str(), &pEnd, 10);
+				if(pEnd && *pEnd == '\0')
+				{
+					Entry.m_SavedAtUnix = SavedAt;
+					PlayersStart = 4;
+				}
+			}
+
+			for(size_t i = PlayersStart; i < vFields.size(); ++i)
 				Entry.m_vPlayers.push_back(Unescape(vFields[i]));
 			std::sort(Entry.m_vPlayers.begin(), Entry.m_vPlayers.end());
 
@@ -149,11 +163,11 @@ public:
 		if(!File)
 			return false;
 
-		static constexpr const char *HEADER = "# BKW saves v1\n";
+		static constexpr const char *HEADER = "# BKW saves v2\n";
 		io_write(File, HEADER, (unsigned)std::char_traits<char>::length(HEADER));
 		for(const SSaveEntry &Entry : m_vEntries)
 		{
-			std::string Line = Escape(Entry.m_Key) + "\t" + Escape(Entry.m_ServerAddress) + "\t" + Escape(Entry.m_Map);
+			std::string Line = Escape(Entry.m_Key) + "\t" + Escape(Entry.m_ServerAddress) + "\t" + Escape(Entry.m_Map) + "\t" + std::to_string(Entry.m_SavedAtUnix);
 			for(const std::string &Player : Entry.m_vPlayers)
 				Line += "\t" + Escape(Player);
 			Line += "\n";
