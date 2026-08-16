@@ -18,10 +18,11 @@ jobs:
           ref: agent/bkw-save-system
           fetch-depth: 0
       - name: Apply BKW patch
-        run: python3 scripts/bkw_apply_save_warning.py
+        run: python3 scripts/bkw_apply_save_warning_v2.py
       - name: Remove temporary patch files
         run: |
           rm -f scripts/bkw_apply_save_warning.py
+          rm -f scripts/bkw_apply_save_warning_v2.py
           rm -f .github/workflows/bkw-save-warning-patch.yml
       - name: Commit patch
         run: |
