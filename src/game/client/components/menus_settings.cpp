@@ -62,12 +62,20 @@ void CMenus::RenderSettings(CUIRect MainView)
 		static int s_PlayerInfoToggleId;
 		static CLineInputBuffered<64> s_PlayerInfoCommandInput;
 		static bool s_PlayerInfoCommandInitialized = false;
+		static int s_ClansToggleId;
+		static CLineInputBuffered<64> s_ClansCommandInput;
+		static bool s_ClansCommandInitialized = false;
 
 		s_SaveStore.Load(Storage());
 		if(!s_PlayerInfoCommandInitialized)
 		{
 			s_PlayerInfoCommandInput.Set(GameClient()->m_BindChat.BkwPlayerInfoChatCommand());
 			s_PlayerInfoCommandInitialized = true;
+		}
+		if(!s_ClansCommandInitialized)
+		{
+			s_ClansCommandInput.Set(GameClient()->m_BindChat.BkwClansChatCommand());
+			s_ClansCommandInitialized = true;
 		}
 
 		const bool Online = Client()->State() == IClient::STATE_ONLINE;
@@ -339,6 +347,48 @@ void CMenus::RenderSettings(CUIRect MainView)
 			Ui()->DoLabel(&Privacy, "Результат виден только вам.", 11.0f, TEXTALIGN_ML);
 			TextRender()->TextColor(TextRender()->DefaultTextColor());
 		}
+
+		PageView.HSplitTop(24.0f, nullptr, &PageView);
+		CUIRect ClansHeader;
+		PageView.HSplitTop(28.0f, &ClansHeader, &PageView);
+		Ui()->DoLabel(&ClansHeader, "BKW — История кланов", 22.0f, TEXTALIGN_ML);
+		PageView.HSplitTop(8.0f, nullptr, &PageView);
+
+		const bool ClansEnabled = GameClient()->m_BindChat.BkwClansEnabled();
+		CUIRect ClansToggle;
+		PageView.HSplitTop(28.0f, &ClansToggle, &PageView);
+		if(DoButton_CheckBox(&s_ClansToggleId, "История кланов", ClansEnabled ? 1 : 0, &ClansToggle))
+			GameClient()->m_BindChat.SetBkwClansEnabled(!ClansEnabled);
+
+		if(GameClient()->m_BindChat.BkwClansEnabled())
+		{
+			PageView.HSplitTop(8.0f, nullptr, &PageView);
+			CUIRect ClansCard;
+			PageView.HSplitTop(126.0f, &ClansCard, &PageView);
+			ClansCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+			ClansCard.Margin(10.0f, &ClansCard);
+
+			CUIRect Description, CommandLabel, CommandInput, Example, Privacy;
+			ClansCard.HSplitTop(24.0f, &Description, &ClansCard);
+			Ui()->DoLabel(&Description, "Показывает историю кланов игрока с Teerank. Команда остаётся локальной.", 11.0f, TEXTALIGN_ML);
+			ClansCard.HSplitTop(20.0f, &CommandLabel, &ClansCard);
+			Ui()->DoLabel(&CommandLabel, "Локальная команда:", 11.0f, TEXTALIGN_ML);
+			ClansCard.HSplitTop(28.0f, &CommandInput, &ClansCard);
+			if(Ui()->DoEditBox(&s_ClansCommandInput, &CommandInput, 12.0f))
+			{
+				GameClient()->m_BindChat.SetBkwClansChatCommand(s_ClansCommandInput.GetString());
+				if(!s_ClansCommandInput.IsActive())
+					s_ClansCommandInput.Set(GameClient()->m_BindChat.BkwClansChatCommand());
+			}
+			ClansCard.HSplitTop(22.0f, &Example, &ClansCard);
+			char aClansExample[160];
+			str_format(aClansExample, sizeof(aClansExample), "Пример: %s Akella", GameClient()->m_BindChat.BkwClansChatCommand());
+			Ui()->DoLabel(&Example, aClansExample, 11.0f, TEXTALIGN_ML);
+			ClansCard.HSplitTop(22.0f, &Privacy, &ClansCard);
+			TextRender()->TextColor(ColorRGBA(0.6f, 0.9f, 0.6f, 1.0f));
+			Ui()->DoLabel(&Privacy, "Источник: Teerank • результат виден только вам.", 11.0f, TEXTALIGN_ML);
+			TextRender()->TextColor(TextRender()->DefaultTextColor());
+		}
 	};
 
 	if(g_Config.m_BcSettingsLayout == 0)
@@ -477,7 +527,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 
 			CUIRect ContentView = PageView;
 			const float ContentStartY = ContentView.y;
-			const float VirtualHeightBoost = Page == SETTINGS_GENERAL ? 120.0f : (Page == SETTINGS_CREDITS ? 2050.0f : 96.0f);
+			const float VirtualHeightBoost = Page == SETTINGS_GENERAL ? 120.0f : (Page == SETTINGS_CREDITS ? 2350.0f : 96.0f);
 			ContentView.h = PageView.h + VirtualHeightBoost;
 
 			RenderSettingsPage(ContentView);
@@ -937,12 +987,8 @@ bool CMenus::RenderHslaScrollbars(CUIRect *pRect, unsigned int *pColor, bool Alp
 	};
 
 	auto &&RenderAlphaRect = [&](CUIRect *pColorRect, const ColorRGBA &CurColorFull) {
-		ColorHSLA LeftColor = color_cast<ColorHSLA>(CurColorFull);
-		ColorHSLA RightColor = color_cast<ColorHSLA>(CurColorFull);
-		LeftColor.a = 0.0f;
-		RightColor.a = 1.0f;
-		const ColorRGBA LeftColorRGBA = color_cast<ColorRGBA>(LeftColor);
-		const ColorRGBA RightColorRGBA = color_cast<ColorRGBA>(RightColor);
+		const ColorRGBA LeftColorRGBA = color_cast<ColorRGBA>(color_cast<ColorHSLA>(CurColorFull).WithAlpha(0.0f));
+		const ColorRGBA RightColorRGBA = color_cast<ColorRGBA>(color_cast<ColorHSLA>(CurColorFull).WithAlpha(1.0f));
 		Graphics()->SetColor4(LeftColorRGBA, RightColorRGBA, RightColorRGBA, LeftColorRGBA);
 		IGraphics::CFreeformItem Freeform(pColorRect->x, pColorRect->y, pColorRect->x + pColorRect->w, pColorRect->y, pColorRect->x, pColorRect->y + pColorRect->h, pColorRect->x + pColorRect->w, pColorRect->y + pColorRect->h);
 		Graphics()->QuadsDrawFreeform(&Freeform, 1);
