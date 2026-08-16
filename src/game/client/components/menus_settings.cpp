@@ -56,6 +56,9 @@ void CMenus::RenderSettings(CUIRect MainView)
 		static CButtonContainer s_SaveButton;
 		static CButtonContainer s_aLoadButtons[256];
 		static CButtonContainer s_aDeleteButtons[256];
+		static int s_CheckpointsToggleId;
+		static CButtonContainer s_CheckpointMouseLeftButton;
+		static CButtonContainer s_CheckpointMouseRightButton;
 
 		s_SaveStore.Load(Storage());
 
@@ -143,93 +146,148 @@ void CMenus::RenderSettings(CUIRect MainView)
 			TextRender()->TextColor(0.65f, 0.65f, 0.65f, 1.0f);
 			Ui()->DoLabel(&Empty, "Пока нет сохранений.", 13.0f, TEXTALIGN_ML);
 			TextRender()->TextColor(TextRender()->DefaultTextColor());
-			return;
 		}
-
-		const size_t MaxRendered = minimum<size_t>(s_SaveStore.Entries().size(), 256);
-		for(size_t Index = 0; Index < MaxRendered; ++Index)
+		else
 		{
-			const Bkw::SSaveEntry &Entry = s_SaveStore.Entries()[Index];
-			const bool ServerMatches = Online && str_comp(Entry.m_ServerAddress.c_str(), ServerInfo.m_aAddress) == 0;
-			const bool MapMatches = Online && str_comp(Entry.m_Map.c_str(), ServerInfo.m_aMap) == 0;
-			const bool TeamMatches = InDdraceTeam && Entry.m_vPlayers == vCurrentPlayers;
-			const long long NowUnix = (long long)std::time(nullptr);
-			const int CooldownLeft = Entry.m_SavedAtUnix > 0 ? maximum(0, 30 - (int)(NowUnix - Entry.m_SavedAtUnix)) : 0;
-			const bool CooldownReady = CooldownLeft == 0;
-			const bool CanLoad = ServerMatches && MapMatches && TeamMatches && CooldownReady;
-
-			CUIRect Card;
-			PageView.HSplitTop(104.0f, &Card, &PageView);
-			PageView.HSplitTop(8.0f, nullptr, &PageView);
-			Card.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
-			Card.Margin(8.0f, &Card);
-
-			CUIRect Title, Meta, Players, Buttons;
-			Card.HSplitTop(20.0f, &Title, &Card);
-			Card.HSplitTop(22.0f, &Meta, &Card);
-			Card.HSplitTop(22.0f, &Players, &Card);
-			Card.HSplitBottom(28.0f, &Card, &Buttons);
-
-			char aTitle[128];
-			str_format(aTitle, sizeof(aTitle), "Сохранение %s", Entry.m_Key.c_str());
-			Ui()->DoLabel(&Title, aTitle, 15.0f, TEXTALIGN_ML);
-
-			char aMeta[512];
-			str_format(aMeta, sizeof(aMeta), "%s  •  %s", Entry.m_Map.c_str(), Entry.m_ServerAddress.c_str());
-			Ui()->DoLabel(&Meta, aMeta, 11.0f, TEXTALIGN_ML);
-
-			std::string PlayerText;
-			for(size_t PlayerIndex = 0; PlayerIndex < Entry.m_vPlayers.size(); ++PlayerIndex)
+			const size_t MaxRendered = minimum<size_t>(s_SaveStore.Entries().size(), 256);
+			for(size_t Index = 0; Index < MaxRendered; ++Index)
 			{
-				if(PlayerIndex != 0)
-					PlayerText += ", ";
-				PlayerText += Entry.m_vPlayers[PlayerIndex];
-			}
-			Ui()->DoLabel(&Players, PlayerText.c_str(), 11.0f, TEXTALIGN_ML);
+				const Bkw::SSaveEntry &Entry = s_SaveStore.Entries()[Index];
+				const bool ServerMatches = Online && str_comp(Entry.m_ServerAddress.c_str(), ServerInfo.m_aAddress) == 0;
+				const bool MapMatches = Online && str_comp(Entry.m_Map.c_str(), ServerInfo.m_aMap) == 0;
+				const bool TeamMatches = InDdraceTeam && Entry.m_vPlayers == vCurrentPlayers;
+				const long long NowUnix = (long long)std::time(nullptr);
+				const int CooldownLeft = Entry.m_SavedAtUnix > 0 ? maximum(0, 30 - (int)(NowUnix - Entry.m_SavedAtUnix)) : 0;
+				const bool CooldownReady = CooldownLeft == 0;
+				const bool CanLoad = ServerMatches && MapMatches && TeamMatches && CooldownReady;
 
-			CUIRect State, LoadButton, DeleteButton;
-			Buttons.VSplitRight(90.0f, &State, &DeleteButton);
-			State.VSplitRight(10.0f, &State, nullptr);
-			State.VSplitRight(110.0f, &State, &LoadButton);
-			State.VSplitRight(10.0f, &State, nullptr);
+				CUIRect Card;
+				PageView.HSplitTop(104.0f, &Card, &PageView);
+				PageView.HSplitTop(8.0f, nullptr, &PageView);
+				Card.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+				Card.Margin(8.0f, &Card);
 
-			char aState[256];
-			if(ServerMatches && MapMatches && TeamMatches && !CooldownReady)
-				str_format(aState, sizeof(aState), "✓ Сервер  ✓ Карта  ✓ Команда   •   Можно загрузить через %d сек.", CooldownLeft);
-			else if(CanLoad)
-				str_copy(aState, "✓ Сервер  ✓ Карта  ✓ Команда   •   Готово к загрузке");
-			else if(!Online)
-				str_copy(aState, "Не подключены к серверу");
-			else
-				str_format(aState, sizeof(aState), "%s Сервер   %s Карта   %s Команда", ServerMatches ? "✓" : "✕", MapMatches ? "✓" : "✕", TeamMatches ? "✓" : "✕");
-			Ui()->DoLabel(&State, aState, 10.0f, TEXTALIGN_ML);
+				CUIRect Title, Meta, Players, Buttons;
+				Card.HSplitTop(20.0f, &Title, &Card);
+				Card.HSplitTop(22.0f, &Meta, &Card);
+				Card.HSplitTop(22.0f, &Players, &Card);
+				Card.HSplitBottom(28.0f, &Card, &Buttons);
 
-			if(CanLoad)
-			{
-				if(DoButton_Menu(&s_aLoadButtons[Index], "Загрузиться", 0, &LoadButton))
+				char aTitle[128];
+				str_format(aTitle, sizeof(aTitle), "Сохранение %s", Entry.m_Key.c_str());
+				Ui()->DoLabel(&Title, aTitle, 15.0f, TEXTALIGN_ML);
+
+				char aMeta[512];
+				str_format(aMeta, sizeof(aMeta), "%s  •  %s", Entry.m_Map.c_str(), Entry.m_ServerAddress.c_str());
+				Ui()->DoLabel(&Meta, aMeta, 11.0f, TEXTALIGN_ML);
+
+				std::string PlayerText;
+				for(size_t PlayerIndex = 0; PlayerIndex < Entry.m_vPlayers.size(); ++PlayerIndex)
 				{
-					char aCommand[128];
-					str_format(aCommand, sizeof(aCommand), "/load %s", Entry.m_Key.c_str());
-					GameClient()->m_Chat.SendChat(0, aCommand);
+					if(PlayerIndex != 0)
+						PlayerText += ", ";
+					PlayerText += Entry.m_vPlayers[PlayerIndex];
+				}
+				Ui()->DoLabel(&Players, PlayerText.c_str(), 11.0f, TEXTALIGN_ML);
+
+				CUIRect State, LoadButton, DeleteButton;
+				Buttons.VSplitRight(90.0f, &State, &DeleteButton);
+				State.VSplitRight(10.0f, &State, nullptr);
+				State.VSplitRight(110.0f, &State, &LoadButton);
+				State.VSplitRight(10.0f, &State, nullptr);
+
+				char aState[256];
+				if(ServerMatches && MapMatches && TeamMatches && !CooldownReady)
+					str_format(aState, sizeof(aState), "✓ Сервер  ✓ Карта  ✓ Команда   •   Можно загрузить через %d сек.", CooldownLeft);
+				else if(CanLoad)
+					str_copy(aState, "✓ Сервер  ✓ Карта  ✓ Команда   •   Готово к загрузке");
+				else if(!Online)
+					str_copy(aState, "Не подключены к серверу");
+				else
+					str_format(aState, sizeof(aState), "%s Сервер   %s Карта   %s Команда", ServerMatches ? "✓" : "✕", MapMatches ? "✓" : "✕", TeamMatches ? "✓" : "✕");
+				Ui()->DoLabel(&State, aState, 10.0f, TEXTALIGN_ML);
+
+				if(CanLoad)
+				{
+					if(DoButton_Menu(&s_aLoadButtons[Index], "Загрузиться", 0, &LoadButton))
+					{
+						char aCommand[128];
+						str_format(aCommand, sizeof(aCommand), "/load %s", Entry.m_Key.c_str());
+						GameClient()->m_Chat.SendChat(0, aCommand);
+						s_SaveStore.Remove(Index);
+						s_SaveStore.Save(Storage());
+						break;
+					}
+				}
+				else
+				{
+					LoadButton.Draw(ColorRGBA(0.18f, 0.18f, 0.18f, 0.45f), IGraphics::CORNER_ALL, 5.0f);
+					TextRender()->TextColor(0.55f, 0.55f, 0.55f, 1.0f);
+					Ui()->DoLabel(&LoadButton, "Загрузиться", 12.0f, TEXTALIGN_MC);
+					TextRender()->TextColor(TextRender()->DefaultTextColor());
+				}
+
+				if(DoButton_Menu(&s_aDeleteButtons[Index], "Удалить", 0, &DeleteButton))
+				{
 					s_SaveStore.Remove(Index);
 					s_SaveStore.Save(Storage());
 					break;
 				}
 			}
-			else
-			{
-				LoadButton.Draw(ColorRGBA(0.18f, 0.18f, 0.18f, 0.45f), IGraphics::CORNER_ALL, 5.0f);
-				TextRender()->TextColor(0.55f, 0.55f, 0.55f, 1.0f);
-				Ui()->DoLabel(&LoadButton, "Загрузиться", 12.0f, TEXTALIGN_MC);
-				TextRender()->TextColor(TextRender()->DefaultTextColor());
-			}
+		}
 
-			if(DoButton_Menu(&s_aDeleteButtons[Index], "Удалить", 0, &DeleteButton))
+		PageView.HSplitTop(24.0f, nullptr, &PageView);
+		CUIRect CheckpointHeader;
+		PageView.HSplitTop(28.0f, &CheckpointHeader, &PageView);
+		Ui()->DoLabel(&CheckpointHeader, "BKW — Чекпоинты", 22.0f, TEXTALIGN_ML);
+		PageView.HSplitTop(8.0f, nullptr, &PageView);
+
+		const bool CheckpointsEnabled = GameClient()->m_FastActions.BkwCheckpointsEnabled();
+		CUIRect CheckpointToggle;
+		PageView.HSplitTop(28.0f, &CheckpointToggle, &PageView);
+		if(DoButton_CheckBox(&s_CheckpointsToggleId, "Чекпоинты", CheckpointsEnabled ? 1 : 0, &CheckpointToggle))
+			GameClient()->m_FastActions.SetBkwCheckpointsEnabled(!CheckpointsEnabled);
+
+		if(GameClient()->m_FastActions.BkwCheckpointsEnabled())
+		{
+			PageView.HSplitTop(8.0f, nullptr, &PageView);
+			CUIRect CheckpointCard;
+			PageView.HSplitTop(154.0f, &CheckpointCard, &PageView);
+			CheckpointCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+			CheckpointCard.Margin(10.0f, &CheckpointCard);
+
+			CUIRect Description, MouseLabel, MouseButtons, Help1, Help2, Status;
+			CheckpointCard.HSplitTop(30.0f, &Description, &CheckpointCard);
+			Ui()->DoLabel(&Description, "Работает только когда сервер подтвердил режим /practice.", 12.0f, TEXTALIGN_ML);
+
+			CheckpointCard.HSplitTop(22.0f, &MouseLabel, &CheckpointCard);
+			Ui()->DoLabel(&MouseLabel, "Кнопка создания / удаления:", 12.0f, TEXTALIGN_ML);
+			CheckpointCard.HSplitTop(28.0f, &MouseButtons, &CheckpointCard);
+			CUIRect LeftMouseButton, RightMouseButton;
+			MouseButtons.VSplitMid(&LeftMouseButton, &RightMouseButton, 6.0f);
+			const int MouseButton = GameClient()->m_FastActions.BkwCheckpointMouseButton();
+			if(DoButton_Menu(&s_CheckpointMouseLeftButton, "ЛКМ", MouseButton == 0, &LeftMouseButton))
+				GameClient()->m_FastActions.SetBkwCheckpointMouseButton(0);
+			if(DoButton_Menu(&s_CheckpointMouseRightButton, "ПКМ", MouseButton == 1, &RightMouseButton))
+				GameClient()->m_FastActions.SetBkwCheckpointMouseButton(1);
+
+			CheckpointCard.HSplitTop(22.0f, &Help1, &CheckpointCard);
+			Ui()->DoLabel(&Help1, "Удержание 0.35 сек.: создать точку у tee. Повторить рядом с точкой — удалить.", 11.0f, TEXTALIGN_ML);
+			CheckpointCard.HSplitTop(22.0f, &Help2, &CheckpointCard);
+			Ui()->DoLabel(&Help2, "Нажатие колёсика: /tpxy к точке возле курсора; если рядом нет точки — к последней.", 11.0f, TEXTALIGN_ML);
+			CheckpointCard.HSplitTop(22.0f, &Status, &CheckpointCard);
+
+			bool PracticeActive = false;
+			if(Online && LocalClientId >= 0 && LocalClientId < MAX_CLIENTS)
 			{
-				s_SaveStore.Remove(Index);
-				s_SaveStore.Save(Storage());
-				break;
+				const auto &Character = GameClient()->m_Snap.m_aCharacters[LocalClientId];
+				PracticeActive = Character.m_Active && Character.m_HasExtendedData && (Character.m_ExtendedData.m_Flags & CHARACTERFLAG_PRACTICE_MODE) != 0;
 			}
+			char aCheckpointStatus[160];
+			str_format(aCheckpointStatus, sizeof(aCheckpointStatus), "Practice: %s   •   Чекпоинтов: %d", PracticeActive ? "активен" : "не активен", GameClient()->m_FastActions.BkwCheckpointCount());
+			TextRender()->TextColor(PracticeActive ? ColorRGBA(0.55f, 1.0f, 0.55f, 1.0f) : ColorRGBA(0.75f, 0.75f, 0.75f, 1.0f));
+			Ui()->DoLabel(&Status, aCheckpointStatus, 11.0f, TEXTALIGN_ML);
+			TextRender()->TextColor(TextRender()->DefaultTextColor());
 		}
 	};
 
@@ -369,7 +427,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 
 			CUIRect ContentView = PageView;
 			const float ContentStartY = ContentView.y;
-			const float VirtualHeightBoost = Page == SETTINGS_GENERAL ? 120.0f : (Page == SETTINGS_CREDITS ? 900.0f : 96.0f);
+			const float VirtualHeightBoost = Page == SETTINGS_GENERAL ? 120.0f : (Page == SETTINGS_CREDITS ? 1800.0f : 96.0f);
 			ContentView.h = PageView.h + VirtualHeightBoost;
 
 			RenderSettingsPage(ContentView);
@@ -874,7 +932,7 @@ bool CMenus::RenderHslaScrollbars(CUIRect *pRect, unsigned int *pColor, bool Alp
 		}
 		else if(i == 2)
 		{
-			RenderLightingRect(&Rail, color_cast<ColorRGBA>(ColorHSLA(Color.h, Color.s, 0.5f, 1.0f)));
+			RenderLightingRect(&Rail, color_cast<ColorRGBA>(ColorHSLA(Color.h, Color.s, Color.l, 1.0f)));
 			HandleColor = color_cast<ColorRGBA>(ColorHSLA(Color.h, Color.s, Color.l, 1.0f).UnclampLighting(DarkestLight));
 		}
 		else if(i == 3)
