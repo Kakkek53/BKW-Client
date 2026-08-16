@@ -3,11 +3,13 @@
 #define GAME_CLIENT_COMPONENTS_BESTCLIENT_FAST_ACTIONS_H
 
 #include <base/str.h>
+#include <base/vmath.h>
 
 #include <engine/console.h>
 
 #include <game/client/component.h>
 
+#include <cstdint>
 #include <vector>
 
 class IConfigManager;
@@ -28,6 +30,17 @@ class CFastActions : public CComponent
 	int m_SelectedBind;
 	int m_DisplayBind;
 
+	struct SBkwCheckpoint
+	{
+		vec2 m_Position = vec2(0.0f, 0.0f);
+	};
+
+	std::vector<SBkwCheckpoint> m_vBkwCheckpoints;
+	bool m_BkwCheckpointsEnabled = false;
+	int m_BkwCheckpointMouseButton = 1; // 0 = left, 1 = right
+	int64_t m_BkwCheckpointHoldStart = 0;
+	bool m_BkwCheckpointHolding = false;
+
 	static void ConOpenFa(IConsole::IResult *pResult, void *pUserData);
 	static void ConAddFaLegacy(IConsole::IResult *pResult, void *pUserData);
 	static void ConAddFa(IConsole::IResult *pResult, void *pUserData);
@@ -36,6 +49,14 @@ class CFastActions : public CComponent
 	static void ConFaExecuteHover(IConsole::IResult *pResult, void *pUserData);
 
 	static void ConfigSaveCallback(IConfigManager *pConfigManager, void *pUserData);
+
+	bool BkwPracticeModeActive() const;
+	void BkwResetCheckpoints();
+	void BkwToggleCheckpointAtTee();
+	void BkwTeleportCheckpointAtCursor();
+	void BkwRenderCheckpoints();
+	void BkwLoadCheckpointSettings();
+	void BkwSaveCheckpointSettings() const;
 
 public:
 	class CBind
@@ -59,6 +80,8 @@ public:
 	void OnRender() override;
 	void OnConsoleInit() override;
 	void OnRelease() override;
+	void OnMapLoad() override;
+	void OnStateChange(int NewState, int OldState) override;
 	bool OnCursorMove(float x, float y, IInput::ECursorType CursorType) override;
 	bool OnInput(const IInput::CEvent &Event) override;
 
@@ -71,6 +94,12 @@ public:
 	void ExecuteBind(int Bind);
 
 	bool IsActive() const { return m_Active; }
+
+	bool BkwCheckpointsEnabled() const { return m_BkwCheckpointsEnabled; }
+	int BkwCheckpointMouseButton() const { return m_BkwCheckpointMouseButton; }
+	int BkwCheckpointCount() const { return (int)m_vBkwCheckpoints.size(); }
+	void SetBkwCheckpointsEnabled(bool Enabled);
+	void SetBkwCheckpointMouseButton(int Button);
 };
 
 #endif
