@@ -51,6 +51,16 @@ void CMenus::RenderSettings(CUIRect MainView)
 
 	g_Config.m_BcSettingsLayout = minimum(maximum(g_Config.m_BcSettingsLayout, 0), 1);
 
+	enum
+	{
+		BKW_TAB_SAVES = 0,
+		BKW_TAB_CHECKPOINTS,
+		BKW_TAB_PLAYER,
+		BKW_TAB_CLANS,
+		BKW_TAB_LENGTH,
+	};
+	static int s_BkwTab = BKW_TAB_SAVES;
+
 	auto RenderBkwPage = [&](CUIRect PageView) {
 		static Bkw::CSaveStore s_SaveStore;
 		static CButtonContainer s_SaveButton;
@@ -65,6 +75,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 		static int s_ClansToggleId;
 		static CLineInputBuffered<64> s_ClansCommandInput;
 		static bool s_ClansCommandInitialized = false;
+		static CButtonContainer s_aBkwTabButtons[BKW_TAB_LENGTH];
 
 		s_SaveStore.Load(Storage());
 		if(!s_PlayerInfoCommandInitialized)
@@ -78,316 +89,338 @@ void CMenus::RenderSettings(CUIRect MainView)
 			s_ClansCommandInitialized = true;
 		}
 
+		s_BkwTab = std::clamp(s_BkwTab, 0, BKW_TAB_LENGTH - 1);
+		CUIRect BkwTabBar;
+		PageView.HSplitTop(30.0f, &BkwTabBar, &PageView);
+		const char *apBkwTabs[BKW_TAB_LENGTH] = {"Сохранение", "Чекпоинты", "Игрок", "Кланы"};
+		CUIRect RemainingTabs = BkwTabBar;
+		const float TabWidth = BkwTabBar.w / (float)BKW_TAB_LENGTH;
+		for(int i = 0; i < BKW_TAB_LENGTH; ++i)
+		{
+			CUIRect TabButton;
+			RemainingTabs.VSplitLeft(TabWidth, &TabButton, &RemainingTabs);
+			const int Corners = i == 0 ? (IGraphics::CORNER_TL | IGraphics::CORNER_BL) : (i == BKW_TAB_LENGTH - 1 ? (IGraphics::CORNER_TR | IGraphics::CORNER_BR) : IGraphics::CORNER_NONE);
+			if(DoButton_MenuTab(&s_aBkwTabButtons[i], apBkwTabs[i], s_BkwTab == i, &TabButton, Corners, nullptr, nullptr, nullptr, nullptr, 4.0f))
+				s_BkwTab = i;
+		}
+		PageView.HSplitTop(14.0f, nullptr, &PageView);
+
 		const bool Online = Client()->State() == IClient::STATE_ONLINE;
 		const CServerInfo &ServerInfo = Client()->ServerInfo();
 		const int LocalClientId = GameClient()->m_Snap.m_LocalClientId;
-		int CurrentTeam = -1;
-		std::vector<std::string> vCurrentPlayers;
 
-		if(Online && LocalClientId >= 0 && LocalClientId < MAX_CLIENTS)
+		if(s_BkwTab == BKW_TAB_SAVES)
 		{
-			CurrentTeam = GameClient()->m_Teams.Team(LocalClientId);
-			if(CurrentTeam > TEAM_FLOCK && CurrentTeam < GameClient()->m_Teams.TeamSuper())
+			int CurrentTeam = -1;
+			std::vector<std::string> vCurrentPlayers;
+			if(Online && LocalClientId >= 0 && LocalClientId < MAX_CLIENTS)
 			{
-				for(int ClientId = 0; ClientId < MAX_CLIENTS; ++ClientId)
+				CurrentTeam = GameClient()->m_Teams.Team(LocalClientId);
+				if(CurrentTeam > TEAM_FLOCK && CurrentTeam < GameClient()->m_Teams.TeamSuper())
 				{
-					if(!GameClient()->m_aClients[ClientId].m_Active)
-						continue;
-					if(GameClient()->m_Teams.Team(ClientId) != CurrentTeam)
-						continue;
-					const char *pName = GameClient()->m_aClients[ClientId].m_aName;
-					if(pName[0] != '\0')
-						vCurrentPlayers.emplace_back(pName);
-				}
-				std::sort(vCurrentPlayers.begin(), vCurrentPlayers.end());
-			}
-		}
-
-		const bool InDdraceTeam = CurrentTeam > TEAM_FLOCK && CurrentTeam < GameClient()->m_Teams.TeamSuper() && !vCurrentPlayers.empty();
-
-		CUIRect Header, Info, SaveButtonRect;
-		PageView.HSplitTop(28.0f, &Header, &PageView);
-		Ui()->DoLabel(&Header, "BKW — Сохранение", 22.0f, TEXTALIGN_ML);
-		PageView.HSplitTop(8.0f, nullptr, &PageView);
-
-		PageView.HSplitTop(74.0f, &Info, &PageView);
-		Info.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.45f), IGraphics::CORNER_ALL, 6.0f);
-		Info.Margin(10.0f, &Info);
-		char aInfo[512];
-		if(!Online)
-			str_copy(aInfo, "Подключитесь к серверу и войдите в /team, чтобы создать сохранение.");
-		else if(!InDdraceTeam)
-			str_format(aInfo, sizeof(aInfo), "Карта: %s\nВойдите в отдельную /team (не team 0), чтобы сохранить команду.", ServerInfo.m_aMap);
-		else
-			str_format(aInfo, sizeof(aInfo), "Карта: %s   •   Игроков в team: %d\nСервер: %s", ServerInfo.m_aMap, (int)vCurrentPlayers.size(), ServerInfo.m_aAddress);
-		Ui()->DoLabel(&Info, aInfo, 13.0f, TEXTALIGN_ML);
-
-		PageView.HSplitTop(10.0f, nullptr, &PageView);
-		PageView.HSplitTop(32.0f, &SaveButtonRect, &PageView);
-		if(InDdraceTeam)
-		{
-			if(DoButton_Menu(&s_SaveButton, "Сохраниться", 0, &SaveButtonRect))
-			{
-				Bkw::SSaveEntry Entry;
-				Entry.m_Key = s_SaveStore.NextFreeKey();
-				Entry.m_ServerAddress = ServerInfo.m_aAddress;
-				Entry.m_Map = ServerInfo.m_aMap;
-				Entry.m_SavedAtUnix = (long long)std::time(nullptr);
-				Entry.m_vPlayers = vCurrentPlayers;
-
-				char aCommand[128];
-				str_format(aCommand, sizeof(aCommand), "/save %s", Entry.m_Key.c_str());
-				GameClient()->m_Chat.SendChat(0, aCommand);
-				s_SaveStore.Add(std::move(Entry));
-				s_SaveStore.Save(Storage());
-			}
-		}
-		else
-		{
-			SaveButtonRect.Draw(ColorRGBA(0.18f, 0.18f, 0.18f, 0.45f), IGraphics::CORNER_ALL, 5.0f);
-			TextRender()->TextColor(0.55f, 0.55f, 0.55f, 1.0f);
-			Ui()->DoLabel(&SaveButtonRect, "Сохраниться", 14.0f, TEXTALIGN_MC);
-			TextRender()->TextColor(TextRender()->DefaultTextColor());
-		}
-
-		PageView.HSplitTop(16.0f, nullptr, &PageView);
-		CUIRect ListHeader;
-		PageView.HSplitTop(24.0f, &ListHeader, &PageView);
-		Ui()->DoLabel(&ListHeader, "Сохранения", 18.0f, TEXTALIGN_ML);
-
-		if(s_SaveStore.Entries().empty())
-		{
-			CUIRect Empty;
-			PageView.HSplitTop(34.0f, &Empty, &PageView);
-			TextRender()->TextColor(0.65f, 0.65f, 0.65f, 1.0f);
-			Ui()->DoLabel(&Empty, "Пока нет сохранений.", 13.0f, TEXTALIGN_ML);
-			TextRender()->TextColor(TextRender()->DefaultTextColor());
-		}
-		else
-		{
-			const size_t MaxRendered = minimum<size_t>(s_SaveStore.Entries().size(), 256);
-			for(size_t Index = 0; Index < MaxRendered; ++Index)
-			{
-				const Bkw::SSaveEntry &Entry = s_SaveStore.Entries()[Index];
-				const bool ServerMatches = Online && str_comp(Entry.m_ServerAddress.c_str(), ServerInfo.m_aAddress) == 0;
-				const bool MapMatches = Online && str_comp(Entry.m_Map.c_str(), ServerInfo.m_aMap) == 0;
-				const bool TeamMatches = InDdraceTeam && Entry.m_vPlayers == vCurrentPlayers;
-				const long long NowUnix = (long long)std::time(nullptr);
-				const int CooldownLeft = Entry.m_SavedAtUnix > 0 ? maximum(0, 30 - (int)(NowUnix - Entry.m_SavedAtUnix)) : 0;
-				const bool CooldownReady = CooldownLeft == 0;
-				const bool CanLoad = ServerMatches && MapMatches && TeamMatches && CooldownReady;
-
-				CUIRect Card;
-				PageView.HSplitTop(104.0f, &Card, &PageView);
-				PageView.HSplitTop(8.0f, nullptr, &PageView);
-				Card.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
-				Card.Margin(8.0f, &Card);
-
-				CUIRect Title, Meta, Players, Buttons;
-				Card.HSplitTop(20.0f, &Title, &Card);
-				Card.HSplitTop(22.0f, &Meta, &Card);
-				Card.HSplitTop(22.0f, &Players, &Card);
-				Card.HSplitBottom(28.0f, &Card, &Buttons);
-
-				char aTitle[128];
-				str_format(aTitle, sizeof(aTitle), "Сохранение %s", Entry.m_Key.c_str());
-				Ui()->DoLabel(&Title, aTitle, 15.0f, TEXTALIGN_ML);
-
-				char aMeta[512];
-				str_format(aMeta, sizeof(aMeta), "%s  •  %s", Entry.m_Map.c_str(), Entry.m_ServerAddress.c_str());
-				Ui()->DoLabel(&Meta, aMeta, 11.0f, TEXTALIGN_ML);
-
-				std::string PlayerText;
-				for(size_t PlayerIndex = 0; PlayerIndex < Entry.m_vPlayers.size(); ++PlayerIndex)
-				{
-					if(PlayerIndex != 0)
-						PlayerText += ", ";
-					PlayerText += Entry.m_vPlayers[PlayerIndex];
-				}
-				Ui()->DoLabel(&Players, PlayerText.c_str(), 11.0f, TEXTALIGN_ML);
-
-				CUIRect State, LoadButton, DeleteButton;
-				Buttons.VSplitRight(90.0f, &State, &DeleteButton);
-				State.VSplitRight(10.0f, &State, nullptr);
-				State.VSplitRight(110.0f, &State, &LoadButton);
-				State.VSplitRight(10.0f, &State, nullptr);
-
-				char aState[256];
-				if(ServerMatches && MapMatches && TeamMatches && !CooldownReady)
-					str_format(aState, sizeof(aState), "✓ Сервер  ✓ Карта  ✓ Команда   •   Можно загрузить через %d сек.", CooldownLeft);
-				else if(CanLoad)
-					str_copy(aState, "✓ Сервер  ✓ Карта  ✓ Команда   •   Готово к загрузке");
-				else if(!Online)
-					str_copy(aState, "Не подключены к серверу");
-				else
-					str_format(aState, sizeof(aState), "%s Сервер   %s Карта   %s Команда", ServerMatches ? "✓" : "✕", MapMatches ? "✓" : "✕", TeamMatches ? "✓" : "✕");
-				Ui()->DoLabel(&State, aState, 10.0f, TEXTALIGN_ML);
-
-				if(CanLoad)
-				{
-					if(DoButton_Menu(&s_aLoadButtons[Index], "Загрузиться", 0, &LoadButton))
+					for(int ClientId = 0; ClientId < MAX_CLIENTS; ++ClientId)
 					{
-						char aCommand[128];
-						str_format(aCommand, sizeof(aCommand), "/load %s", Entry.m_Key.c_str());
-						GameClient()->m_Chat.SendChat(0, aCommand);
+						if(!GameClient()->m_aClients[ClientId].m_Active)
+							continue;
+						if(GameClient()->m_Teams.Team(ClientId) != CurrentTeam)
+							continue;
+						const char *pName = GameClient()->m_aClients[ClientId].m_aName;
+						if(pName[0] != '\0')
+							vCurrentPlayers.emplace_back(pName);
+					}
+					std::sort(vCurrentPlayers.begin(), vCurrentPlayers.end());
+				}
+			}
+			const bool InDdraceTeam = CurrentTeam > TEAM_FLOCK && CurrentTeam < GameClient()->m_Teams.TeamSuper() && !vCurrentPlayers.empty();
+
+			CUIRect Header, Info, SaveButtonRect;
+			PageView.HSplitTop(28.0f, &Header, &PageView);
+			Ui()->DoLabel(&Header, "BKW — Сохранение", 22.0f, TEXTALIGN_ML);
+			PageView.HSplitTop(8.0f, nullptr, &PageView);
+
+			PageView.HSplitTop(74.0f, &Info, &PageView);
+			Info.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.45f), IGraphics::CORNER_ALL, 6.0f);
+			Info.Margin(10.0f, &Info);
+			char aInfo[512];
+			if(!Online)
+				str_copy(aInfo, "Подключитесь к серверу и войдите в /team, чтобы создать сохранение.");
+			else if(!InDdraceTeam)
+				str_format(aInfo, sizeof(aInfo), "Карта: %s\nВойдите в отдельную /team (не team 0), чтобы сохранить команду.", ServerInfo.m_aMap);
+			else
+				str_format(aInfo, sizeof(aInfo), "Карта: %s   •   Игроков в team: %d\nСервер: %s", ServerInfo.m_aMap, (int)vCurrentPlayers.size(), ServerInfo.m_aAddress);
+			Ui()->DoLabel(&Info, aInfo, 13.0f, TEXTALIGN_ML);
+
+			PageView.HSplitTop(10.0f, nullptr, &PageView);
+			PageView.HSplitTop(32.0f, &SaveButtonRect, &PageView);
+			if(InDdraceTeam)
+			{
+				if(DoButton_Menu(&s_SaveButton, "Сохраниться", 0, &SaveButtonRect))
+				{
+					Bkw::SSaveEntry Entry;
+					Entry.m_Key = s_SaveStore.NextFreeKey();
+					Entry.m_ServerAddress = ServerInfo.m_aAddress;
+					Entry.m_Map = ServerInfo.m_aMap;
+					Entry.m_SavedAtUnix = (long long)std::time(nullptr);
+					Entry.m_vPlayers = vCurrentPlayers;
+
+					char aCommand[128];
+					str_format(aCommand, sizeof(aCommand), "/save %s", Entry.m_Key.c_str());
+					GameClient()->m_Chat.SendChat(0, aCommand);
+					s_SaveStore.Add(std::move(Entry));
+					s_SaveStore.Save(Storage());
+				}
+			}
+			else
+			{
+				SaveButtonRect.Draw(ColorRGBA(0.18f, 0.18f, 0.18f, 0.45f), IGraphics::CORNER_ALL, 5.0f);
+				TextRender()->TextColor(0.55f, 0.55f, 0.55f, 1.0f);
+				Ui()->DoLabel(&SaveButtonRect, "Сохраниться", 14.0f, TEXTALIGN_MC);
+				TextRender()->TextColor(TextRender()->DefaultTextColor());
+			}
+
+			PageView.HSplitTop(16.0f, nullptr, &PageView);
+			CUIRect ListHeader;
+			PageView.HSplitTop(24.0f, &ListHeader, &PageView);
+			Ui()->DoLabel(&ListHeader, "Сохранения", 18.0f, TEXTALIGN_ML);
+
+			if(s_SaveStore.Entries().empty())
+			{
+				CUIRect Empty;
+				PageView.HSplitTop(34.0f, &Empty, &PageView);
+				TextRender()->TextColor(0.65f, 0.65f, 0.65f, 1.0f);
+				Ui()->DoLabel(&Empty, "Пока нет сохранений.", 13.0f, TEXTALIGN_ML);
+				TextRender()->TextColor(TextRender()->DefaultTextColor());
+			}
+			else
+			{
+				const size_t MaxRendered = minimum<size_t>(s_SaveStore.Entries().size(), 256);
+				for(size_t Index = 0; Index < MaxRendered; ++Index)
+				{
+					const Bkw::SSaveEntry &Entry = s_SaveStore.Entries()[Index];
+					const bool ServerMatches = Online && str_comp(Entry.m_ServerAddress.c_str(), ServerInfo.m_aAddress) == 0;
+					const bool MapMatches = Online && str_comp(Entry.m_Map.c_str(), ServerInfo.m_aMap) == 0;
+					const bool TeamMatches = InDdraceTeam && Entry.m_vPlayers == vCurrentPlayers;
+					const long long NowUnix = (long long)std::time(nullptr);
+					const int CooldownLeft = Entry.m_SavedAtUnix > 0 ? maximum(0, 30 - (int)(NowUnix - Entry.m_SavedAtUnix)) : 0;
+					const bool CooldownReady = CooldownLeft == 0;
+					const bool CanLoad = ServerMatches && MapMatches && TeamMatches && CooldownReady;
+
+					CUIRect Card;
+					PageView.HSplitTop(104.0f, &Card, &PageView);
+					PageView.HSplitTop(8.0f, nullptr, &PageView);
+					Card.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+					Card.Margin(8.0f, &Card);
+
+					CUIRect Title, Meta, Players, Buttons;
+					Card.HSplitTop(20.0f, &Title, &Card);
+					Card.HSplitTop(22.0f, &Meta, &Card);
+					Card.HSplitTop(22.0f, &Players, &Card);
+					Card.HSplitBottom(28.0f, &Card, &Buttons);
+
+					char aTitle[128];
+					str_format(aTitle, sizeof(aTitle), "Сохранение %s", Entry.m_Key.c_str());
+					Ui()->DoLabel(&Title, aTitle, 15.0f, TEXTALIGN_ML);
+
+					char aMeta[512];
+					str_format(aMeta, sizeof(aMeta), "%s  •  %s", Entry.m_Map.c_str(), Entry.m_ServerAddress.c_str());
+					Ui()->DoLabel(&Meta, aMeta, 11.0f, TEXTALIGN_ML);
+
+					std::string PlayerText;
+					for(size_t PlayerIndex = 0; PlayerIndex < Entry.m_vPlayers.size(); ++PlayerIndex)
+					{
+						if(PlayerIndex != 0)
+							PlayerText += ", ";
+						PlayerText += Entry.m_vPlayers[PlayerIndex];
+					}
+					Ui()->DoLabel(&Players, PlayerText.c_str(), 11.0f, TEXTALIGN_ML);
+
+					CUIRect State, LoadButton, DeleteButton;
+					Buttons.VSplitRight(90.0f, &State, &DeleteButton);
+					State.VSplitRight(10.0f, &State, nullptr);
+					State.VSplitRight(110.0f, &State, &LoadButton);
+					State.VSplitRight(10.0f, &State, nullptr);
+
+					char aState[256];
+					if(ServerMatches && MapMatches && TeamMatches && !CooldownReady)
+						str_format(aState, sizeof(aState), "✓ Сервер  ✓ Карта  ✓ Команда   •   Можно загрузить через %d сек.", CooldownLeft);
+					else if(CanLoad)
+						str_copy(aState, "✓ Сервер  ✓ Карта  ✓ Команда   •   Готово к загрузке");
+					else if(!Online)
+						str_copy(aState, "Не подключены к серверу");
+					else
+						str_format(aState, sizeof(aState), "%s Сервер   %s Карта   %s Команда", ServerMatches ? "✓" : "✕", MapMatches ? "✓" : "✕", TeamMatches ? "✓" : "✕");
+					Ui()->DoLabel(&State, aState, 10.0f, TEXTALIGN_ML);
+
+					if(CanLoad)
+					{
+						if(DoButton_Menu(&s_aLoadButtons[Index], "Загрузиться", 0, &LoadButton))
+						{
+							char aCommand[128];
+							str_format(aCommand, sizeof(aCommand), "/load %s", Entry.m_Key.c_str());
+							GameClient()->m_Chat.SendChat(0, aCommand);
+							s_SaveStore.Remove(Index);
+							s_SaveStore.Save(Storage());
+							break;
+						}
+					}
+					else
+					{
+						LoadButton.Draw(ColorRGBA(0.18f, 0.18f, 0.18f, 0.45f), IGraphics::CORNER_ALL, 5.0f);
+						TextRender()->TextColor(0.55f, 0.55f, 0.55f, 1.0f);
+						Ui()->DoLabel(&LoadButton, "Загрузиться", 12.0f, TEXTALIGN_MC);
+						TextRender()->TextColor(TextRender()->DefaultTextColor());
+					}
+
+					if(DoButton_Menu(&s_aDeleteButtons[Index], "Удалить", 0, &DeleteButton))
+					{
 						s_SaveStore.Remove(Index);
 						s_SaveStore.Save(Storage());
 						break;
 					}
 				}
-				else
+			}
+		}
+		else if(s_BkwTab == BKW_TAB_CHECKPOINTS)
+		{
+			CUIRect Header;
+			PageView.HSplitTop(28.0f, &Header, &PageView);
+			Ui()->DoLabel(&Header, "BKW — Чекпоинты", 22.0f, TEXTALIGN_ML);
+			PageView.HSplitTop(8.0f, nullptr, &PageView);
+
+			const bool CheckpointsEnabled = GameClient()->m_FastActions.BkwCheckpointsEnabled();
+			CUIRect CheckpointToggle;
+			PageView.HSplitTop(28.0f, &CheckpointToggle, &PageView);
+			if(DoButton_CheckBox(&s_CheckpointsToggleId, "Чекпоинты", CheckpointsEnabled ? 1 : 0, &CheckpointToggle))
+				GameClient()->m_FastActions.SetBkwCheckpointsEnabled(!CheckpointsEnabled);
+
+			if(GameClient()->m_FastActions.BkwCheckpointsEnabled())
+			{
+				PageView.HSplitTop(8.0f, nullptr, &PageView);
+				CUIRect CheckpointCard;
+				PageView.HSplitTop(180.0f, &CheckpointCard, &PageView);
+				CheckpointCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+				CheckpointCard.Margin(10.0f, &CheckpointCard);
+
+				CUIRect Description, MouseLabel, MouseButtons, Help1, Help2, Help3, Status;
+				CheckpointCard.HSplitTop(30.0f, &Description, &CheckpointCard);
+				Ui()->DoLabel(&Description, "Работает только когда сервер подтвердил режим /practice.", 12.0f, TEXTALIGN_ML);
+				CheckpointCard.HSplitTop(22.0f, &MouseLabel, &CheckpointCard);
+				Ui()->DoLabel(&MouseLabel, "Кнопка создания / удаления:", 12.0f, TEXTALIGN_ML);
+				CheckpointCard.HSplitTop(28.0f, &MouseButtons, &CheckpointCard);
+				CUIRect LeftMouseButton, RightMouseButton;
+				MouseButtons.VSplitMid(&LeftMouseButton, &RightMouseButton, 6.0f);
+				const int MouseButton = GameClient()->m_FastActions.BkwCheckpointMouseButton();
+				if(DoButton_Menu(&s_CheckpointMouseLeftButton, "ЛКМ", MouseButton == 0, &LeftMouseButton))
+					GameClient()->m_FastActions.SetBkwCheckpointMouseButton(0);
+				if(DoButton_Menu(&s_CheckpointMouseRightButton, "ПКМ", MouseButton == 1, &RightMouseButton))
+					GameClient()->m_FastActions.SetBkwCheckpointMouseButton(1);
+
+				CheckpointCard.HSplitTop(22.0f, &Help1, &CheckpointCard);
+				Ui()->DoLabel(&Help1, "Удержание 0.35 сек.: создать точку у tee. Повторить рядом с точкой — удалить.", 11.0f, TEXTALIGN_ML);
+				CheckpointCard.HSplitTop(22.0f, &Help2, &CheckpointCard);
+				Ui()->DoLabel(&Help2, "Короткое нажатие колёсика: /tpxy к точке возле курсора или к последней.", 11.0f, TEXTALIGN_ML);
+				CheckpointCard.HSplitTop(22.0f, &Help3, &CheckpointCard);
+				Ui()->DoLabel(&Help3, "Удержание колёсика 0.5 сек.: выключить /practice.", 11.0f, TEXTALIGN_ML);
+				CheckpointCard.HSplitTop(22.0f, &Status, &CheckpointCard);
+
+				bool PracticeActive = false;
+				if(Online && LocalClientId >= 0 && LocalClientId < MAX_CLIENTS)
 				{
-					LoadButton.Draw(ColorRGBA(0.18f, 0.18f, 0.18f, 0.45f), IGraphics::CORNER_ALL, 5.0f);
-					TextRender()->TextColor(0.55f, 0.55f, 0.55f, 1.0f);
-					Ui()->DoLabel(&LoadButton, "Загрузиться", 12.0f, TEXTALIGN_MC);
-					TextRender()->TextColor(TextRender()->DefaultTextColor());
+					const auto &Character = GameClient()->m_Snap.m_aCharacters[LocalClientId];
+					PracticeActive = Character.m_Active && Character.m_HasExtendedData && (Character.m_ExtendedData.m_Flags & CHARACTERFLAG_PRACTICE_MODE) != 0;
 				}
+				char aCheckpointStatus[160];
+				str_format(aCheckpointStatus, sizeof(aCheckpointStatus), "Practice: %s   •   Чекпоинтов: %d", PracticeActive ? "активен" : "не активен", GameClient()->m_FastActions.BkwCheckpointCount());
+				TextRender()->TextColor(PracticeActive ? ColorRGBA(0.55f, 1.0f, 0.55f, 1.0f) : ColorRGBA(0.75f, 0.75f, 0.75f, 1.0f));
+				Ui()->DoLabel(&Status, aCheckpointStatus, 11.0f, TEXTALIGN_ML);
+				TextRender()->TextColor(TextRender()->DefaultTextColor());
+			}
+		}
+		else if(s_BkwTab == BKW_TAB_PLAYER)
+		{
+			CUIRect Header;
+			PageView.HSplitTop(28.0f, &Header, &PageView);
+			Ui()->DoLabel(&Header, "BKW — Инф. о игроке (рейс)", 22.0f, TEXTALIGN_ML);
+			PageView.HSplitTop(8.0f, nullptr, &PageView);
 
-				if(DoButton_Menu(&s_aDeleteButtons[Index], "Удалить", 0, &DeleteButton))
+			const bool PlayerInfoEnabled = GameClient()->m_BindChat.BkwPlayerInfoEnabled();
+			CUIRect PlayerInfoToggle;
+			PageView.HSplitTop(28.0f, &PlayerInfoToggle, &PageView);
+			if(DoButton_CheckBox(&s_PlayerInfoToggleId, "Инф. о игроке (рейс)", PlayerInfoEnabled ? 1 : 0, &PlayerInfoToggle))
+				GameClient()->m_BindChat.SetBkwPlayerInfoEnabled(!PlayerInfoEnabled);
+
+			if(GameClient()->m_BindChat.BkwPlayerInfoEnabled())
+			{
+				PageView.HSplitTop(8.0f, nullptr, &PageView);
+				CUIRect PlayerInfoCard;
+				PageView.HSplitTop(126.0f, &PlayerInfoCard, &PageView);
+				PlayerInfoCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+				PlayerInfoCard.Margin(10.0f, &PlayerInfoCard);
+
+				CUIRect Description, CommandLabel, CommandInput, Example, Privacy;
+				PlayerInfoCard.HSplitTop(24.0f, &Description, &PlayerInfoCard);
+				Ui()->DoLabel(&Description, "Показывает DDNet race-статистику локально. Сообщение не отправляется на сервер.", 11.0f, TEXTALIGN_ML);
+				PlayerInfoCard.HSplitTop(20.0f, &CommandLabel, &PlayerInfoCard);
+				Ui()->DoLabel(&CommandLabel, "Локальная команда:", 11.0f, TEXTALIGN_ML);
+				PlayerInfoCard.HSplitTop(28.0f, &CommandInput, &PlayerInfoCard);
+				if(Ui()->DoEditBox(&s_PlayerInfoCommandInput, &CommandInput, 12.0f))
 				{
-					s_SaveStore.Remove(Index);
-					s_SaveStore.Save(Storage());
-					break;
+					GameClient()->m_BindChat.SetBkwPlayerInfoChatCommand(s_PlayerInfoCommandInput.GetString());
+					if(!s_PlayerInfoCommandInput.IsActive())
+						s_PlayerInfoCommandInput.Set(GameClient()->m_BindChat.BkwPlayerInfoChatCommand());
 				}
+				PlayerInfoCard.HSplitTop(22.0f, &Example, &PlayerInfoCard);
+				char aPlayerInfoExample[160];
+				str_format(aPlayerInfoExample, sizeof(aPlayerInfoExample), "Пример: %s DDNET PRO COACH", GameClient()->m_BindChat.BkwPlayerInfoChatCommand());
+				Ui()->DoLabel(&Example, aPlayerInfoExample, 11.0f, TEXTALIGN_ML);
+				PlayerInfoCard.HSplitTop(22.0f, &Privacy, &PlayerInfoCard);
+				TextRender()->TextColor(ColorRGBA(0.6f, 0.9f, 0.6f, 1.0f));
+				Ui()->DoLabel(&Privacy, "Результат виден только вам.", 11.0f, TEXTALIGN_ML);
+				TextRender()->TextColor(TextRender()->DefaultTextColor());
 			}
 		}
-
-		PageView.HSplitTop(24.0f, nullptr, &PageView);
-		CUIRect CheckpointHeader;
-		PageView.HSplitTop(28.0f, &CheckpointHeader, &PageView);
-		Ui()->DoLabel(&CheckpointHeader, "BKW — Чекпоинты", 22.0f, TEXTALIGN_ML);
-		PageView.HSplitTop(8.0f, nullptr, &PageView);
-
-		const bool CheckpointsEnabled = GameClient()->m_FastActions.BkwCheckpointsEnabled();
-		CUIRect CheckpointToggle;
-		PageView.HSplitTop(28.0f, &CheckpointToggle, &PageView);
-		if(DoButton_CheckBox(&s_CheckpointsToggleId, "Чекпоинты", CheckpointsEnabled ? 1 : 0, &CheckpointToggle))
-			GameClient()->m_FastActions.SetBkwCheckpointsEnabled(!CheckpointsEnabled);
-
-		if(GameClient()->m_FastActions.BkwCheckpointsEnabled())
+		else if(s_BkwTab == BKW_TAB_CLANS)
 		{
+			CUIRect Header;
+			PageView.HSplitTop(28.0f, &Header, &PageView);
+			Ui()->DoLabel(&Header, "BKW — История кланов", 22.0f, TEXTALIGN_ML);
 			PageView.HSplitTop(8.0f, nullptr, &PageView);
-			CUIRect CheckpointCard;
-			PageView.HSplitTop(154.0f, &CheckpointCard, &PageView);
-			CheckpointCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
-			CheckpointCard.Margin(10.0f, &CheckpointCard);
 
-			CUIRect Description, MouseLabel, MouseButtons, Help1, Help2, Status;
-			CheckpointCard.HSplitTop(30.0f, &Description, &CheckpointCard);
-			Ui()->DoLabel(&Description, "Работает только когда сервер подтвердил режим /practice.", 12.0f, TEXTALIGN_ML);
+			const bool ClansEnabled = GameClient()->m_BindChat.BkwClansEnabled();
+			CUIRect ClansToggle;
+			PageView.HSplitTop(28.0f, &ClansToggle, &PageView);
+			if(DoButton_CheckBox(&s_ClansToggleId, "История кланов", ClansEnabled ? 1 : 0, &ClansToggle))
+				GameClient()->m_BindChat.SetBkwClansEnabled(!ClansEnabled);
 
-			CheckpointCard.HSplitTop(22.0f, &MouseLabel, &CheckpointCard);
-			Ui()->DoLabel(&MouseLabel, "Кнопка создания / удаления:", 12.0f, TEXTALIGN_ML);
-			CheckpointCard.HSplitTop(28.0f, &MouseButtons, &CheckpointCard);
-			CUIRect LeftMouseButton, RightMouseButton;
-			MouseButtons.VSplitMid(&LeftMouseButton, &RightMouseButton, 6.0f);
-			const int MouseButton = GameClient()->m_FastActions.BkwCheckpointMouseButton();
-			if(DoButton_Menu(&s_CheckpointMouseLeftButton, "ЛКМ", MouseButton == 0, &LeftMouseButton))
-				GameClient()->m_FastActions.SetBkwCheckpointMouseButton(0);
-			if(DoButton_Menu(&s_CheckpointMouseRightButton, "ПКМ", MouseButton == 1, &RightMouseButton))
-				GameClient()->m_FastActions.SetBkwCheckpointMouseButton(1);
-
-			CheckpointCard.HSplitTop(22.0f, &Help1, &CheckpointCard);
-			Ui()->DoLabel(&Help1, "Удержание 0.35 сек.: создать точку у tee. Повторить рядом с точкой — удалить.", 11.0f, TEXTALIGN_ML);
-			CheckpointCard.HSplitTop(22.0f, &Help2, &CheckpointCard);
-			Ui()->DoLabel(&Help2, "Нажатие колёсика: /tpxy к точке возле курсора; если рядом нет точки — к последней.", 11.0f, TEXTALIGN_ML);
-			CheckpointCard.HSplitTop(22.0f, &Status, &CheckpointCard);
-
-			bool PracticeActive = false;
-			if(Online && LocalClientId >= 0 && LocalClientId < MAX_CLIENTS)
+			if(GameClient()->m_BindChat.BkwClansEnabled())
 			{
-				const auto &Character = GameClient()->m_Snap.m_aCharacters[LocalClientId];
-				PracticeActive = Character.m_Active && Character.m_HasExtendedData && (Character.m_ExtendedData.m_Flags & CHARACTERFLAG_PRACTICE_MODE) != 0;
+				PageView.HSplitTop(8.0f, nullptr, &PageView);
+				CUIRect ClansCard;
+				PageView.HSplitTop(126.0f, &ClansCard, &PageView);
+				ClansCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+				ClansCard.Margin(10.0f, &ClansCard);
+
+				CUIRect Description, CommandLabel, CommandInput, Example, Privacy;
+				ClansCard.HSplitTop(24.0f, &Description, &ClansCard);
+				Ui()->DoLabel(&Description, "Показывает историю кланов игрока с Teerank. Команда остаётся локальной.", 11.0f, TEXTALIGN_ML);
+				ClansCard.HSplitTop(20.0f, &CommandLabel, &ClansCard);
+				Ui()->DoLabel(&CommandLabel, "Локальная команда:", 11.0f, TEXTALIGN_ML);
+				ClansCard.HSplitTop(28.0f, &CommandInput, &ClansCard);
+				if(Ui()->DoEditBox(&s_ClansCommandInput, &CommandInput, 12.0f))
+				{
+					GameClient()->m_BindChat.SetBkwClansChatCommand(s_ClansCommandInput.GetString());
+					if(!s_ClansCommandInput.IsActive())
+						s_ClansCommandInput.Set(GameClient()->m_BindChat.BkwClansChatCommand());
+				}
+				ClansCard.HSplitTop(22.0f, &Example, &ClansCard);
+				char aClansExample[160];
+				str_format(aClansExample, sizeof(aClansExample), "Пример: %s Akella", GameClient()->m_BindChat.BkwClansChatCommand());
+				Ui()->DoLabel(&Example, aClansExample, 11.0f, TEXTALIGN_ML);
+				ClansCard.HSplitTop(22.0f, &Privacy, &ClansCard);
+				TextRender()->TextColor(ColorRGBA(0.6f, 0.9f, 0.6f, 1.0f));
+				Ui()->DoLabel(&Privacy, "Источник: Teerank • результат виден только вам.", 11.0f, TEXTALIGN_ML);
+				TextRender()->TextColor(TextRender()->DefaultTextColor());
 			}
-			char aCheckpointStatus[160];
-			str_format(aCheckpointStatus, sizeof(aCheckpointStatus), "Practice: %s   •   Чекпоинтов: %d", PracticeActive ? "активен" : "не активен", GameClient()->m_FastActions.BkwCheckpointCount());
-			TextRender()->TextColor(PracticeActive ? ColorRGBA(0.55f, 1.0f, 0.55f, 1.0f) : ColorRGBA(0.75f, 0.75f, 0.75f, 1.0f));
-			Ui()->DoLabel(&Status, aCheckpointStatus, 11.0f, TEXTALIGN_ML);
-			TextRender()->TextColor(TextRender()->DefaultTextColor());
-		}
-
-		PageView.HSplitTop(24.0f, nullptr, &PageView);
-		CUIRect PlayerInfoHeader;
-		PageView.HSplitTop(28.0f, &PlayerInfoHeader, &PageView);
-		Ui()->DoLabel(&PlayerInfoHeader, "BKW — Инф. о игроке (рейс)", 22.0f, TEXTALIGN_ML);
-		PageView.HSplitTop(8.0f, nullptr, &PageView);
-
-		const bool PlayerInfoEnabled = GameClient()->m_BindChat.BkwPlayerInfoEnabled();
-		CUIRect PlayerInfoToggle;
-		PageView.HSplitTop(28.0f, &PlayerInfoToggle, &PageView);
-		if(DoButton_CheckBox(&s_PlayerInfoToggleId, "Инф. о игроке (рейс)", PlayerInfoEnabled ? 1 : 0, &PlayerInfoToggle))
-			GameClient()->m_BindChat.SetBkwPlayerInfoEnabled(!PlayerInfoEnabled);
-
-		if(GameClient()->m_BindChat.BkwPlayerInfoEnabled())
-		{
-			PageView.HSplitTop(8.0f, nullptr, &PageView);
-			CUIRect PlayerInfoCard;
-			PageView.HSplitTop(126.0f, &PlayerInfoCard, &PageView);
-			PlayerInfoCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
-			PlayerInfoCard.Margin(10.0f, &PlayerInfoCard);
-
-			CUIRect Description, CommandLabel, CommandInput, Example, Privacy;
-			PlayerInfoCard.HSplitTop(24.0f, &Description, &PlayerInfoCard);
-			Ui()->DoLabel(&Description, "Показывает DDNet race-статистику локально. Сообщение не отправляется на сервер.", 11.0f, TEXTALIGN_ML);
-			PlayerInfoCard.HSplitTop(20.0f, &CommandLabel, &PlayerInfoCard);
-			Ui()->DoLabel(&CommandLabel, "Локальная команда:", 11.0f, TEXTALIGN_ML);
-			PlayerInfoCard.HSplitTop(28.0f, &CommandInput, &PlayerInfoCard);
-			if(Ui()->DoEditBox(&s_PlayerInfoCommandInput, &CommandInput, 12.0f))
-			{
-				GameClient()->m_BindChat.SetBkwPlayerInfoChatCommand(s_PlayerInfoCommandInput.GetString());
-				if(!s_PlayerInfoCommandInput.IsActive())
-					s_PlayerInfoCommandInput.Set(GameClient()->m_BindChat.BkwPlayerInfoChatCommand());
-			}
-			PlayerInfoCard.HSplitTop(22.0f, &Example, &PlayerInfoCard);
-			char aPlayerInfoExample[160];
-			str_format(aPlayerInfoExample, sizeof(aPlayerInfoExample), "Пример: %s DDNET PRO COACH", GameClient()->m_BindChat.BkwPlayerInfoChatCommand());
-			Ui()->DoLabel(&Example, aPlayerInfoExample, 11.0f, TEXTALIGN_ML);
-			PlayerInfoCard.HSplitTop(22.0f, &Privacy, &PlayerInfoCard);
-			TextRender()->TextColor(ColorRGBA(0.6f, 0.9f, 0.6f, 1.0f));
-			Ui()->DoLabel(&Privacy, "Результат виден только вам.", 11.0f, TEXTALIGN_ML);
-			TextRender()->TextColor(TextRender()->DefaultTextColor());
-		}
-
-		PageView.HSplitTop(24.0f, nullptr, &PageView);
-		CUIRect ClansHeader;
-		PageView.HSplitTop(28.0f, &ClansHeader, &PageView);
-		Ui()->DoLabel(&ClansHeader, "BKW — История кланов", 22.0f, TEXTALIGN_ML);
-		PageView.HSplitTop(8.0f, nullptr, &PageView);
-
-		const bool ClansEnabled = GameClient()->m_BindChat.BkwClansEnabled();
-		CUIRect ClansToggle;
-		PageView.HSplitTop(28.0f, &ClansToggle, &PageView);
-		if(DoButton_CheckBox(&s_ClansToggleId, "История кланов", ClansEnabled ? 1 : 0, &ClansToggle))
-			GameClient()->m_BindChat.SetBkwClansEnabled(!ClansEnabled);
-
-		if(GameClient()->m_BindChat.BkwClansEnabled())
-		{
-			PageView.HSplitTop(8.0f, nullptr, &PageView);
-			CUIRect ClansCard;
-			PageView.HSplitTop(126.0f, &ClansCard, &PageView);
-			ClansCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
-			ClansCard.Margin(10.0f, &ClansCard);
-
-			CUIRect Description, CommandLabel, CommandInput, Example, Privacy;
-			ClansCard.HSplitTop(24.0f, &Description, &ClansCard);
-			Ui()->DoLabel(&Description, "Показывает историю кланов игрока с Teerank. Команда остаётся локальной.", 11.0f, TEXTALIGN_ML);
-			ClansCard.HSplitTop(20.0f, &CommandLabel, &ClansCard);
-			Ui()->DoLabel(&CommandLabel, "Локальная команда:", 11.0f, TEXTALIGN_ML);
-			ClansCard.HSplitTop(28.0f, &CommandInput, &ClansCard);
-			if(Ui()->DoEditBox(&s_ClansCommandInput, &CommandInput, 12.0f))
-			{
-				GameClient()->m_BindChat.SetBkwClansChatCommand(s_ClansCommandInput.GetString());
-				if(!s_ClansCommandInput.IsActive())
-					s_ClansCommandInput.Set(GameClient()->m_BindChat.BkwClansChatCommand());
-			}
-			ClansCard.HSplitTop(22.0f, &Example, &ClansCard);
-			char aClansExample[160];
-			str_format(aClansExample, sizeof(aClansExample), "Пример: %s Akella", GameClient()->m_BindChat.BkwClansChatCommand());
-			Ui()->DoLabel(&Example, aClansExample, 11.0f, TEXTALIGN_ML);
-			ClansCard.HSplitTop(22.0f, &Privacy, &ClansCard);
-			TextRender()->TextColor(ColorRGBA(0.6f, 0.9f, 0.6f, 1.0f));
-			Ui()->DoLabel(&Privacy, "Источник: Teerank • результат виден только вам.", 11.0f, TEXTALIGN_ML);
-			TextRender()->TextColor(TextRender()->DefaultTextColor());
 		}
 	};
 
@@ -517,17 +550,20 @@ void CMenus::RenderSettings(CUIRect MainView)
 			}
 
 			static CScrollRegion s_aNewLayoutScrollRegions[SETTINGS_LENGTH];
+			static CScrollRegion s_aBkwScrollRegions[BKW_TAB_LENGTH];
 			CScrollRegionParams ScrollParams;
 			ScrollParams.m_ScrollUnit = 60.0f;
 			ScrollParams.m_ScrollbarMargin = 5.0f;
 
 			vec2 ScrollOffset(0.0f, 0.0f);
-			CScrollRegion &ScrollRegion = s_aNewLayoutScrollRegions[Page];
+			CScrollRegion &ScrollRegion = Page == SETTINGS_CREDITS ? s_aBkwScrollRegions[s_BkwTab] : s_aNewLayoutScrollRegions[Page];
 			ScrollRegion.Begin(&PageView, &ScrollParams);
 
 			CUIRect ContentView = PageView;
 			const float ContentStartY = ContentView.y;
-			const float VirtualHeightBoost = Page == SETTINGS_GENERAL ? 120.0f : (Page == SETTINGS_CREDITS ? 2350.0f : 96.0f);
+			float VirtualHeightBoost = Page == SETTINGS_GENERAL ? 120.0f : 96.0f;
+			if(Page == SETTINGS_CREDITS)
+				VirtualHeightBoost = s_BkwTab == BKW_TAB_SAVES ? 2350.0f : 360.0f;
 			ContentView.h = PageView.h + VirtualHeightBoost;
 
 			RenderSettingsPage(ContentView);
