@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace Bkw
@@ -51,9 +52,12 @@ class CSaveStore
 
 	static int HexValue(char c)
 	{
-		if(c >= '0' && c <= '9') return c - '0';
-		if(c >= 'a' && c <= 'f') return 10 + c - 'a';
-		if(c >= 'A' && c <= 'F') return 10 + c - 'A';
+		if(c >= '0' && c <= '9')
+			return c - '0';
+		if(c >= 'a' && c <= 'f')
+			return 10 + c - 'a';
+		if(c >= 'A' && c <= 'F')
+			return 10 + c - 'A';
 		return -1;
 	}
 
@@ -96,7 +100,6 @@ class CSaveStore
 
 public:
 	const std::vector<SSaveEntry> &Entries() const { return m_vEntries; }
-	std::vector<SSaveEntry> &Entries() { return m_vEntries; }
 	bool IsLoaded() const { return m_Loaded; }
 
 	void Load(IStorage *pStorage)
