@@ -23,6 +23,7 @@
 
 static constexpr LOG_COLOR BINDCHAT_PRINT_COLOR{255, 255, 204};
 static constexpr size_t BKW_PLAYER_INFO_MAX_RESPONSE_SIZE = 8 * 1024 * 1024;
+static constexpr size_t BKW_CLANS_MAX_RESPONSE_SIZE = 8 * 1024 * 1024;
 
 namespace
 {
@@ -47,6 +48,33 @@ void BkwFormatRaceTime(double Seconds, char *pBuf, size_t BufSize)
 	const int Minutes = (int)(Seconds / 60.0);
 	const double SecondsPart = Seconds - Minutes * 60.0;
 	str_format(pBuf, (int)BufSize, "%02d:%05.2f", Minutes, SecondsPart);
+}
+
+std::string BkwHtmlDecode(std::string Text)
+{
+	struct SEntity
+	{
+		const char *m_pFrom;
+		const char *m_pTo;
+	};
+	static constexpr SEntity s_aEntities[] = {
+		{"&amp;", "&"},
+		{"&lt;", "<"},
+		{"&gt;", ">"},
+		{"&quot;", "\""},
+		{"&#x27;", "'"},
+		{"&#39;", "'"},
+	};
+	for(const SEntity &Entity : s_aEntities)
+	{
+		size_t Pos = 0;
+		while((Pos = Text.find(Entity.m_pFrom, Pos)) != std::string::npos)
+		{
+			Text.replace(Pos, str_length(Entity.m_pFrom), Entity.m_pTo);
+			Pos += str_length(Entity.m_pTo);
+		}
+	}
+	return Text;
 }
 } // namespace
 
@@ -73,11 +101,11 @@ decltype(CBindChat::BIND_DEFAULTS) CBindChat::BIND_DEFAULTS = {
 				   }},
 	{TCLocalizable("Warlist"), {
 					   {TCLocalizable("Add war name:"), {"!war", "war_name_index 1"}},
-					   {TCLocalizable("Add war clan:"), {"!warclan", "war_clan_index 1"}},
+					   {TCLocalizable("Add war clan:"), {"!warclan", "war_clan_index 2"}},
 					   {TCLocalizable("Add team name:"), {"!team", "war_name_index 2"}},
 					   {TCLocalizable("Add team clan:"), {"!teamclan", "war_clan_index 2"}},
 					   {TCLocalizable("Remove war name:"), {"!delwar", "remove_war_name_index 1"}},
-					   {TCLocalizable("Remove war clan:"), {"!delwarclan", "remove_war_clan_index 1"}},
+					   {TCLocalizable("Remove war clan:"), {"!delwarclan", "remove_war_clan_index 2"}},
 					   {TCLocalizable("Remove team name:"), {"!delteam", "remove_war_name_index 2"}},
 					   {TCLocalizable("Remove team clan:"), {"!delteamclan", "remove_war_clan_index 2"}},
 					   {TCLocalizable("Add [group] [name] [reason]:"), {"!name", "war_name"}},
@@ -104,7 +132,6 @@ void CBindChat::ConAddBindchat(IConsole::IResult *pResult, void *pUserData)
 {
 	const char *pName = pResult->GetString(0);
 	const char *pCommand = pResult->GetString(1);
-
 	CBindChat *pThis = static_cast<CBindChat *>(pUserData);
 	pThis->AddBind({pName, pCommand});
 }
@@ -149,7 +176,6 @@ void CBindChat::ConRemoveBindchatAll(IConsole::IResult *pResult, void *pUserData
 void CBindChat::ConBindchatDefaults(IConsole::IResult *pResult, void *pUserData)
 {
 	CBindChat *pThis = static_cast<CBindChat *>(pUserData);
-
 	for(const auto &[_, vBindDefaults] : CBindChat::BIND_DEFAULTS)
 		for(const CBindChat::CBindDefault &BindDefault : vBindDefaults)
 			pThis->AddBind(BindDefault.m_Bind);
@@ -176,9 +202,30 @@ void CBindChat::ConBkwPlayerInfoChatCommand(IConsole::IResult *pResult, void *pU
 	static_cast<CBindChat *>(pUserData)->SetBkwPlayerInfoChatCommand(pResult->GetString(0));
 }
 
+void CBindChat::ConBkwClans(IConsole::IResult *pResult, void *pUserData)
+{
+	CBindChat *pThis = static_cast<CBindChat *>(pUserData);
+	if(pResult->NumArguments() < 1 || pResult->GetString(0)[0] == '\0')
+	{
+		pThis->PrintBkwPlayerInfoLine("Использование: bkw_clans <ник>");
+		return;
+	}
+	pThis->StartBkwClansRequest(pResult->GetString(0));
+}
+
+void CBindChat::ConBkwClansEnabled(IConsole::IResult *pResult, void *pUserData)
+{
+	static_cast<CBindChat *>(pUserData)->SetBkwClansEnabled(pResult->GetInteger(0) != 0);
+}
+
+void CBindChat::ConBkwClansChatCommand(IConsole::IResult *pResult, void *pUserData)
+{
+	static_cast<CBindChat *>(pUserData)->SetBkwClansChatCommand(pResult->GetString(0));
+}
+
 void CBindChat::AddBind(const CBind &Bind)
 {
-	RemoveBind(Bind.m_aName); // Prevent duplicates
+	RemoveBind(Bind.m_aName);
 	m_vBinds.push_back(Bind);
 }
 
@@ -224,6 +271,9 @@ void CBindChat::OnConsoleInit()
 	Console()->Register("bkw_player_info", "r[name]", CFGFLAG_CLIENT, ConBkwPlayerInfo, this, "Show DDNet race information for a player locally");
 	Console()->Register("bkw_player_info_enabled", "i[enabled]", CFGFLAG_CLIENT, ConBkwPlayerInfoEnabled, this, "Enable BKW local player race information command");
 	Console()->Register("bkw_player_info_chat_command", "s[command]", CFGFLAG_CLIENT, ConBkwPlayerInfoChatCommand, this, "Set BKW local chat command for player race information");
+	Console()->Register("bkw_clans", "r[name]", CFGFLAG_CLIENT, ConBkwClans, this, "Show Teerank clan history for a player locally");
+	Console()->Register("bkw_clans_enabled", "i[enabled]", CFGFLAG_CLIENT, ConBkwClansEnabled, this, "Enable BKW local clans command");
+	Console()->Register("bkw_clans_chat_command", "s[command]", CFGFLAG_CLIENT, ConBkwClansChatCommand, this, "Set BKW local chat command for clan history");
 
 	ConBindchatDefaults(nullptr, this);
 }
@@ -231,15 +281,24 @@ void CBindChat::OnConsoleInit()
 void CBindChat::OnRender()
 {
 	FinishBkwPlayerInfoRequest();
+	FinishBkwClansRequest();
 }
 
 void CBindChat::OnStateChange(int NewState, int OldState)
 {
 	(void)OldState;
-	if(NewState == IClient::STATE_OFFLINE && m_pBkwPlayerInfoRequest)
+	if(NewState == IClient::STATE_OFFLINE)
 	{
-		m_pBkwPlayerInfoRequest->Abort();
-		m_pBkwPlayerInfoRequest = nullptr;
+		if(m_pBkwPlayerInfoRequest)
+		{
+			m_pBkwPlayerInfoRequest->Abort();
+			m_pBkwPlayerInfoRequest = nullptr;
+		}
+		if(m_pBkwClansRequest)
+		{
+			m_pBkwClansRequest->Abort();
+			m_pBkwClansRequest = nullptr;
+		}
 	}
 }
 
@@ -261,13 +320,28 @@ bool CBindChat::MatchBkwPlayerInfoCommand(const char *pText, const char **ppPlay
 {
 	if(!m_BkwPlayerInfoEnabled || !pText || m_aBkwPlayerInfoChatCommand[0] == '\0')
 		return false;
-
 	const size_t CommandLength = str_length(m_aBkwPlayerInfoChatCommand);
 	if(str_comp_nocase_num(pText, m_aBkwPlayerInfoChatCommand, CommandLength) != 0)
 		return false;
 	if(pText[CommandLength] != '\0' && pText[CommandLength] != ' ')
 		return false;
+	const char *pName = pText + CommandLength;
+	while(*pName == ' ')
+		++pName;
+	if(ppPlayerName)
+		*ppPlayerName = pName;
+	return true;
+}
 
+bool CBindChat::MatchBkwClansCommand(const char *pText, const char **ppPlayerName) const
+{
+	if(!m_BkwClansEnabled || !pText || m_aBkwClansChatCommand[0] == '\0')
+		return false;
+	const size_t CommandLength = str_length(m_aBkwClansChatCommand);
+	if(str_comp_nocase_num(pText, m_aBkwClansChatCommand, CommandLength) != 0)
+		return false;
+	if(pText[CommandLength] != '\0' && pText[CommandLength] != ' ')
+		return false;
 	const char *pName = pText + CommandLength;
 	while(*pName == ' ')
 		++pName;
@@ -279,9 +353,8 @@ bool CBindChat::MatchBkwPlayerInfoCommand(const char *pText, const char **ppPlay
 bool CBindChat::CheckBindChat(const char *pText)
 {
 	const char *pIgnoredName = nullptr;
-	if(MatchBkwPlayerInfoCommand(pText, &pIgnoredName))
+	if(MatchBkwPlayerInfoCommand(pText, &pIgnoredName) || MatchBkwClansCommand(pText, &pIgnoredName))
 		return true;
-
 	const char *pSpace = str_find(pText, " ");
 	size_t SpaceIndex = pSpace ? pSpace - pText : strlen(pText);
 	for(const CBind &Bind : m_vBinds)
@@ -298,6 +371,13 @@ bool CBindChat::ChatDoBinds(const char *pText)
 		return false;
 
 	CChat &Chat = GameClient()->m_Chat;
+	const auto AddToHistory = [&](const char *pLine) {
+		const int Length = str_length(pLine);
+		CChat::CHistoryEntry *pEntry = Chat.m_History.Allocate(sizeof(CChat::CHistoryEntry) + Length);
+		pEntry->m_Team = 0;
+		str_copy(pEntry->m_aText, pLine, Length + 1);
+	};
+
 	const char *pBkwPlayerName = nullptr;
 	if(MatchBkwPlayerInfoCommand(pText, &pBkwPlayerName))
 	{
@@ -305,11 +385,18 @@ bool CBindChat::ChatDoBinds(const char *pText)
 			PrintBkwPlayerInfoLine("Укажите ник после команды.");
 		else
 			StartBkwPlayerInfoRequest(pBkwPlayerName);
+		AddToHistory(pText);
+		return true;
+	}
 
-		const int Length = str_length(pText);
-		CChat::CHistoryEntry *pEntry = Chat.m_History.Allocate(sizeof(CChat::CHistoryEntry) + Length);
-		pEntry->m_Team = 0;
-		str_copy(pEntry->m_aText, pText, Length + 1);
+	const char *pBkwClansName = nullptr;
+	if(MatchBkwClansCommand(pText, &pBkwClansName))
+	{
+		if(!pBkwClansName || pBkwClansName[0] == '\0')
+			PrintBkwPlayerInfoLine("Укажите ник после команды .clans.");
+		else
+			StartBkwClansRequest(pBkwClansName);
+		AddToHistory(pText);
 		return true;
 	}
 
@@ -320,14 +407,10 @@ bool CBindChat::ChatDoBinds(const char *pText)
 	size_t SpaceIndex = pSpace ? pSpace - pText : strlen(pText);
 	for(const CBind &Bind : m_vBinds)
 	{
-		if(str_startswith_nocase(pText, Bind.m_aName) &&
-			str_comp_nocase_num(pText, Bind.m_aName, SpaceIndex) == 0)
+		if(str_startswith_nocase(pText, Bind.m_aName) && str_comp_nocase_num(pText, Bind.m_aName, SpaceIndex) == 0)
 		{
 			ExecuteBind(Bind, pSpace ? pSpace + 1 : nullptr);
-			const int Length = str_length(pText);
-			CChat::CHistoryEntry *pEntry = Chat.m_History.Allocate(sizeof(CChat::CHistoryEntry) + Length);
-			pEntry->m_Team = 0;
-			str_copy(pEntry->m_aText, pText, Length + 1);
+			AddToHistory(pText);
 			return true;
 		}
 	}
@@ -359,17 +442,14 @@ void CBindChat::StartBkwPlayerInfoRequest(const char *pPlayerName)
 {
 	if(!m_BkwPlayerInfoEnabled || !pPlayerName || pPlayerName[0] == '\0')
 		return;
-
 	if(m_pBkwPlayerInfoRequest)
 	{
 		m_pBkwPlayerInfoRequest->Abort();
 		m_pBkwPlayerInfoRequest = nullptr;
 	}
-
 	str_copy(m_aBkwPlayerInfoRequestedName, pPlayerName);
 	std::string Url = "https://ddnet.org/players/?json2=";
 	Url += BkwUrlEncode(pPlayerName);
-
 	std::shared_ptr<IHttpRequest> pGet = HttpGet(Url.c_str());
 	pGet->Timeout(CTimeout{8000, 0, 4096, 8});
 	pGet->MaxResponseSize(BKW_PLAYER_INFO_MAX_RESPONSE_SIZE);
@@ -377,7 +457,6 @@ void CBindChat::StartBkwPlayerInfoRequest(const char *pPlayerName)
 	pGet->LogProgress(HTTPLOG::NONE);
 	m_pBkwPlayerInfoRequest = pGet;
 	Http()->Run(pGet);
-
 	char aBuf[192];
 	str_format(aBuf, sizeof(aBuf), "BKW: получаю race-статистику игрока %s…", pPlayerName);
 	PrintBkwPlayerInfoLine(aBuf);
@@ -387,7 +466,6 @@ void CBindChat::FinishBkwPlayerInfoRequest()
 {
 	if(!m_pBkwPlayerInfoRequest || !m_pBkwPlayerInfoRequest->Done())
 		return;
-
 	const bool HttpDone = m_pBkwPlayerInfoRequest->State() == EHttpState::DONE;
 	const int StatusCode = HttpDone ? m_pBkwPlayerInfoRequest->StatusCode() : -1;
 	if(!HttpDone || StatusCode < 200 || StatusCode >= 400)
@@ -398,7 +476,6 @@ void CBindChat::FinishBkwPlayerInfoRequest()
 		m_pBkwPlayerInfoRequest = nullptr;
 		return;
 	}
-
 	unsigned char *pResult = nullptr;
 	size_t ResultSize = 0;
 	m_pBkwPlayerInfoRequest->Result(&pResult, &ResultSize);
@@ -408,7 +485,6 @@ void CBindChat::FinishBkwPlayerInfoRequest()
 		m_pBkwPlayerInfoRequest = nullptr;
 		return;
 	}
-
 	json_value *pRoot = json_parse(reinterpret_cast<const char *>(pResult), ResultSize);
 	if(!pRoot || pRoot->type != json_object)
 	{
@@ -418,7 +494,6 @@ void CBindChat::FinishBkwPlayerInfoRequest()
 		m_pBkwPlayerInfoRequest = nullptr;
 		return;
 	}
-
 	PrintBkwPlayerInfo(*pRoot);
 	json_value_free(pRoot);
 	m_pBkwPlayerInfoRequest = nullptr;
@@ -439,12 +514,10 @@ void CBindChat::PrintBkwPlayerInfo(const json_value &Root)
 		PrintBkwPlayerInfoLine(aBuf);
 		return;
 	}
-
 	const json_value &Points = Root["points"];
 	const int CurrentPoints = BkwJsonInt(Points["points"]);
 	const int TotalPoints = BkwJsonInt(Points["total"]);
 	const int PointsRank = BkwJsonInt(Points["rank"]);
-
 	int FinishedMaps = 0;
 	int TotalFinishes = 0;
 	const json_value &Types = Root["types"];
@@ -466,7 +539,6 @@ void CBindChat::PrintBkwPlayerInfo(const json_value &Root)
 			}
 		}
 	}
-
 	char aBuf[256];
 	str_format(aBuf, sizeof(aBuf), "━━ BKW • %s ━━", pPlayer);
 	PrintBkwPlayerInfoLine(aBuf);
@@ -475,7 +547,6 @@ void CBindChat::PrintBkwPlayerInfo(const json_value &Root)
 	else
 		str_format(aBuf, sizeof(aBuf), "Поинты: %d / %d   •   Карт: %d   •   Финишей: %d", CurrentPoints, TotalPoints, FinishedMaps, TotalFinishes);
 	PrintBkwPlayerInfoLine(aBuf);
-
 	if(Types.type == json_object)
 	{
 		std::string TypeLine;
@@ -490,7 +561,6 @@ void CBindChat::PrintBkwPlayerInfo(const json_value &Root)
 			const int TypeTotal = BkwJsonInt(TypePoints["total"]);
 			if(TypeCurrent == 0 && TypeTotal == 0)
 				continue;
-
 			char aType[128];
 			str_format(aType, sizeof(aType), "%s: %d/%d", pTypeName, TypeCurrent, TypeTotal);
 			if(!TypeLine.empty() && TypeLine.size() + str_length(aType) + 3 > 190)
@@ -505,7 +575,6 @@ void CBindChat::PrintBkwPlayerInfo(const json_value &Root)
 		if(!TypeLine.empty())
 			PrintBkwPlayerInfoLine(TypeLine.c_str());
 	}
-
 	const json_value &LastFinishes = Root["last_finishes"];
 	if(LastFinishes.type == json_array && LastFinishes.u.array.length > 0)
 	{
@@ -520,7 +589,6 @@ void CBindChat::PrintBkwPlayerInfo(const json_value &Root)
 			PrintBkwPlayerInfoLine(aBuf);
 		}
 	}
-
 	const json_value &Partners = Root["favorite_partners"];
 	if(Partners.type == json_array && Partners.u.array.length > 0)
 	{
@@ -532,6 +600,137 @@ void CBindChat::PrintBkwPlayerInfo(const json_value &Root)
 			str_format(aBuf, sizeof(aBuf), "%u. %s — %d совместных финишей", i + 1, BkwJsonString(Partner["name"]), BkwJsonInt(Partner["finishes"]));
 			PrintBkwPlayerInfoLine(aBuf);
 		}
+	}
+}
+
+void CBindChat::StartBkwClansRequest(const char *pPlayerName)
+{
+	if(!m_BkwClansEnabled || !pPlayerName || pPlayerName[0] == '\0')
+		return;
+	if(m_pBkwClansRequest)
+	{
+		m_pBkwClansRequest->Abort();
+		m_pBkwClansRequest = nullptr;
+	}
+	str_copy(m_aBkwClansRequestedName, pPlayerName);
+	std::string Url = "https://teerank.io/player/";
+	Url += BkwUrlEncode(pPlayerName);
+	Url += "/clans";
+	std::shared_ptr<IHttpRequest> pGet = HttpGet(Url.c_str());
+	pGet->Timeout(CTimeout{8000, 0, 4096, 8});
+	pGet->MaxResponseSize(BKW_CLANS_MAX_RESPONSE_SIZE);
+	pGet->FailOnErrorStatus(false);
+	pGet->LogProgress(HTTPLOG::NONE);
+	m_pBkwClansRequest = pGet;
+	Http()->Run(pGet);
+	char aBuf[192];
+	str_format(aBuf, sizeof(aBuf), "BKW: получаю список кланов игрока %s…", pPlayerName);
+	PrintBkwPlayerInfoLine(aBuf);
+}
+
+void CBindChat::FinishBkwClansRequest()
+{
+	if(!m_pBkwClansRequest || !m_pBkwClansRequest->Done())
+		return;
+	const bool HttpDone = m_pBkwClansRequest->State() == EHttpState::DONE;
+	const int StatusCode = HttpDone ? m_pBkwClansRequest->StatusCode() : -1;
+	if(!HttpDone || StatusCode < 200 || StatusCode >= 400)
+	{
+		char aBuf[192];
+		str_format(aBuf, sizeof(aBuf), "BKW: не удалось получить кланы %s (HTTP %d).", m_aBkwClansRequestedName, StatusCode);
+		PrintBkwPlayerInfoLine(aBuf);
+		m_pBkwClansRequest = nullptr;
+		return;
+	}
+	unsigned char *pResult = nullptr;
+	size_t ResultSize = 0;
+	m_pBkwClansRequest->Result(&pResult, &ResultSize);
+	if(!pResult || ResultSize == 0)
+	{
+		PrintBkwPlayerInfoLine("BKW: Teerank вернул пустой ответ.");
+		m_pBkwClansRequest = nullptr;
+		return;
+	}
+	PrintBkwClansHtml(reinterpret_cast<const char *>(pResult), ResultSize);
+	m_pBkwClansRequest = nullptr;
+}
+
+void CBindChat::PrintBkwClansHtml(const char *pHtml, size_t HtmlSize)
+{
+	const std::string Html(pHtml, HtmlSize);
+	const std::string HrefMarker = "href=\"/clan/";
+	const std::string RowTail = "</a></span><span class=\"truncate text-right\">";
+	const std::string NextCell = "</span><span class=\"truncate text-right\">";
+
+	struct SClan
+	{
+		std::string m_Name;
+		std::string m_Players;
+		std::string m_PlayTime;
+	};
+	std::vector<SClan> vClans;
+	size_t SearchPos = 0;
+	while(vClans.size() < 128)
+	{
+		const size_t HrefPos = Html.find(HrefMarker, SearchPos);
+		if(HrefPos == std::string::npos)
+			break;
+		const size_t NameStartMarker = Html.find('>', HrefPos + HrefMarker.size());
+		if(NameStartMarker == std::string::npos)
+			break;
+		const size_t NameStart = NameStartMarker + 1;
+		const size_t NameEnd = Html.find(RowTail, NameStart);
+		if(NameEnd == std::string::npos || NameEnd - NameStart > 512)
+		{
+			SearchPos = NameStart;
+			continue;
+		}
+		const size_t PlayersStart = NameEnd + RowTail.size();
+		const size_t PlayersEnd = Html.find(NextCell, PlayersStart);
+		if(PlayersEnd == std::string::npos || PlayersEnd - PlayersStart > 64)
+		{
+			SearchPos = NameStart;
+			continue;
+		}
+		const size_t TimeStart = PlayersEnd + NextCell.size();
+		const size_t TimeEnd = Html.find("</span>", TimeStart);
+		if(TimeEnd == std::string::npos || TimeEnd - TimeStart > 64)
+		{
+			SearchPos = NameStart;
+			continue;
+		}
+		SClan Clan;
+		Clan.m_Name = BkwHtmlDecode(Html.substr(NameStart, NameEnd - NameStart));
+		Clan.m_Players = BkwHtmlDecode(Html.substr(PlayersStart, PlayersEnd - PlayersStart));
+		Clan.m_PlayTime = BkwHtmlDecode(Html.substr(TimeStart, TimeEnd - TimeStart));
+		if(!Clan.m_Name.empty())
+			vClans.push_back(std::move(Clan));
+		SearchPos = TimeEnd + 7;
+	}
+
+	if(vClans.empty())
+	{
+		char aBuf[192];
+		str_format(aBuf, sizeof(aBuf), "BKW: у игрока %s кланы не найдены или Teerank изменил формат страницы.", m_aBkwClansRequestedName);
+		PrintBkwPlayerInfoLine(aBuf);
+		return;
+	}
+
+	char aBuf[256];
+	str_format(aBuf, sizeof(aBuf), "━━ BKW • Кланы %s ━━", m_aBkwClansRequestedName);
+	PrintBkwPlayerInfoLine(aBuf);
+	str_format(aBuf, sizeof(aBuf), "Всего кланов: %d • показываю первые %d", (int)vClans.size(), minimum(10, (int)vClans.size()));
+	PrintBkwPlayerInfoLine(aBuf);
+	const int Count = minimum(10, (int)vClans.size());
+	for(int i = 0; i < Count; ++i)
+	{
+		str_format(aBuf, sizeof(aBuf), "%d. %s • игроков: %s • время: %s", i + 1, vClans[i].m_Name.c_str(), vClans[i].m_Players.c_str(), vClans[i].m_PlayTime.c_str());
+		PrintBkwPlayerInfoLine(aBuf);
+	}
+	if((int)vClans.size() > Count)
+	{
+		str_format(aBuf, sizeof(aBuf), "…ещё %d кланов", (int)vClans.size() - Count);
+		PrintBkwPlayerInfoLine(aBuf);
 	}
 }
 
@@ -560,26 +759,47 @@ void CBindChat::SetBkwPlayerInfoChatCommand(const char *pCommand)
 	str_copy(m_aBkwPlayerInfoChatCommand, aCommand);
 }
 
+void CBindChat::SetBkwClansEnabled(bool Enabled)
+{
+	m_BkwClansEnabled = Enabled;
+	if(!Enabled && m_pBkwClansRequest)
+	{
+		m_pBkwClansRequest->Abort();
+		m_pBkwClansRequest = nullptr;
+	}
+}
+
+void CBindChat::SetBkwClansChatCommand(const char *pCommand)
+{
+	if(!pCommand)
+		return;
+	while(*pCommand == ' ')
+		++pCommand;
+	char aCommand[BKW_CLANS_COMMAND_MAX];
+	str_copy(aCommand, pCommand);
+	if(char *pSpace = const_cast<char *>(str_find(aCommand, " ")))
+		*pSpace = '\0';
+	if(aCommand[0] == '\0')
+		str_copy(aCommand, ".clans");
+	str_copy(m_aBkwClansChatCommand, aCommand);
+}
+
 bool CBindChat::ChatDoAutocomplete(bool ShiftPressed)
 {
 	CChat &Chat = GameClient()->m_Chat;
-
 	if(m_vBinds.empty())
 		return false;
 	if(*Chat.m_aCompletionBuffer == '\0')
 		return false;
-
 	const CBind *pCompletionBind = nullptr;
 	int InitialCompletionChosen = Chat.m_CompletionChosen;
 	int InitialCompletionUsed = Chat.m_CompletionUsed;
-
 	if(ShiftPressed && Chat.m_CompletionUsed)
 		Chat.m_CompletionChosen--;
 	else if(!ShiftPressed)
 		Chat.m_CompletionChosen++;
 	Chat.m_CompletionChosen = (Chat.m_CompletionChosen + m_vBinds.size()) % m_vBinds.size();
-
-	Chat.m_CompletionUsed = true;
+	m_CompletionUsed = true;
 	int Index = Chat.m_CompletionChosen;
 	for(int i = 0; i < (int)m_vBinds.size(); i++)
 	{
@@ -591,7 +811,6 @@ bool CBindChat::ChatDoAutocomplete(bool ShiftPressed)
 			break;
 		}
 	}
-
 	if(pCompletionBind)
 	{
 		char aBuf[CChat::MAX_LINE_LENGTH];
@@ -600,7 +819,6 @@ bool CBindChat::ChatDoAutocomplete(bool ShiftPressed)
 		const char *pSeparator = " ";
 		str_append(aBuf, pSeparator);
 		str_append(aBuf, Chat.m_Input.GetString() + Chat.m_PlaceholderOffset + Chat.m_PlaceholderLength);
-
 		Chat.m_PlaceholderLength = str_length(pSeparator) + str_length(pCompletionBind->m_aName);
 		Chat.m_Input.Set(aBuf);
 		Chat.m_Input.SetCursorOffset(Chat.m_PlaceholderOffset + Chat.m_PlaceholderLength);
@@ -610,14 +828,12 @@ bool CBindChat::ChatDoAutocomplete(bool ShiftPressed)
 		Chat.m_CompletionChosen = InitialCompletionChosen;
 		Chat.m_CompletionUsed = InitialCompletionUsed;
 	}
-
 	return pCompletionBind != nullptr;
 }
 
 void CBindChat::ConfigSaveCallback(IConfigManager *pConfigManager, void *pUserData)
 {
 	CBindChat *pThis = (CBindChat *)pUserData;
-
 	{
 		char aBuf[160];
 		str_format(aBuf, sizeof(aBuf), "bkw_player_info_enabled %d", pThis->m_BkwPlayerInfoEnabled ? 1 : 0);
@@ -628,19 +844,26 @@ void CBindChat::ConfigSaveCallback(IConfigManager *pConfigManager, void *pUserDa
 		str_escape(&pDst, pThis->m_aBkwPlayerInfoChatCommand, pEnd);
 		str_append(aEscaped, "\"");
 		pConfigManager->WriteLine(aEscaped, ConfigDomain::TCLIENTCHATBINDS);
+
+		str_format(aBuf, sizeof(aBuf), "bkw_clans_enabled %d", pThis->m_BkwClansEnabled ? 1 : 0);
+		pConfigManager->WriteLine(aBuf, ConfigDomain::TCLIENTCHATBINDS);
+		char aClansEscaped[BKW_CLANS_COMMAND_MAX * 2 + 64] = "bkw_clans_chat_command \"";
+		pEnd = aClansEscaped + sizeof(aClansEscaped);
+		pDst = aClansEscaped + str_length(aClansEscaped);
+		str_escape(&pDst, pThis->m_aBkwClansChatCommand, pEnd);
+		str_append(aClansEscaped, "\"");
+		pConfigManager->WriteLine(aClansEscaped, ConfigDomain::TCLIENTCHATBINDS);
 	}
 
 	auto Compare = [&](const CBindChat::CBind &A, const CBindChat::CBind &B) {
 		const int Res = str_utf8_comp_nocase(A.m_aName, B.m_aName);
 		return Res < 0 || (Res == 0 && str_comp(A.m_aName, B.m_aName) < 0);
 	};
-
 	std::vector<std::reference_wrapper<const CBindChat::CBind>> vDefaultBinds;
 	for(const auto &[_, vBindDefaults] : CBindChat::BIND_DEFAULTS)
 		for(const CBindChat::CBindDefault &BindDefault : vBindDefaults)
 			vDefaultBinds.emplace_back(BindDefault.m_Bind);
 	std::sort(vDefaultBinds.begin(), vDefaultBinds.end(), Compare);
-
 	std::sort(pThis->m_vBinds.begin(), pThis->m_vBinds.end(), Compare);
 	for(CBind &Bind : pThis->m_vBinds)
 	{
@@ -653,11 +876,8 @@ void CBindChat::ConfigSaveCallback(IConfigManager *pConfigManager, void *pUserDa
 				continue;
 			}
 			else
-			{
 				vDefaultBinds.erase(It);
-			}
 		}
-
 		char aBuf[BINDCHAT_MAX_CMD * 2] = "";
 		char *pEnd = aBuf + sizeof(aBuf);
 		char *pDst;
@@ -675,12 +895,10 @@ void CBindChat::ConfigSaveCallback(IConfigManager *pConfigManager, void *pUserDa
 		char aBuf[BINDCHAT_MAX_CMD * 2 + 32] = "";
 		char *pEnd = aBuf + sizeof(aBuf);
 		char *pDst;
-
 		str_append(aBuf, "unbindchat \"");
 		pDst = aBuf + str_length(aBuf);
 		str_escape(&pDst, Bind.get().m_aName, pEnd);
 		str_append(aBuf, "\"");
-
 		pConfigManager->WriteLine(aBuf, ConfigDomain::TCLIENTCHATBINDS);
 	}
 }
