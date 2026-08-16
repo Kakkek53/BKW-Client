@@ -17,6 +17,7 @@
 #include <game/localization.h>
 
 #include <algorithm>
+#include <ctime>
 #include <string>
 #include <vector>
 
@@ -112,6 +113,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 				Entry.m_Key = s_SaveStore.NextFreeKey();
 				Entry.m_ServerAddress = ServerInfo.m_aAddress;
 				Entry.m_Map = ServerInfo.m_aMap;
+				Entry.m_SavedAtUnix = (long long)std::time(nullptr);
 				Entry.m_vPlayers = vCurrentPlayers;
 
 				char aCommand[128];
@@ -151,7 +153,10 @@ void CMenus::RenderSettings(CUIRect MainView)
 			const bool ServerMatches = Online && str_comp(Entry.m_ServerAddress.c_str(), ServerInfo.m_aAddress) == 0;
 			const bool MapMatches = Online && str_comp(Entry.m_Map.c_str(), ServerInfo.m_aMap) == 0;
 			const bool TeamMatches = InDdraceTeam && Entry.m_vPlayers == vCurrentPlayers;
-			const bool CanLoad = ServerMatches && MapMatches && TeamMatches;
+			const long long NowUnix = (long long)std::time(nullptr);
+			const int CooldownLeft = Entry.m_SavedAtUnix > 0 ? maximum(0, 30 - (int)(NowUnix - Entry.m_SavedAtUnix)) : 0;
+			const bool CooldownReady = CooldownLeft == 0;
+			const bool CanLoad = ServerMatches && MapMatches && TeamMatches && CooldownReady;
 
 			CUIRect Card;
 			PageView.HSplitTop(104.0f, &Card, &PageView);
@@ -189,8 +194,10 @@ void CMenus::RenderSettings(CUIRect MainView)
 			State.VSplitRight(10.0f, &State, nullptr);
 
 			char aState[256];
-			if(CanLoad)
-				str_copy(aState, "✓ Сервер  ✓ Карта  ✓ Команда");
+			if(ServerMatches && MapMatches && TeamMatches && !CooldownReady)
+				str_format(aState, sizeof(aState), "✓ Сервер  ✓ Карта  ✓ Команда   •   Можно загрузить через %d сек.", CooldownLeft);
+			else if(CanLoad)
+				str_copy(aState, "✓ Сервер  ✓ Карта  ✓ Команда   •   Готово к загрузке");
 			else if(!Online)
 				str_copy(aState, "Не подключены к серверу");
 			else
@@ -204,6 +211,9 @@ void CMenus::RenderSettings(CUIRect MainView)
 					char aCommand[128];
 					str_format(aCommand, sizeof(aCommand), "/load %s", Entry.m_Key.c_str());
 					GameClient()->m_Chat.SendChat(0, aCommand);
+					s_SaveStore.Remove(Index);
+					s_SaveStore.Save(Storage());
+					break;
 				}
 			}
 			else
