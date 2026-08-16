@@ -59,8 +59,16 @@ void CMenus::RenderSettings(CUIRect MainView)
 		static int s_CheckpointsToggleId;
 		static CButtonContainer s_CheckpointMouseLeftButton;
 		static CButtonContainer s_CheckpointMouseRightButton;
+		static int s_PlayerInfoToggleId;
+		static CLineInputBuffered<64> s_PlayerInfoCommandInput;
+		static bool s_PlayerInfoCommandInitialized = false;
 
 		s_SaveStore.Load(Storage());
+		if(!s_PlayerInfoCommandInitialized)
+		{
+			s_PlayerInfoCommandInput.Set(GameClient()->m_BindChat.BkwPlayerInfoChatCommand());
+			s_PlayerInfoCommandInitialized = true;
+		}
 
 		const bool Online = Client()->State() == IClient::STATE_ONLINE;
 		const CServerInfo &ServerInfo = Client()->ServerInfo();
@@ -289,6 +297,48 @@ void CMenus::RenderSettings(CUIRect MainView)
 			Ui()->DoLabel(&Status, aCheckpointStatus, 11.0f, TEXTALIGN_ML);
 			TextRender()->TextColor(TextRender()->DefaultTextColor());
 		}
+
+		PageView.HSplitTop(24.0f, nullptr, &PageView);
+		CUIRect PlayerInfoHeader;
+		PageView.HSplitTop(28.0f, &PlayerInfoHeader, &PageView);
+		Ui()->DoLabel(&PlayerInfoHeader, "BKW — Инф. о игроке (рейс)", 22.0f, TEXTALIGN_ML);
+		PageView.HSplitTop(8.0f, nullptr, &PageView);
+
+		const bool PlayerInfoEnabled = GameClient()->m_BindChat.BkwPlayerInfoEnabled();
+		CUIRect PlayerInfoToggle;
+		PageView.HSplitTop(28.0f, &PlayerInfoToggle, &PageView);
+		if(DoButton_CheckBox(&s_PlayerInfoToggleId, "Инф. о игроке (рейс)", PlayerInfoEnabled ? 1 : 0, &PlayerInfoToggle))
+			GameClient()->m_BindChat.SetBkwPlayerInfoEnabled(!PlayerInfoEnabled);
+
+		if(GameClient()->m_BindChat.BkwPlayerInfoEnabled())
+		{
+			PageView.HSplitTop(8.0f, nullptr, &PageView);
+			CUIRect PlayerInfoCard;
+			PageView.HSplitTop(126.0f, &PlayerInfoCard, &PageView);
+			PlayerInfoCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+			PlayerInfoCard.Margin(10.0f, &PlayerInfoCard);
+
+			CUIRect Description, CommandLabel, CommandInput, Example, Privacy;
+			PlayerInfoCard.HSplitTop(24.0f, &Description, &PlayerInfoCard);
+			Ui()->DoLabel(&Description, "Показывает DDNet race-статистику локально. Сообщение не отправляется на сервер.", 11.0f, TEXTALIGN_ML);
+			PlayerInfoCard.HSplitTop(20.0f, &CommandLabel, &PlayerInfoCard);
+			Ui()->DoLabel(&CommandLabel, "Локальная команда:", 11.0f, TEXTALIGN_ML);
+			PlayerInfoCard.HSplitTop(28.0f, &CommandInput, &PlayerInfoCard);
+			if(Ui()->DoEditBox(&s_PlayerInfoCommandInput, &CommandInput, 12.0f))
+			{
+				GameClient()->m_BindChat.SetBkwPlayerInfoChatCommand(s_PlayerInfoCommandInput.GetString());
+				if(!s_PlayerInfoCommandInput.IsActive())
+					s_PlayerInfoCommandInput.Set(GameClient()->m_BindChat.BkwPlayerInfoChatCommand());
+			}
+			PlayerInfoCard.HSplitTop(22.0f, &Example, &PlayerInfoCard);
+			char aPlayerInfoExample[160];
+			str_format(aPlayerInfoExample, sizeof(aPlayerInfoExample), "Пример: %s DDNET PRO COACH", GameClient()->m_BindChat.BkwPlayerInfoChatCommand());
+			Ui()->DoLabel(&Example, aPlayerInfoExample, 11.0f, TEXTALIGN_ML);
+			PlayerInfoCard.HSplitTop(22.0f, &Privacy, &PlayerInfoCard);
+			TextRender()->TextColor(ColorRGBA(0.6f, 0.9f, 0.6f, 1.0f));
+			Ui()->DoLabel(&Privacy, "Результат виден только вам.", 11.0f, TEXTALIGN_ML);
+			TextRender()->TextColor(TextRender()->DefaultTextColor());
+		}
 	};
 
 	if(g_Config.m_BcSettingsLayout == 0)
@@ -427,7 +477,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 
 			CUIRect ContentView = PageView;
 			const float ContentStartY = ContentView.y;
-			const float VirtualHeightBoost = Page == SETTINGS_GENERAL ? 120.0f : (Page == SETTINGS_CREDITS ? 1800.0f : 96.0f);
+			const float VirtualHeightBoost = Page == SETTINGS_GENERAL ? 120.0f : (Page == SETTINGS_CREDITS ? 2050.0f : 96.0f);
 			ContentView.h = PageView.h + VirtualHeightBoost;
 
 			RenderSettingsPage(ContentView);
@@ -887,8 +937,12 @@ bool CMenus::RenderHslaScrollbars(CUIRect *pRect, unsigned int *pColor, bool Alp
 	};
 
 	auto &&RenderAlphaRect = [&](CUIRect *pColorRect, const ColorRGBA &CurColorFull) {
-		const ColorRGBA LeftColorRGBA = color_cast<ColorRGBA>(color_cast<ColorHSLA>(CurColorFull).WithAlpha(0.0f));
-		const ColorRGBA RightColorRGBA = color_cast<ColorRGBA>(color_cast<ColorHSLA>(CurColorFull).WithAlpha(1.0f));
+		ColorHSLA LeftColor = color_cast<ColorHSLA>(CurColorFull);
+		ColorHSLA RightColor = color_cast<ColorHSLA>(CurColorFull);
+		LeftColor.a = 0.0f;
+		RightColor.a = 1.0f;
+		const ColorRGBA LeftColorRGBA = color_cast<ColorRGBA>(LeftColor);
+		const ColorRGBA RightColorRGBA = color_cast<ColorRGBA>(RightColor);
 		Graphics()->SetColor4(LeftColorRGBA, RightColorRGBA, RightColorRGBA, LeftColorRGBA);
 		IGraphics::CFreeformItem Freeform(pColorRect->x, pColorRect->y, pColorRect->x + pColorRect->w, pColorRect->y, pColorRect->x, pColorRect->y + pColorRect->h, pColorRect->x + pColorRect->w, pColorRect->y + pColorRect->h);
 		Graphics()->QuadsDrawFreeform(&Freeform, 1);
