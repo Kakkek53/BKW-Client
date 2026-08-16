@@ -1,0 +1,33 @@
+name: BKW save warning patch
+
+on:
+  push:
+    branches:
+      - agent/bkw-save-system
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/bkw-save-system
+          fetch-depth: 0
+      - name: Apply BKW patch
+        run: python3 scripts/bkw_apply_save_warning.py
+      - name: Remove temporary patch files
+        run: |
+          rm -f scripts/bkw_apply_save_warning.py
+          rm -f .github/workflows/bkw-save-warning-patch.yml
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Add BKW unsaved progress exit warning"
+          git push origin HEAD:agent/bkw-save-system
