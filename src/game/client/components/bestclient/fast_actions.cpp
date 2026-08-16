@@ -2,23 +2,33 @@
 #include "fast_actions.h"
 
 #include <base/math.h>
+#include <base/system.h>
 
 #include <engine/graphics.h>
 #include <engine/shared/config.h>
+#include <engine/storage.h>
 
 #include <game/client/animstate.h>
 #include <game/client/gameclient.h>
 #include <game/client/render.h>
 #include <game/client/ui.h>
 #include <game/localization.h>
+#include <game/mapitems.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdlib>
+#include <sstream>
 
 namespace
 {
+constexpr const char *BKW_CHECKPOINT_SETTINGS_FILE = "bkw-checkpoints.cfg";
+constexpr float BKW_CHECKPOINT_HOLD_SECONDS = 0.35f;
+constexpr float BKW_CHECKPOINT_REMOVE_DISTANCE = 42.0f;
+constexpr float BKW_CHECKPOINT_PICK_DISTANCE = 56.0f;
+constexpr int BKW_CHECKPOINT_MAX = 32;
+
 void EnsureFixedBindSlots(std::vector<CFastActions::CBind> &vBinds)
 {
 	if(vBinds.size() != FAST_ACTIONS_FIXED_SLOTS)
@@ -146,8 +156,187 @@ void CFastActions::ConRemoveFa(IConsole::IResult *pResult, void *pUserData)
 
 void CFastActions::ConRemoveAllFaBinds(IConsole::IResult *pResult, void *pUserData)
 {
-	CFastActions *pThis = static_cast<CFastActions *>(pUserData);
+	CFastActions *pThis = (CFastActions *)pUserData;
 	pThis->RemoveAllBinds();
+}
+
+bool CFastActions::BkwPracticeModeActive() const
+{
+	if(!m_BkwCheckpointsEnabled || Client()->State() != IClient::STATE_ONLINE)
+		return false;
+
+	const int LocalClientId = GameClient()->m_Snap.m_LocalClientId;
+	if(LocalClientId < 0 || LocalClientId >= MAX_CLIENTS)
+		return false;
+
+	const auto &Character = GameClient()->m_Snap.m_aCharacters[LocalClientId];
+	return Character.m_Active && Character.m_HasExtendedData && (Character.m_ExtendedData.m_Flags & CHARACTERFLAG_PRACTICE_MODE) != 0;
+}
+
+void CFastActions::BkwResetCheckpoints()
+{
+	m_vBkwCheckpoints.clear();
+	m_BkwCheckpointHolding = false;
+	m_BkwCheckpointHoldStart = 0;
+}
+
+void CFastActions::BkwToggleCheckpointAtTee()
+{
+	if(!BkwPracticeModeActive())
+		return;
+
+	const vec2 TeePos = GameClient()->m_LocalCharacterPos;
+	int ClosestIndex = -1;
+	float ClosestDistance = BKW_CHECKPOINT_REMOVE_DISTANCE;
+	for(size_t i = 0; i < m_vBkwCheckpoints.size(); ++i)
+	{
+		const float Dist = distance(TeePos, m_vBkwCheckpoints[i].m_Position);
+		if(Dist <= ClosestDistance)
+		{
+			ClosestDistance = Dist;
+			ClosestIndex = (int)i;
+		}
+	}
+
+	if(ClosestIndex >= 0)
+	{
+		m_vBkwCheckpoints.erase(m_vBkwCheckpoints.begin() + ClosestIndex);
+		return;
+	}
+
+	if((int)m_vBkwCheckpoints.size() >= BKW_CHECKPOINT_MAX)
+		m_vBkwCheckpoints.erase(m_vBkwCheckpoints.begin());
+
+	SBkwCheckpoint Checkpoint;
+	Checkpoint.m_Position = TeePos;
+	m_vBkwCheckpoints.push_back(Checkpoint);
+}
+
+void CFastActions::BkwTeleportCheckpointAtCursor()
+{
+	if(!BkwPracticeModeActive() || m_vBkwCheckpoints.empty())
+		return;
+
+	const int Dummy = g_Config.m_ClDummy ? 1 : 0;
+	const vec2 CursorWorld = GameClient()->m_LocalCharacterPos + GameClient()->m_Controls.m_aTargetPos[Dummy];
+
+	int ClosestIndex = -1;
+	float ClosestDistance = BKW_CHECKPOINT_PICK_DISTANCE;
+	for(size_t i = 0; i < m_vBkwCheckpoints.size(); ++i)
+	{
+		const float Dist = distance(CursorWorld, m_vBkwCheckpoints[i].m_Position);
+		if(Dist <= ClosestDistance)
+		{
+			ClosestDistance = Dist;
+			ClosestIndex = (int)i;
+		}
+	}
+
+	// If the cursor is not close to any marker, use the latest checkpoint.
+	if(ClosestIndex < 0)
+		ClosestIndex = (int)m_vBkwCheckpoints.size() - 1;
+
+	const vec2 Pos = m_vBkwCheckpoints[ClosestIndex].m_Position;
+	char aCommand[128];
+	str_format(aCommand, sizeof(aCommand), "/tpxy %.2f %.2f", Pos.x, Pos.y);
+	GameClient()->m_Chat.SendChat(0, aCommand);
+}
+
+void CFastActions::BkwRenderCheckpoints()
+{
+	if(!BkwPracticeModeActive() || m_vBkwCheckpoints.empty())
+		return;
+
+	const CScreenRect OldScreen = Graphics()->GetScreen();
+	const CMapItemGroup *pGameGroup = GameClient()->Layers()->GameGroup();
+	if(pGameGroup)
+	{
+		const int ParallaxZoom = std::clamp(maximum(pGameGroup->m_ParallaxX, pGameGroup->m_ParallaxY), 0, 100);
+		const CScreenRect WorldScreen = Graphics()->MapScreenToWorld(
+			GameClient()->m_Camera.m_Center.x, GameClient()->m_Camera.m_Center.y,
+			pGameGroup->m_ParallaxX, pGameGroup->m_ParallaxY, (float)ParallaxZoom,
+			pGameGroup->m_OffsetX, pGameGroup->m_OffsetY,
+			Graphics()->ScreenAspect(), GameClient()->m_Camera.m_Zoom);
+		Graphics()->MapScreen(WorldScreen);
+	}
+
+	const int Segments = 32;
+	std::vector<IGraphics::CLineItem> vLines;
+	vLines.reserve(m_vBkwCheckpoints.size() * Segments * 2);
+	for(const SBkwCheckpoint &Checkpoint : m_vBkwCheckpoints)
+	{
+		for(float Radius : {16.0f, 17.5f})
+		{
+			for(int i = 0; i < Segments; ++i)
+			{
+				const float A0 = 2.0f * pi * i / Segments;
+				const float A1 = 2.0f * pi * (i + 1) / Segments;
+				vLines.emplace_back(
+					Checkpoint.m_Position.x + std::cos(A0) * Radius,
+					Checkpoint.m_Position.y + std::sin(A0) * Radius,
+					Checkpoint.m_Position.x + std::cos(A1) * Radius,
+					Checkpoint.m_Position.y + std::sin(A1) * Radius);
+			}
+		}
+	}
+
+	Graphics()->TextureClear();
+	Graphics()->LinesBegin();
+	Graphics()->SetColor(1.0f, 1.0f, 1.0f, 0.9f);
+	if(!vLines.empty())
+		Graphics()->LinesDraw(vLines.data(), vLines.size());
+	Graphics()->LinesEnd();
+	Graphics()->MapScreen(OldScreen);
+}
+
+void CFastActions::BkwLoadCheckpointSettings()
+{
+	char *pData = Storage()->ReadFileStr(BKW_CHECKPOINT_SETTINGS_FILE, IStorage::TYPE_SAVE);
+	if(!pData)
+		return;
+
+	std::istringstream Stream(pData);
+	std::string Line;
+	while(std::getline(Stream, Line))
+	{
+		if(str_startswith(Line.c_str(), "enabled="))
+			m_BkwCheckpointsEnabled = std::atoi(Line.c_str() + 8) != 0;
+		else if(str_startswith(Line.c_str(), "mouse="))
+			m_BkwCheckpointMouseButton = std::clamp(std::atoi(Line.c_str() + 6), 0, 1);
+	}
+	std::free(pData);
+}
+
+void CFastActions::BkwSaveCheckpointSettings() const
+{
+	IOHANDLE File = Storage()->OpenFile(BKW_CHECKPOINT_SETTINGS_FILE, IOFLAG_WRITE, IStorage::TYPE_SAVE);
+	if(!File)
+		return;
+
+	char aBuf[128];
+	str_format(aBuf, sizeof(aBuf), "enabled=%d\nmouse=%d\n", m_BkwCheckpointsEnabled ? 1 : 0, m_BkwCheckpointMouseButton);
+	io_write(File, aBuf, str_length(aBuf));
+	io_close(File);
+}
+
+void CFastActions::SetBkwCheckpointsEnabled(bool Enabled)
+{
+	if(m_BkwCheckpointsEnabled == Enabled)
+		return;
+	m_BkwCheckpointsEnabled = Enabled;
+	if(!Enabled)
+		BkwResetCheckpoints();
+	BkwSaveCheckpointSettings();
+}
+
+void CFastActions::SetBkwCheckpointMouseButton(int Button)
+{
+	Button = std::clamp(Button, 0, 1);
+	if(m_BkwCheckpointMouseButton == Button)
+		return;
+	m_BkwCheckpointMouseButton = Button;
+	m_BkwCheckpointHolding = false;
+	BkwSaveCheckpointSettings();
 }
 
 void CFastActions::AddBind(const char *pName, const char *pCommand)
@@ -222,6 +411,7 @@ void CFastActions::RemoveAllBinds()
 void CFastActions::OnConsoleInit()
 {
 	EnsureFixedBindSlots(m_vBinds);
+	BkwLoadCheckpointSettings();
 
 	IConfigManager *pConfigManager = Kernel()->RequestInterface<IConfigManager>();
 	if(pConfigManager)
@@ -243,6 +433,19 @@ void CFastActions::OnReset()
 	m_SelectedBind = -1;
 	m_DisplayBind = -1;
 	m_AnimationTime = 0.0f;
+	BkwResetCheckpoints();
+}
+
+void CFastActions::OnMapLoad()
+{
+	BkwResetCheckpoints();
+}
+
+void CFastActions::OnStateChange(int NewState, int OldState)
+{
+	(void)OldState;
+	if(NewState == IClient::STATE_OFFLINE || NewState == IClient::STATE_CONNECTING || NewState == IClient::STATE_LOADING)
+		BkwResetCheckpoints();
 }
 
 void CFastActions::OnRelease()
@@ -260,6 +463,33 @@ bool CFastActions::OnCursorMove(float x, float y, IInput::ECursorType CursorType
 
 bool CFastActions::OnInput(const IInput::CEvent &Event)
 {
+	if(m_BkwCheckpointsEnabled && Client()->State() == IClient::STATE_ONLINE && !GameClient()->m_Menus.IsActive())
+	{
+		const int ActionKey = m_BkwCheckpointMouseButton == 0 ? KEY_MOUSE_1 : KEY_MOUSE_2;
+		if(Event.m_Key == ActionKey)
+		{
+			if(Event.m_Flags & IInput::FLAG_PRESS)
+			{
+				m_BkwCheckpointHolding = true;
+				m_BkwCheckpointHoldStart = time_get();
+			}
+			else if(Event.m_Flags & IInput::FLAG_RELEASE)
+			{
+				if(m_BkwCheckpointHolding)
+				{
+					const float HeldSeconds = (time_get() - m_BkwCheckpointHoldStart) / (float)time_freq();
+					if(HeldSeconds >= BKW_CHECKPOINT_HOLD_SECONDS)
+						BkwToggleCheckpointAtTee();
+				}
+				m_BkwCheckpointHolding = false;
+			}
+		}
+		else if(Event.m_Key == KEY_MOUSE_3 && (Event.m_Flags & IInput::FLAG_PRESS))
+		{
+			BkwTeleportCheckpointAtCursor();
+		}
+	}
+
 	if(!g_Config.m_BcFastActions)
 	{
 		m_Active = false;
@@ -288,6 +518,8 @@ bool CFastActions::OnInput(const IInput::CEvent &Event)
 
 void CFastActions::OnRender()
 {
+	BkwRenderCheckpoints();
+
 	if(!g_Config.m_BcFastActions)
 	{
 		m_Active = false;
@@ -329,7 +561,6 @@ void CFastActions::OnRender()
 	}
 	else
 	{
-		// Re-trigger the appear animation whenever the displayed slot changes.
 		if(ShouldBeVisible && m_DisplayBind != m_SelectedBind)
 		{
 			m_DisplayBind = m_SelectedBind;
