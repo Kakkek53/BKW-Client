@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <sstream>
+#include <string>
 
 namespace
 {
@@ -218,7 +219,7 @@ void CFastActions::BkwTeleportCheckpointAtCursor()
 		return;
 
 	const int Dummy = g_Config.m_ClDummy ? 1 : 0;
-	const vec2 CursorWorld = GameClient()->m_LocalCharacterPos + GameClient()->m_Controls.m_aTargetPos[Dummy];
+	const vec2 CursorWorld = GameClient()->m_Controls.m_aTargetPos[Dummy];
 
 	int ClosestIndex = -1;
 	float ClosestDistance = BKW_CHECKPOINT_PICK_DISTANCE;
@@ -232,7 +233,6 @@ void CFastActions::BkwTeleportCheckpointAtCursor()
 		}
 	}
 
-	// If the cursor is not close to any marker, use the latest checkpoint.
 	if(ClosestIndex < 0)
 		ClosestIndex = (int)m_vBkwCheckpoints.size() - 1;
 
