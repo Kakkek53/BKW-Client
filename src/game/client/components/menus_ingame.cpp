@@ -59,7 +59,11 @@ void CMenus::RenderGame(CUIRect MainView)
 	static CButtonContainer s_DisconnectButton;
 	if(DoButton_Menu(&s_DisconnectButton, Localize("Disconnect"), 0, &Button))
 	{
-		if((GameClient()->CurrentRaceTime() / 60 >= g_Config.m_ClConfirmDisconnectTime && g_Config.m_ClConfirmDisconnectTime >= 0) ||
+		if(BkwShouldWarnUnsavedProgress())
+		{
+			BkwOpenUnsavedProgressWarning(false);
+		}
+		else if((GameClient()->CurrentRaceTime() / 60 >= g_Config.m_ClConfirmDisconnectTime && g_Config.m_ClConfirmDisconnectTime >= 0) ||
 			GameClient()->m_TouchControls.HasEditingChanges() ||
 			GameClient()->m_Menus.m_MenusIngameTouchControls.UnsavedChanges())
 		{

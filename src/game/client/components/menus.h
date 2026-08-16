@@ -940,6 +940,10 @@ public:
 	void ForceRefreshLanPage();
 	void SetShowStart(bool ShowStart);
 	void ShowQuitPopup();
+	bool BkwShouldWarnUnsavedProgress();
+	bool BkwCanSaveCurrentProgress();
+	bool BkwSaveCurrentProgress();
+	void BkwOpenUnsavedProgressWarning(bool QuitGame);
 	void JoinTutorial();
 
 private:

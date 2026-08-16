@@ -10,6 +10,7 @@
 #include <engine/shared/config.h>
 
 #include <game/client/components/bkw/save_store.h>
+#include <game/client/components/bkw/save_warning.h>
 #include <game/client/components/menu_background.h>
 #include <game/client/gameclient.h>
 #include <game/client/ui.h>
@@ -57,6 +58,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 		BKW_TAB_CHECKPOINTS,
 		BKW_TAB_PLAYER,
 		BKW_TAB_CLANS,
+		BKW_TAB_EXIT,
 		BKW_TAB_LENGTH,
 	};
 	static int s_BkwTab = BKW_TAB_SAVES;
@@ -75,9 +77,23 @@ void CMenus::RenderSettings(CUIRect MainView)
 		static int s_ClansToggleId;
 		static CLineInputBuffered<64> s_ClansCommandInput;
 		static bool s_ClansCommandInitialized = false;
+		static int s_SaveWarningToggleId;
+		static CLineInputBuffered<256> s_SaveWarningIpsInput;
+		static CLineInputBuffered<256> s_SaveWarningCommunitiesInput;
+		static CLineInputBuffered<256> s_SaveWarningGameTypesInput;
+		static bool s_SaveWarningInputsInitialized = false;
 		static CButtonContainer s_aBkwTabButtons[BKW_TAB_LENGTH];
 
 		s_SaveStore.Load(Storage());
+		auto &SaveWarning = Bkw::SaveWarningState();
+		SaveWarning.Load(Storage());
+		if(!s_SaveWarningInputsInitialized)
+		{
+			s_SaveWarningIpsInput.Set(SaveWarning.m_ExcludedIps.c_str());
+			s_SaveWarningCommunitiesInput.Set(SaveWarning.m_ExcludedCommunities.c_str());
+			s_SaveWarningGameTypesInput.Set(SaveWarning.m_ExcludedGameTypes.c_str());
+			s_SaveWarningInputsInitialized = true;
+		}
 		if(!s_PlayerInfoCommandInitialized)
 		{
 			s_PlayerInfoCommandInput.Set(GameClient()->m_BindChat.BkwPlayerInfoChatCommand());
@@ -92,7 +108,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 		s_BkwTab = std::clamp(s_BkwTab, 0, BKW_TAB_LENGTH - 1);
 		CUIRect BkwTabBar;
 		PageView.HSplitTop(30.0f, &BkwTabBar, &PageView);
-		const char *apBkwTabs[BKW_TAB_LENGTH] = {"Сохранение", "Чекпоинты", "Игрок", "Кланы"};
+		const char *apBkwTabs[BKW_TAB_LENGTH] = {"Сохранение", "Чекпоинты", "Игрок", "Кланы", "Выход"};
 		CUIRect RemainingTabs = BkwTabBar;
 		const float TabWidth = BkwTabBar.w / (float)BKW_TAB_LENGTH;
 		for(int i = 0; i < BKW_TAB_LENGTH; ++i)
@@ -168,6 +184,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 					GameClient()->m_Chat.SendChat(0, aCommand);
 					s_SaveStore.Add(std::move(Entry));
 					s_SaveStore.Save(Storage());
+					Bkw::SaveWarningState().MarkSaved();
 				}
 			}
 			else
@@ -258,6 +275,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 							char aCommand[128];
 							str_format(aCommand, sizeof(aCommand), "/load %s", Entry.m_Key.c_str());
 							GameClient()->m_Chat.SendChat(0, aCommand);
+							Bkw::SaveWarningState().MarkLoaded();
 							s_SaveStore.Remove(Index);
 							s_SaveStore.Save(Storage());
 							break;
@@ -421,6 +439,50 @@ void CMenus::RenderSettings(CUIRect MainView)
 				Ui()->DoLabel(&Privacy, "Источник: Teerank • результат виден только вам.", 11.0f, TEXTALIGN_ML);
 				TextRender()->TextColor(TextRender()->DefaultTextColor());
 			}
+		}
+
+		else if(s_BkwTab == BKW_TAB_EXIT)
+		{
+			CUIRect Header, Toggle;
+			PageView.HSplitTop(28.0f, &Header, &PageView);
+			Ui()->DoLabel(&Header, "BKW — Предупреждение о выходе", 22.0f, TEXTALIGN_ML);
+			PageView.HSplitTop(8.0f, nullptr, &PageView);
+			PageView.HSplitTop(28.0f, &Toggle, &PageView);
+			if(DoButton_CheckBox(&s_SaveWarningToggleId, "Предупреждать о несохранённом прогрессе", SaveWarning.m_Enabled ? 1 : 0, &Toggle))
+			{
+				SaveWarning.m_Enabled = !SaveWarning.m_Enabled;
+				SaveWarning.Save(Storage());
+			}
+
+			PageView.HSplitTop(10.0f, nullptr, &PageView);
+			CUIRect Info;
+			PageView.HSplitTop(58.0f, &Info, &PageView);
+			Info.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+			Info.Margin(10.0f, &Info);
+			Ui()->DoLabel(&Info, "Окно появляется только после реального пересечения старта и исчезает после финиша или BKW-сохранения.", 11.0f, TEXTALIGN_ML);
+
+			PageView.HSplitTop(14.0f, nullptr, &PageView);
+			auto DoExceptionInput = [&](const char *pLabel, CLineInputBuffered<256> &Input, std::string &Target) {
+				CUIRect Label, Edit;
+				PageView.HSplitTop(20.0f, &Label, &PageView);
+				Ui()->DoLabel(&Label, pLabel, 12.0f, TEXTALIGN_ML);
+				PageView.HSplitTop(28.0f, &Edit, &PageView);
+				if(Ui()->DoEditBox(&Input, &Edit, 12.0f))
+				{
+					Target = Input.GetString();
+					SaveWarning.Save(Storage());
+				}
+				PageView.HSplitTop(10.0f, nullptr, &PageView);
+			};
+
+			DoExceptionInput("Исключения по IP (через запятую):", s_SaveWarningIpsInput, SaveWarning.m_ExcludedIps);
+			DoExceptionInput("Исключения по сообществам, например ddnet, kog:", s_SaveWarningCommunitiesInput, SaveWarning.m_ExcludedCommunities);
+			DoExceptionInput("Исключения по типу игры, например DDRace, Gores:", s_SaveWarningGameTypesInput, SaveWarning.m_ExcludedGameTypes);
+			CUIRect Hint;
+			PageView.HSplitTop(36.0f, &Hint, &PageView);
+			TextRender()->TextColor(ColorRGBA(0.7f, 0.7f, 0.7f, 1.0f));
+			Ui()->DoLabel(&Hint, "Поддерживаются запятые и точки с запятой. Совпадение без учёта регистра.", 11.0f, TEXTALIGN_ML);
+			TextRender()->TextColor(TextRender()->DefaultTextColor());
 		}
 	};
 

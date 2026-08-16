@@ -29,6 +29,8 @@
 #include <game/client/animstate.h>
 #include <game/client/bc_ui_animations.h>
 #include <game/client/components/binds.h>
+#include <game/client/components/bkw/save_store.h>
+#include <game/client/components/bkw/save_warning.h>
 #include <game/client/components/console.h>
 #include <game/client/components/key_binder.h>
 #include <game/client/components/menu_background.h>
@@ -40,6 +42,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <ctime>
+#include <string>
 #include <vector>
 
 using namespace std::chrono_literals;
@@ -511,7 +515,11 @@ void CMenus::RenderMenubar(CUIRect Box, IClient::EClientState ClientState)
 	ColorRGBA QuitColor(1, 0, 0, 0.5f);
 	if(DoButton_MenuTab(&s_QuitButton, FontIcon::POWER_OFF, 0, &Button, IGraphics::CORNER_T, &m_aAnimatorsSmallPage[SMALL_TAB_QUIT], nullptr, nullptr, &QuitColor, 10.0f))
 	{
-		if(GameClient()->Editor()->HasUnsavedData() || (GameClient()->CurrentRaceTime() / 60 >= g_Config.m_ClConfirmQuitTime && g_Config.m_ClConfirmQuitTime >= 0) || m_MenusIngameTouchControls.UnsavedChanges() || GameClient()->m_TouchControls.HasEditingChanges())
+		if(BkwShouldWarnUnsavedProgress())
+		{
+			BkwOpenUnsavedProgressWarning(true);
+		}
+		else if(GameClient()->Editor()->HasUnsavedData() || (GameClient()->CurrentRaceTime() / 60 >= g_Config.m_ClConfirmQuitTime && g_Config.m_ClConfirmQuitTime >= 0) || m_MenusIngameTouchControls.UnsavedChanges() || GameClient()->m_TouchControls.HasEditingChanges())
 		{
 			m_Popup = POPUP_QUIT;
 		}
@@ -1367,6 +1375,96 @@ void CMenus::Render()
 
 void CMenus::RenderPopupFullscreen(CUIRect Screen)
 {
+	auto &BkwWarning = Bkw::SaveWarningState();
+	if(BkwWarning.m_PopupActive)
+	{
+		if(BkwWarning.m_ExitAfterSaveAt > 0 && time_get() >= BkwWarning.m_ExitAfterSaveAt)
+		{
+			const Bkw::ESaveWarningExitAction Action = BkwWarning.m_ExitAction;
+			BkwWarning.ResetRace();
+			m_Popup = POPUP_NONE;
+			SetActive(false);
+			if(Action == Bkw::ESaveWarningExitAction::QUIT)
+				Client()->Quit();
+			else if(Action == Bkw::ESaveWarningExitAction::DISCONNECT)
+				Client()->Disconnect();
+			return;
+		}
+
+		Screen.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 0.30f), IGraphics::CORNER_ALL, 0.0f);
+		CUIRect Box = Screen;
+		Box.VMargin(maximum(20.0f, Screen.w * 0.17f), &Box);
+		Box.HMargin(maximum(20.0f, (Screen.h - 245.0f) * 0.5f), &Box);
+		Box.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.97f), IGraphics::CORNER_ALL, 10.0f);
+		Box.Margin(18.0f, &Box);
+
+		CUIRect Title, Message, Buttons;
+		Box.HSplitTop(34.0f, &Title, &Box);
+		Ui()->DoLabel(&Title, "Несохранённый прогресс", 24.0f, TEXTALIGN_MC);
+		Box.HSplitTop(14.0f, nullptr, &Box);
+		Box.HSplitTop(88.0f, &Message, &Box);
+		if(BkwWarning.m_ExitAfterSaveAt > 0)
+		{
+			Ui()->DoLabel(&Message, "Сохранение отправлено серверу. Выход...", 15.0f, TEXTALIGN_MC);
+			return;
+		}
+
+		const bool CanSave = BkwCanSaveCurrentProgress();
+		const char *pMessage = CanSave ?
+			"Вы начали прохождение и ещё не сохранили прогресс.\nСохранить команду перед выходом?" :
+			"Вы начали прохождение и ещё не сохранили прогресс.\nДля автосохранения нужно находиться в отдельной /team.";
+		Ui()->DoLabel(&Message, pMessage, 14.0f, TEXTALIGN_MC);
+
+		Box.HSplitBottom(38.0f, &Box, &Buttons);
+		CUIRect ForceButton, SaveButton, CancelButton, Rest;
+		Buttons.VSplitLeft(Buttons.w / 3.0f - 4.0f, &ForceButton, &Rest);
+		Rest.VSplitLeft(6.0f, nullptr, &Rest);
+		Rest.VSplitLeft(Rest.w / 2.0f - 3.0f, &SaveButton, &Rest);
+		Rest.VSplitLeft(6.0f, nullptr, &CancelButton);
+
+		static CButtonContainer s_BkwForceExitButton;
+		static CButtonContainer s_BkwSaveExitButton;
+		static CButtonContainer s_BkwCancelExitButton;
+
+		const bool Escape = Input()->KeyPress(KEY_ESCAPE);
+		if(DoButton_Menu(&s_BkwCancelExitButton, "Отмена", 0, &CancelButton) || Escape)
+		{
+			BkwWarning.m_PopupActive = false;
+			BkwWarning.m_ExitAction = Bkw::ESaveWarningExitAction::NONE;
+			BkwWarning.m_ExitAfterSaveAt = 0;
+			m_Popup = POPUP_NONE;
+			return;
+		}
+		if(DoButton_Menu(&s_BkwForceExitButton, "Всё равно выйти", 0, &ForceButton))
+		{
+			const Bkw::ESaveWarningExitAction Action = BkwWarning.m_ExitAction;
+			BkwWarning.ResetRace();
+			m_Popup = POPUP_NONE;
+			SetActive(false);
+			if(Action == Bkw::ESaveWarningExitAction::QUIT)
+				Client()->Quit();
+			else
+				Client()->Disconnect();
+			return;
+		}
+		if(CanSave)
+		{
+			if(DoButton_Menu(&s_BkwSaveExitButton, "Сохраниться и выйти", 0, &SaveButton) && BkwSaveCurrentProgress())
+			{
+				// Give the reliable chat command a short moment to reach the server before closing the connection.
+				BkwWarning.m_ExitAfterSaveAt = time_get() + time_freq() * 3 / 4;
+			}
+		}
+		else
+		{
+			SaveButton.Draw(ColorRGBA(0.18f, 0.18f, 0.18f, 0.55f), IGraphics::CORNER_ALL, 5.0f);
+			TextRender()->TextColor(0.55f, 0.55f, 0.55f, 1.0f);
+			Ui()->DoLabel(&SaveButton, "Сохраниться и выйти", 12.0f, TEXTALIGN_MC);
+			TextRender()->TextColor(TextRender()->DefaultTextColor());
+		}
+		return;
+	}
+
 	char aBuf[1536];
 	const char *pTitle = "";
 	const char *pExtraText = "";
@@ -3112,9 +3210,92 @@ void CMenus::SetShowStart(bool ShowStart)
 	m_ShowStart = ShowStart;
 }
 
+bool CMenus::BkwShouldWarnUnsavedProgress()
+{
+	auto &Warning = Bkw::SaveWarningState();
+	Warning.Load(Storage());
+	if(Client()->State() != IClient::STATE_ONLINE || !Warning.HasUnsavedProgress())
+		return false;
+
+	const CServerInfo &Info = Client()->ServerInfo();
+	if(Bkw::CSaveWarningState::ListMatches(Warning.m_ExcludedIps, Info.m_aAddress) ||
+		Bkw::CSaveWarningState::ListMatches(Warning.m_ExcludedCommunities, Info.m_aCommunityId) ||
+		Bkw::CSaveWarningState::ListMatches(Warning.m_ExcludedGameTypes, Info.m_aGameType))
+		return false;
+
+	if(const CCommunity *pCommunity = ServerBrowser()->Community(Info.m_aCommunityId))
+	{
+		if(Bkw::CSaveWarningState::ListMatches(Warning.m_ExcludedCommunities, pCommunity->Name()))
+			return false;
+	}
+	return true;
+}
+
+bool CMenus::BkwCanSaveCurrentProgress()
+{
+	if(Client()->State() != IClient::STATE_ONLINE)
+		return false;
+	const int LocalClientId = GameClient()->m_Snap.m_LocalClientId;
+	if(LocalClientId < 0 || LocalClientId >= MAX_CLIENTS)
+		return false;
+	const int Team = GameClient()->m_Teams.Team(LocalClientId);
+	return Team > TEAM_FLOCK && Team < GameClient()->m_Teams.TeamSuper();
+}
+
+bool CMenus::BkwSaveCurrentProgress()
+{
+	if(!BkwCanSaveCurrentProgress())
+		return false;
+
+	const int LocalClientId = GameClient()->m_Snap.m_LocalClientId;
+	const int Team = GameClient()->m_Teams.Team(LocalClientId);
+	std::vector<std::string> vPlayers;
+	for(int ClientId = 0; ClientId < MAX_CLIENTS; ++ClientId)
+	{
+		if(!GameClient()->m_aClients[ClientId].m_Active || GameClient()->m_Teams.Team(ClientId) != Team)
+			continue;
+		if(GameClient()->m_aClients[ClientId].m_aName[0] != '\0')
+			vPlayers.emplace_back(GameClient()->m_aClients[ClientId].m_aName);
+	}
+	if(vPlayers.empty())
+		return false;
+	std::sort(vPlayers.begin(), vPlayers.end());
+
+	Bkw::CSaveStore Store;
+	Store.Load(Storage());
+	Bkw::SSaveEntry Entry;
+	Entry.m_Key = Store.NextFreeKey();
+	Entry.m_ServerAddress = Client()->ServerInfo().m_aAddress;
+	Entry.m_Map = Client()->ServerInfo().m_aMap;
+	Entry.m_SavedAtUnix = (long long)std::time(nullptr);
+	Entry.m_vPlayers = std::move(vPlayers);
+
+	char aCommand[128];
+	str_format(aCommand, sizeof(aCommand), "/save %s", Entry.m_Key.c_str());
+	GameClient()->m_Chat.SendChat(0, aCommand);
+	Store.Add(std::move(Entry));
+	Store.Save(Storage());
+	Bkw::SaveWarningState().MarkSaved();
+	return true;
+}
+
+void CMenus::BkwOpenUnsavedProgressWarning(bool QuitGame)
+{
+	auto &Warning = Bkw::SaveWarningState();
+	Warning.Load(Storage());
+	Warning.m_PopupActive = true;
+	Warning.m_ExitAction = QuitGame ? Bkw::ESaveWarningExitAction::QUIT : Bkw::ESaveWarningExitAction::DISCONNECT;
+	Warning.m_ExitAfterSaveAt = 0;
+	m_Popup = POPUP_CONFIRM;
+	SetActive(true);
+}
+
 void CMenus::ShowQuitPopup()
 {
-	m_Popup = POPUP_QUIT;
+	if(BkwShouldWarnUnsavedProgress())
+		BkwOpenUnsavedProgressWarning(true);
+	else
+		m_Popup = POPUP_QUIT;
 }
 
 void CMenus::JoinTutorial()
