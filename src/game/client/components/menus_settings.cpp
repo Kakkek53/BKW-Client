@@ -9,11 +9,16 @@
 #include <engine/graphics.h>
 #include <engine/shared/config.h>
 
+#include <game/client/components/bkw/save_store.h>
 #include <game/client/components/menu_background.h>
 #include <game/client/gameclient.h>
 #include <game/client/ui.h>
 #include <game/client/ui_listbox.h>
 #include <game/localization.h>
+
+#include <algorithm>
+#include <string>
+#include <vector>
 
 void CMenus::SetNeedSendInfo()
 {
@@ -32,9 +37,6 @@ void CMenus::RenderSettings(CUIRect MainView)
 	if(g_Config.m_UiSettingsPage == SETTINGS_PLAYER)
 		g_Config.m_UiSettingsPage = SETTINGS_TEE;
 
-	// Must short-circuit here, before any of the root/sub tab bar buttons below are given a
-	// chance to run their click logic this frame - otherwise clicks on the fullscreen editor
-	// can also land on whatever tab button used to be underneath it.
 	if(m_GifWheelEditorOpen)
 	{
 		RenderSettingsBestClientGifWheelFullscreen(*Ui()->Screen());
@@ -47,6 +49,179 @@ void CMenus::RenderSettings(CUIRect MainView)
 	}
 
 	g_Config.m_BcSettingsLayout = minimum(maximum(g_Config.m_BcSettingsLayout, 0), 1);
+
+	auto RenderBkwPage = [&](CUIRect PageView) {
+		static Bkw::CSaveStore s_SaveStore;
+		static CButtonContainer s_SaveButton;
+		static CButtonContainer s_aLoadButtons[256];
+		static CButtonContainer s_aDeleteButtons[256];
+
+		s_SaveStore.Load(Storage());
+
+		const bool Online = Client()->State() == IClient::STATE_ONLINE;
+		const CServerInfo &ServerInfo = Client()->ServerInfo();
+		const int LocalClientId = GameClient()->m_Snap.m_LocalClientId;
+		int CurrentTeam = -1;
+		std::vector<std::string> vCurrentPlayers;
+
+		if(Online && LocalClientId >= 0 && LocalClientId < MAX_CLIENTS)
+		{
+			CurrentTeam = GameClient()->m_Teams.Team(LocalClientId);
+			if(CurrentTeam > TEAM_FLOCK && CurrentTeam < GameClient()->m_Teams.TeamSuper())
+			{
+				for(int ClientId = 0; ClientId < MAX_CLIENTS; ++ClientId)
+				{
+					if(!GameClient()->m_aClients[ClientId].m_Active)
+						continue;
+					if(GameClient()->m_Teams.Team(ClientId) != CurrentTeam)
+						continue;
+					const char *pName = GameClient()->m_aClients[ClientId].m_aName;
+					if(pName[0] != '\0')
+						vCurrentPlayers.emplace_back(pName);
+				}
+				std::sort(vCurrentPlayers.begin(), vCurrentPlayers.end());
+			}
+		}
+
+		const bool InDdraceTeam = CurrentTeam > TEAM_FLOCK && CurrentTeam < GameClient()->m_Teams.TeamSuper() && !vCurrentPlayers.empty();
+
+		CUIRect Header, Info, SaveButtonRect;
+		PageView.HSplitTop(28.0f, &Header, &PageView);
+		Ui()->DoLabel(&Header, "BKW — Сохранение", 22.0f, TEXTALIGN_ML);
+		PageView.HSplitTop(8.0f, nullptr, &PageView);
+
+		PageView.HSplitTop(74.0f, &Info, &PageView);
+		Info.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.45f), IGraphics::CORNER_ALL, 6.0f);
+		Info.Margin(10.0f, &Info);
+		char aInfo[512];
+		if(!Online)
+			str_copy(aInfo, "Подключитесь к серверу и войдите в /team, чтобы создать сохранение.");
+		else if(!InDdraceTeam)
+			str_format(aInfo, sizeof(aInfo), "Карта: %s\nВойдите в отдельную /team (не team 0), чтобы сохранить команду.", ServerInfo.m_aMap);
+		else
+			str_format(aInfo, sizeof(aInfo), "Карта: %s   •   Игроков в team: %d\nСервер: %s", ServerInfo.m_aMap, (int)vCurrentPlayers.size(), ServerInfo.m_aAddress);
+		Ui()->DoLabel(&Info, aInfo, 13.0f, TEXTALIGN_ML);
+
+		PageView.HSplitTop(10.0f, nullptr, &PageView);
+		PageView.HSplitTop(32.0f, &SaveButtonRect, &PageView);
+		if(InDdraceTeam)
+		{
+			if(DoButton_Menu(&s_SaveButton, "Сохраниться", 0, &SaveButtonRect))
+			{
+				Bkw::SSaveEntry Entry;
+				Entry.m_Key = s_SaveStore.NextFreeKey();
+				Entry.m_ServerAddress = ServerInfo.m_aAddress;
+				Entry.m_Map = ServerInfo.m_aMap;
+				Entry.m_vPlayers = vCurrentPlayers;
+
+				char aCommand[128];
+				str_format(aCommand, sizeof(aCommand), "/save %s", Entry.m_Key.c_str());
+				GameClient()->m_Chat.SendChat(0, aCommand);
+				s_SaveStore.Add(std::move(Entry));
+				s_SaveStore.Save(Storage());
+			}
+		}
+		else
+		{
+			SaveButtonRect.Draw(ColorRGBA(0.18f, 0.18f, 0.18f, 0.45f), IGraphics::CORNER_ALL, 5.0f);
+			TextRender()->TextColor(0.55f, 0.55f, 0.55f, 1.0f);
+			Ui()->DoLabel(&SaveButtonRect, "Сохраниться", 14.0f, TEXTALIGN_MC);
+			TextRender()->TextColor(TextRender()->DefaultTextColor());
+		}
+
+		PageView.HSplitTop(16.0f, nullptr, &PageView);
+		CUIRect ListHeader;
+		PageView.HSplitTop(24.0f, &ListHeader, &PageView);
+		Ui()->DoLabel(&ListHeader, "Сохранения", 18.0f, TEXTALIGN_ML);
+
+		if(s_SaveStore.Entries().empty())
+		{
+			CUIRect Empty;
+			PageView.HSplitTop(34.0f, &Empty, &PageView);
+			TextRender()->TextColor(0.65f, 0.65f, 0.65f, 1.0f);
+			Ui()->DoLabel(&Empty, "Пока нет сохранений.", 13.0f, TEXTALIGN_ML);
+			TextRender()->TextColor(TextRender()->DefaultTextColor());
+			return;
+		}
+
+		const size_t MaxRendered = minimum<size_t>(s_SaveStore.Entries().size(), 256);
+		for(size_t Index = 0; Index < MaxRendered; ++Index)
+		{
+			const Bkw::SSaveEntry &Entry = s_SaveStore.Entries()[Index];
+			const bool ServerMatches = Online && str_comp(Entry.m_ServerAddress.c_str(), ServerInfo.m_aAddress) == 0;
+			const bool MapMatches = Online && str_comp(Entry.m_Map.c_str(), ServerInfo.m_aMap) == 0;
+			const bool TeamMatches = InDdraceTeam && Entry.m_vPlayers == vCurrentPlayers;
+			const bool CanLoad = ServerMatches && MapMatches && TeamMatches;
+
+			CUIRect Card;
+			PageView.HSplitTop(104.0f, &Card, &PageView);
+			PageView.HSplitTop(8.0f, nullptr, &PageView);
+			Card.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+			Card.Margin(8.0f, &Card);
+
+			CUIRect Title, Meta, Players, Buttons;
+			Card.HSplitTop(20.0f, &Title, &Card);
+			Card.HSplitTop(22.0f, &Meta, &Card);
+			Card.HSplitTop(22.0f, &Players, &Card);
+			Card.HSplitBottom(28.0f, &Card, &Buttons);
+
+			char aTitle[128];
+			str_format(aTitle, sizeof(aTitle), "Сохранение %s", Entry.m_Key.c_str());
+			Ui()->DoLabel(&Title, aTitle, 15.0f, TEXTALIGN_ML);
+
+			char aMeta[512];
+			str_format(aMeta, sizeof(aMeta), "%s  •  %s", Entry.m_Map.c_str(), Entry.m_ServerAddress.c_str());
+			Ui()->DoLabel(&Meta, aMeta, 11.0f, TEXTALIGN_ML);
+
+			std::string PlayerText;
+			for(size_t PlayerIndex = 0; PlayerIndex < Entry.m_vPlayers.size(); ++PlayerIndex)
+			{
+				if(PlayerIndex != 0)
+					PlayerText += ", ";
+				PlayerText += Entry.m_vPlayers[PlayerIndex];
+			}
+			Ui()->DoLabel(&Players, PlayerText.c_str(), 11.0f, TEXTALIGN_ML);
+
+			CUIRect State, LoadButton, DeleteButton;
+			Buttons.VSplitRight(90.0f, &State, &DeleteButton);
+			State.VSplitRight(10.0f, &State, nullptr);
+			State.VSplitRight(110.0f, &State, &LoadButton);
+			State.VSplitRight(10.0f, &State, nullptr);
+
+			char aState[256];
+			if(CanLoad)
+				str_copy(aState, "✓ Сервер  ✓ Карта  ✓ Команда");
+			else if(!Online)
+				str_copy(aState, "Не подключены к серверу");
+			else
+				str_format(aState, sizeof(aState), "%s Сервер   %s Карта   %s Команда", ServerMatches ? "✓" : "✕", MapMatches ? "✓" : "✕", TeamMatches ? "✓" : "✕");
+			Ui()->DoLabel(&State, aState, 10.0f, TEXTALIGN_ML);
+
+			if(CanLoad)
+			{
+				if(DoButton_Menu(&s_aLoadButtons[Index], "Загрузиться", 0, &LoadButton))
+				{
+					char aCommand[128];
+					str_format(aCommand, sizeof(aCommand), "/load %s", Entry.m_Key.c_str());
+					GameClient()->m_Chat.SendChat(0, aCommand);
+				}
+			}
+			else
+			{
+				LoadButton.Draw(ColorRGBA(0.18f, 0.18f, 0.18f, 0.45f), IGraphics::CORNER_ALL, 5.0f);
+				TextRender()->TextColor(0.55f, 0.55f, 0.55f, 1.0f);
+				Ui()->DoLabel(&LoadButton, "Загрузиться", 12.0f, TEXTALIGN_MC);
+				TextRender()->TextColor(TextRender()->DefaultTextColor());
+			}
+
+			if(DoButton_Menu(&s_aDeleteButtons[Index], "Удалить", 0, &DeleteButton))
+			{
+				s_SaveStore.Remove(Index);
+				s_SaveStore.Save(Storage());
+				break;
+			}
+		}
+	};
 
 	if(g_Config.m_BcSettingsLayout == 0)
 	{
@@ -113,8 +288,8 @@ void CMenus::RenderSettings(CUIRect MainView)
 			}
 			else if(g_Config.m_UiSettingsPage == SETTINGS_CREDITS)
 			{
-				GameClient()->m_MenuBackground.ChangePosition(CMenuBackground::POS_SETTINGS_CREDITS);
-				RenderSettingsCredits(PageView);
+				GameClient()->m_MenuBackground.ChangePosition(CMenuBackground::POS_SETTINGS_RESERVED0);
+				RenderBkwPage(PageView);
 			}
 			else if(g_Config.m_UiSettingsPage == SETTINGS_BESTCLIENT)
 			{
@@ -165,7 +340,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 
 		auto RenderSettingsPageNewLayout = [&](CUIRect PageView) {
 			const int Page = g_Config.m_UiSettingsPage;
-			const bool NeedsAutoScroll = Page == SETTINGS_GENERAL || Page == SETTINGS_APPEARANCE;
+			const bool NeedsAutoScroll = Page == SETTINGS_GENERAL || Page == SETTINGS_APPEARANCE || Page == SETTINGS_CREDITS;
 
 			if(!NeedsAutoScroll)
 			{
@@ -184,7 +359,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 
 			CUIRect ContentView = PageView;
 			const float ContentStartY = ContentView.y;
-			const float VirtualHeightBoost = Page == SETTINGS_GENERAL ? 120.0f : 96.0f;
+			const float VirtualHeightBoost = Page == SETTINGS_GENERAL ? 120.0f : (Page == SETTINGS_CREDITS ? 900.0f : 96.0f);
 			ContentView.h = PageView.h + VirtualHeightBoost;
 
 			RenderSettingsPage(ContentView);
@@ -212,6 +387,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 			ROOT_TAB_APPEARANCE,
 			ROOT_TAB_TCLIENT,
 			ROOT_TAB_BESTCLIENT,
+			ROOT_TAB_BKW,
 			ROOT_TAB_LENGTH,
 		};
 
@@ -222,6 +398,8 @@ void CMenus::RenderSettings(CUIRect MainView)
 				return ROOT_TAB_APPEARANCE;
 			if(Page == SETTINGS_TCLIENT || Page == SETTINGS_PROFILES || Page == SETTINGS_CONFIGS)
 				return ROOT_TAB_TCLIENT;
+			if(Page == SETTINGS_CREDITS)
+				return ROOT_TAB_BKW;
 			return ROOT_TAB_BESTCLIENT;
 		};
 
@@ -233,6 +411,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 			Localize("Appearance"),
 			TCLocalize("TClient"),
 			Localize("BestClient"),
+			"BKW",
 		};
 		static CButtonContainer s_aRootTabButtons[ROOT_TAB_LENGTH];
 		const int CurRootTab = GetRootTabByPage(g_Config.m_UiSettingsPage);
@@ -251,15 +430,17 @@ void CMenus::RenderSettings(CUIRect MainView)
 					g_Config.m_UiSettingsPage = SETTINGS_APPEARANCE;
 				else if(i == ROOT_TAB_TCLIENT)
 					g_Config.m_UiSettingsPage = SETTINGS_TCLIENT;
-				else
+				else if(i == ROOT_TAB_BESTCLIENT)
 					g_Config.m_UiSettingsPage = SETTINGS_BESTCLIENT;
+				else
+					g_Config.m_UiSettingsPage = SETTINGS_CREDITS;
 			}
 		}
 
 		const int ActiveRootTab = GetRootTabByPage(g_Config.m_UiSettingsPage);
 		ContentView.HSplitTop(6.0f, nullptr, &ContentView);
 
-		if(ActiveRootTab != ROOT_TAB_BESTCLIENT)
+		if(ActiveRootTab == ROOT_TAB_GENERAL || ActiveRootTab == ROOT_TAB_APPEARANCE || ActiveRootTab == ROOT_TAB_TCLIENT)
 		{
 			CUIRect SubTabBar;
 			ContentView.HSplitTop(24.0f, &SubTabBar, &ContentView);
@@ -327,7 +508,6 @@ void CMenus::RenderSettings(CUIRect MainView)
 		return;
 	}
 
-	// render background
 	CUIRect Button, TabBar, RestartBar;
 	MainView.VSplitRight(120.0f, &MainView, &TabBar);
 	MainView.Draw(ms_ColorTabbarActive, IGraphics::CORNER_B, 10.0f);
@@ -358,7 +538,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 		Localize("BestClient"),
 		Localize("Profiles"),
 		Localize("Configs"),
-		Localize("Credits")};
+		"BKW"};
 
 	if(g_Config.m_UiSettingsPage == SETTINGS_LANGUAGE)
 		g_Config.m_UiSettingsPage = SETTINGS_GENERAL;
@@ -447,8 +627,8 @@ void CMenus::RenderSettings(CUIRect MainView)
 	}
 	else if(g_Config.m_UiSettingsPage == SETTINGS_CREDITS)
 	{
-		GameClient()->m_MenuBackground.ChangePosition(CMenuBackground::POS_SETTINGS_CREDITS);
-		RenderSettingsCredits(MainView);
+		GameClient()->m_MenuBackground.ChangePosition(CMenuBackground::POS_SETTINGS_RESERVED0);
+		RenderBkwPage(MainView);
 	}
 	else if(g_Config.m_UiSettingsPage == SETTINGS_BESTCLIENT)
 	{
@@ -516,7 +696,6 @@ CUi::EPopupMenuFunctionResult CMenus::PopupSettingsCountrySelection(void *pConte
 	for(size_t i = 0; i < pMenus->GameClient()->m_CountryFlags.Num(); ++i)
 	{
 		const CCountryFlags::CCountryFlag &Entry = pMenus->GameClient()->m_CountryFlags.GetByIndex(i);
-
 		const CListboxItem Item = s_ListBox.DoNextItem(&Entry, Entry.m_CountryCode == pPopupContext->m_Selection);
 		if(!Item.m_Visible)
 			continue;
@@ -529,7 +708,6 @@ CUi::EPopupMenuFunctionResult CMenus::PopupSettingsCountrySelection(void *pConte
 		FlagRect.w = FlagRect.h * 2.0f;
 		FlagRect.x += (OldWidth - FlagRect.w) / 2.0f;
 		pMenus->GameClient()->m_CountryFlags.Render(Entry.m_CountryCode, ColorRGBA(1.0f, 1.0f, 1.0f, 1.0f), FlagRect.x, FlagRect.y, FlagRect.w, FlagRect.h);
-
 		pMenus->Ui()->DoLabel(&Label, Entry.m_aCountryCodeString, 10.0f, TEXTALIGN_MC);
 	}
 
@@ -573,110 +751,45 @@ bool CMenus::RenderHslaScrollbars(CUIRect *pRect, unsigned int *pColor, bool Alp
 		float CurXOff = pColorRect->x;
 		const float SizeColor = pColorRect->w / 6;
 
-		// red to yellow
 		{
-			IGraphics::CColorVertex aColorVertices[] = {
-				IGraphics::CColorVertex(0, 1, 0, 0, 1),
-				IGraphics::CColorVertex(1, 1, 1, 0, 1),
-				IGraphics::CColorVertex(2, 1, 0, 0, 1),
-				IGraphics::CColorVertex(3, 1, 1, 0, 1)};
+			IGraphics::CColorVertex aColorVertices[] = {IGraphics::CColorVertex(0, 1, 0, 0, 1), IGraphics::CColorVertex(1, 1, 1, 0, 1), IGraphics::CColorVertex(2, 1, 0, 0, 1), IGraphics::CColorVertex(3, 1, 1, 0, 1)};
 			Graphics()->SetColorVertex(aColorVertices, std::size(aColorVertices));
-
-			IGraphics::CFreeformItem Freeform(
-				CurXOff, pColorRect->y,
-				CurXOff + SizeColor, pColorRect->y,
-				CurXOff, pColorRect->y + pColorRect->h,
-				CurXOff + SizeColor, pColorRect->y + pColorRect->h);
+			IGraphics::CFreeformItem Freeform(CurXOff, pColorRect->y, CurXOff + SizeColor, pColorRect->y, CurXOff, pColorRect->y + pColorRect->h, CurXOff + SizeColor, pColorRect->y + pColorRect->h);
 			Graphics()->QuadsDrawFreeform(&Freeform, 1);
 		}
-
-		// yellow to green
 		CurXOff += SizeColor;
 		{
-			IGraphics::CColorVertex aColorVertices[] = {
-				IGraphics::CColorVertex(0, 1, 1, 0, 1),
-				IGraphics::CColorVertex(1, 0, 1, 0, 1),
-				IGraphics::CColorVertex(2, 1, 1, 0, 1),
-				IGraphics::CColorVertex(3, 0, 1, 0, 1)};
+			IGraphics::CColorVertex aColorVertices[] = {IGraphics::CColorVertex(0, 1, 1, 0, 1), IGraphics::CColorVertex(1, 0, 1, 0, 1), IGraphics::CColorVertex(2, 1, 1, 0, 1), IGraphics::CColorVertex(3, 0, 1, 0, 1)};
 			Graphics()->SetColorVertex(aColorVertices, std::size(aColorVertices));
-
-			IGraphics::CFreeformItem Freeform(
-				CurXOff, pColorRect->y,
-				CurXOff + SizeColor, pColorRect->y,
-				CurXOff, pColorRect->y + pColorRect->h,
-				CurXOff + SizeColor, pColorRect->y + pColorRect->h);
+			IGraphics::CFreeformItem Freeform(CurXOff, pColorRect->y, CurXOff + SizeColor, pColorRect->y, CurXOff, pColorRect->y + pColorRect->h, CurXOff + SizeColor, pColorRect->y + pColorRect->h);
 			Graphics()->QuadsDrawFreeform(&Freeform, 1);
 		}
-
 		CurXOff += SizeColor;
-		// green to turquoise
 		{
-			IGraphics::CColorVertex aColorVertices[] = {
-				IGraphics::CColorVertex(0, 0, 1, 0, 1),
-				IGraphics::CColorVertex(1, 0, 1, 1, 1),
-				IGraphics::CColorVertex(2, 0, 1, 0, 1),
-				IGraphics::CColorVertex(3, 0, 1, 1, 1)};
+			IGraphics::CColorVertex aColorVertices[] = {IGraphics::CColorVertex(0, 0, 1, 0, 1), IGraphics::CColorVertex(1, 0, 1, 1, 1), IGraphics::CColorVertex(2, 0, 1, 0, 1), IGraphics::CColorVertex(3, 0, 1, 1, 1)};
 			Graphics()->SetColorVertex(aColorVertices, std::size(aColorVertices));
-
-			IGraphics::CFreeformItem Freeform(
-				CurXOff, pColorRect->y,
-				CurXOff + SizeColor, pColorRect->y,
-				CurXOff, pColorRect->y + pColorRect->h,
-				CurXOff + SizeColor, pColorRect->y + pColorRect->h);
+			IGraphics::CFreeformItem Freeform(CurXOff, pColorRect->y, CurXOff + SizeColor, pColorRect->y, CurXOff, pColorRect->y + pColorRect->h, CurXOff + SizeColor, pColorRect->y + pColorRect->h);
 			Graphics()->QuadsDrawFreeform(&Freeform, 1);
 		}
-
 		CurXOff += SizeColor;
-		// turquoise to blue
 		{
-			IGraphics::CColorVertex aColorVertices[] = {
-				IGraphics::CColorVertex(0, 0, 1, 1, 1),
-				IGraphics::CColorVertex(1, 0, 0, 1, 1),
-				IGraphics::CColorVertex(2, 0, 1, 1, 1),
-				IGraphics::CColorVertex(3, 0, 0, 1, 1)};
+			IGraphics::CColorVertex aColorVertices[] = {IGraphics::CColorVertex(0, 0, 1, 1, 1), IGraphics::CColorVertex(1, 0, 0, 1, 1), IGraphics::CColorVertex(2, 0, 1, 1, 1), IGraphics::CColorVertex(3, 0, 0, 1, 1)};
 			Graphics()->SetColorVertex(aColorVertices, std::size(aColorVertices));
-
-			IGraphics::CFreeformItem Freeform(
-				CurXOff, pColorRect->y,
-				CurXOff + SizeColor, pColorRect->y,
-				CurXOff, pColorRect->y + pColorRect->h,
-				CurXOff + SizeColor, pColorRect->y + pColorRect->h);
+			IGraphics::CFreeformItem Freeform(CurXOff, pColorRect->y, CurXOff + SizeColor, pColorRect->y, CurXOff, pColorRect->y + pColorRect->h, CurXOff + SizeColor, pColorRect->y + pColorRect->h);
 			Graphics()->QuadsDrawFreeform(&Freeform, 1);
 		}
-
 		CurXOff += SizeColor;
-		// blue to purple
 		{
-			IGraphics::CColorVertex aColorVertices[] = {
-				IGraphics::CColorVertex(0, 0, 0, 1, 1),
-				IGraphics::CColorVertex(1, 1, 0, 1, 1),
-				IGraphics::CColorVertex(2, 0, 0, 1, 1),
-				IGraphics::CColorVertex(3, 1, 0, 1, 1)};
+			IGraphics::CColorVertex aColorVertices[] = {IGraphics::CColorVertex(0, 0, 0, 1, 1), IGraphics::CColorVertex(1, 1, 0, 1, 1), IGraphics::CColorVertex(2, 0, 0, 1, 1), IGraphics::CColorVertex(3, 1, 0, 1, 1)};
 			Graphics()->SetColorVertex(aColorVertices, std::size(aColorVertices));
-
-			IGraphics::CFreeformItem Freeform(
-				CurXOff, pColorRect->y,
-				CurXOff + SizeColor, pColorRect->y,
-				CurXOff, pColorRect->y + pColorRect->h,
-				CurXOff + SizeColor, pColorRect->y + pColorRect->h);
+			IGraphics::CFreeformItem Freeform(CurXOff, pColorRect->y, CurXOff + SizeColor, pColorRect->y, CurXOff, pColorRect->y + pColorRect->h, CurXOff + SizeColor, pColorRect->y + pColorRect->h);
 			Graphics()->QuadsDrawFreeform(&Freeform, 1);
 		}
-
 		CurXOff += SizeColor;
-		// purple to red
 		{
-			IGraphics::CColorVertex aColorVertices[] = {
-				IGraphics::CColorVertex(0, 1, 0, 1, 1),
-				IGraphics::CColorVertex(1, 1, 0, 0, 1),
-				IGraphics::CColorVertex(2, 1, 0, 1, 1),
-				IGraphics::CColorVertex(3, 1, 0, 0, 1)};
+			IGraphics::CColorVertex aColorVertices[] = {IGraphics::CColorVertex(0, 1, 0, 1, 1), IGraphics::CColorVertex(1, 1, 0, 0, 1), IGraphics::CColorVertex(2, 1, 0, 1, 1), IGraphics::CColorVertex(3, 1, 0, 0, 1)};
 			Graphics()->SetColorVertex(aColorVertices, std::size(aColorVertices));
-
-			IGraphics::CFreeformItem Freeform(
-				CurXOff, pColorRect->y,
-				CurXOff + SizeColor, pColorRect->y,
-				CurXOff, pColorRect->y + pColorRect->h,
-				CurXOff + SizeColor, pColorRect->y + pColorRect->h);
+			IGraphics::CFreeformItem Freeform(CurXOff, pColorRect->y, CurXOff + SizeColor, pColorRect->y, CurXOff, pColorRect->y + pColorRect->h, CurXOff + SizeColor, pColorRect->y + pColorRect->h);
 			Graphics()->QuadsDrawFreeform(&Freeform, 1);
 		}
 	};
@@ -684,54 +797,32 @@ bool CMenus::RenderHslaScrollbars(CUIRect *pRect, unsigned int *pColor, bool Alp
 	auto &&RenderSaturationRect = [&](CUIRect *pColorRect, const ColorRGBA &CurColor) {
 		ColorHSLA LeftColor = color_cast<ColorHSLA>(CurColor);
 		ColorHSLA RightColor = color_cast<ColorHSLA>(CurColor);
-
 		LeftColor.s = 0.0f;
 		RightColor.s = 1.0f;
-
 		const ColorRGBA LeftColorRGBA = color_cast<ColorRGBA>(LeftColor);
 		const ColorRGBA RightColorRGBA = color_cast<ColorRGBA>(RightColor);
-
 		Graphics()->SetColor4(LeftColorRGBA, RightColorRGBA, RightColorRGBA, LeftColorRGBA);
-
-		IGraphics::CFreeformItem Freeform(
-			pColorRect->x, pColorRect->y,
-			pColorRect->x + pColorRect->w, pColorRect->y,
-			pColorRect->x, pColorRect->y + pColorRect->h,
-			pColorRect->x + pColorRect->w, pColorRect->y + pColorRect->h);
+		IGraphics::CFreeformItem Freeform(pColorRect->x, pColorRect->y, pColorRect->x + pColorRect->w, pColorRect->y, pColorRect->x, pColorRect->y + pColorRect->h, pColorRect->x + pColorRect->w, pColorRect->y + pColorRect->h);
 		Graphics()->QuadsDrawFreeform(&Freeform, 1);
 	};
 
 	auto &&RenderLightingRect = [&](CUIRect *pColorRect, const ColorRGBA &CurColor) {
 		ColorHSLA LeftColor = color_cast<ColorHSLA>(CurColor);
 		ColorHSLA RightColor = color_cast<ColorHSLA>(CurColor);
-
 		LeftColor.l = DarkestLight;
 		RightColor.l = 1.0f;
-
 		const ColorRGBA LeftColorRGBA = color_cast<ColorRGBA>(LeftColor);
 		const ColorRGBA RightColorRGBA = color_cast<ColorRGBA>(RightColor);
-
 		Graphics()->SetColor4(LeftColorRGBA, RightColorRGBA, RightColorRGBA, LeftColorRGBA);
-
-		IGraphics::CFreeformItem Freeform(
-			pColorRect->x, pColorRect->y,
-			pColorRect->x + pColorRect->w, pColorRect->y,
-			pColorRect->x, pColorRect->y + pColorRect->h,
-			pColorRect->x + pColorRect->w, pColorRect->y + pColorRect->h);
+		IGraphics::CFreeformItem Freeform(pColorRect->x, pColorRect->y, pColorRect->x + pColorRect->w, pColorRect->y, pColorRect->x, pColorRect->y + pColorRect->h, pColorRect->x + pColorRect->w, pColorRect->y + pColorRect->h);
 		Graphics()->QuadsDrawFreeform(&Freeform, 1);
 	};
 
 	auto &&RenderAlphaRect = [&](CUIRect *pColorRect, const ColorRGBA &CurColorFull) {
 		const ColorRGBA LeftColorRGBA = color_cast<ColorRGBA>(color_cast<ColorHSLA>(CurColorFull).WithAlpha(0.0f));
 		const ColorRGBA RightColorRGBA = color_cast<ColorRGBA>(color_cast<ColorHSLA>(CurColorFull).WithAlpha(1.0f));
-
 		Graphics()->SetColor4(LeftColorRGBA, RightColorRGBA, RightColorRGBA, LeftColorRGBA);
-
-		IGraphics::CFreeformItem Freeform(
-			pColorRect->x, pColorRect->y,
-			pColorRect->x + pColorRect->w, pColorRect->y,
-			pColorRect->x, pColorRect->y + pColorRect->h,
-			pColorRect->x + pColorRect->w, pColorRect->y + pColorRect->h);
+		IGraphics::CFreeformItem Freeform(pColorRect->x, pColorRect->y, pColorRect->x + pColorRect->w, pColorRect->y, pColorRect->x, pColorRect->y + pColorRect->h, pColorRect->x + pColorRect->w, pColorRect->y + pColorRect->h);
 		Graphics()->QuadsDrawFreeform(&Freeform, 1);
 	};
 
@@ -742,25 +833,18 @@ bool CMenus::RenderHslaScrollbars(CUIRect *pRect, unsigned int *pColor, bool Alp
 		pRect->HSplitTop(MarginPerEntry, nullptr, pRect);
 		Button.VSplitLeft(140.0f, &Label, &Button);
 		Label.VMargin(10.0f, &Label);
-
 		Button.Draw(ColorRGBA(0.15f, 0.15f, 0.15f, 1.0f), IGraphics::CORNER_ALL, 1.0f);
 
 		CUIRect Rail;
 		Button.Margin(2.0f, &Rail);
-
 		char aBuf[32];
-
-		// Hue
 		if(i == 0)
 			str_format(aBuf, sizeof(aBuf), "%s: %.1f° (%03d)", apLabels[i], Color[i] * 360.0f, round_to_int(Color[i] * 255.0f));
-		// Lht
 		else if(i == 2)
 		{
-			// handle internal light clamping, see `UnclampLighting`
 			float Lht = DarkestLight + Color[i] * (1.0f - DarkestLight);
 			str_format(aBuf, sizeof(aBuf), "%s: %.1f%% (%03d)", apLabels[i], Lht * 100.0f, round_to_int(Color[i] * 255.0f));
 		}
-		// Sat and Alpha
 		else
 			str_format(aBuf, sizeof(aBuf), "%s: %.1f%% (%03d)", apLabels[i], Color[i] * 100.0f, round_to_int(Color[i] * 255.0f));
 		Ui()->DoLabel(&Label, aBuf, 12.0f, TEXTALIGN_ML);
@@ -789,13 +873,10 @@ bool CMenus::RenderHslaScrollbars(CUIRect *pRect, unsigned int *pColor, bool Alp
 			HandleColor = color_cast<ColorRGBA>(Color.UnclampLighting(DarkestLight));
 		}
 		Graphics()->TrianglesEnd();
-
 		Color[i] = Ui()->DoScrollbarH(&((char *)pColor)[i], &Button, Color[i], &HandleColor);
 	}
 
 	if(OriginalColor != Color)
-	{
 		*pColor = Color.Pack(Alpha);
-	}
 	return PrevPackedColor != *pColor;
 }
