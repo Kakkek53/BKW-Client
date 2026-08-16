@@ -2,6 +2,8 @@
 
 #include "race_demo.h"
 
+#include "bkw/save_warning.h"
+
 #include <base/process.h>
 #include <base/str.h>
 #include <base/time.h>
@@ -55,11 +57,26 @@ void CRaceDemo::GetPath(char *pBuf, int Size, int Time) const
 void CRaceDemo::OnStateChange(int NewState, int OldState)
 {
 	if(OldState == IClient::STATE_ONLINE)
+	{
 		StopRecord();
+		Bkw::SaveWarningState().ResetRace();
+	}
 }
 
 void CRaceDemo::OnNewSnapshot()
 {
+	// BKW: track a real start-line crossing independently of auto race demo settings.
+	// The warning must never be armed merely because the player joined a race server.
+	if(GameClient()->m_GameInfo.m_Race && Client()->State() == IClient::STATE_ONLINE &&
+		GameClient()->m_Snap.m_pGameInfoObj && !GameClient()->m_Snap.m_SpecInfo.m_Active &&
+		GameClient()->m_Snap.m_pLocalCharacter && GameClient()->m_Snap.m_pLocalPrevCharacter)
+	{
+		const vec2 PrevPos = vec2(GameClient()->m_Snap.m_pLocalPrevCharacter->m_X, GameClient()->m_Snap.m_pLocalPrevCharacter->m_Y);
+		const vec2 Pos = vec2(GameClient()->m_Snap.m_pLocalCharacter->m_X, GameClient()->m_Snap.m_pLocalCharacter->m_Y);
+		if(GameClient()->RaceHelper()->IsStart(PrevPos, Pos))
+			Bkw::SaveWarningState().MarkStarted();
+	}
+
 	if(!GameClient()->m_GameInfo.m_Race || !g_Config.m_ClAutoRaceRecord || Client()->State() != IClient::STATE_ONLINE)
 		return;
 
@@ -120,6 +137,7 @@ void CRaceDemo::OnNewSnapshot()
 void CRaceDemo::OnReset()
 {
 	StopRecord();
+	Bkw::SaveWarningState().ResetRace();
 }
 
 void CRaceDemo::OnShutdown()
@@ -133,41 +151,58 @@ void CRaceDemo::OnMessage(int MsgType, void *pRawMsg)
 	if(MsgType == NETMSGTYPE_SV_KILLMSG)
 	{
 		CNetMsg_Sv_KillMsg *pMsg = (CNetMsg_Sv_KillMsg *)pRawMsg;
-		if(pMsg->m_Victim == GameClient()->m_Snap.m_LocalClientId && Client()->RaceRecord_IsRecording())
-			StopRecord(m_Time);
+		if(pMsg->m_Victim == GameClient()->m_Snap.m_LocalClientId)
+		{
+			Bkw::SaveWarningState().MarkKilled();
+			if(Client()->RaceRecord_IsRecording())
+				StopRecord(m_Time);
+		}
 	}
 	else if(MsgType == NETMSGTYPE_SV_KILLMSGTEAM)
 	{
 		CNetMsg_Sv_KillMsgTeam *pMsg = (CNetMsg_Sv_KillMsgTeam *)pRawMsg;
 		for(int i = 0; i < MAX_CLIENTS; i++)
 		{
-			if(GameClient()->m_Teams.Team(i) == pMsg->m_Team && i == GameClient()->m_Snap.m_LocalClientId && Client()->RaceRecord_IsRecording())
-				StopRecord(m_Time);
+			if(GameClient()->m_Teams.Team(i) == pMsg->m_Team && i == GameClient()->m_Snap.m_LocalClientId)
+			{
+				Bkw::SaveWarningState().MarkKilled();
+				if(Client()->RaceRecord_IsRecording())
+					StopRecord(m_Time);
+			}
 		}
 	}
 	else if(MsgType == NETMSGTYPE_SV_CHAT)
 	{
 		CNetMsg_Sv_Chat *pMsg = (CNetMsg_Sv_Chat *)pRawMsg;
-		if(pMsg->m_ClientId == -1 && m_RaceState == RACE_STARTED)
+		if(pMsg->m_ClientId == -1)
 		{
 			char aName[MAX_NAME_LENGTH];
 			int Time = CRaceHelper::TimeFromFinishMessage(pMsg->m_pMessage, aName, sizeof(aName));
-			if(Time > 0 && GameClient()->m_Snap.m_LocalClientId >= 0 && str_comp(aName, GameClient()->m_aClients[GameClient()->m_Snap.m_LocalClientId].m_aName) == 0)
+			const bool LocalFinished = Time > 0 && GameClient()->m_Snap.m_LocalClientId >= 0 && str_comp(aName, GameClient()->m_aClients[GameClient()->m_Snap.m_LocalClientId].m_aName) == 0;
+			if(LocalFinished)
 			{
-				m_RaceState = RACE_FINISHED;
-				m_RecordStopTick = Client()->GameTick(g_Config.m_ClDummy) + Client()->GameTickSpeed();
-				m_Time = Time;
+				Bkw::SaveWarningState().MarkFinished();
+				if(m_RaceState == RACE_STARTED)
+				{
+					m_RaceState = RACE_FINISHED;
+					m_RecordStopTick = Client()->GameTick(g_Config.m_ClDummy) + Client()->GameTickSpeed();
+					m_Time = Time;
+				}
 			}
 		}
 	}
 	else if(MsgType == NETMSGTYPE_SV_RACEFINISH)
 	{
 		CNetMsg_Sv_RaceFinish *pMsg = (CNetMsg_Sv_RaceFinish *)pRawMsg;
-		if(m_RaceState == RACE_STARTED && pMsg->m_ClientId == GameClient()->m_Snap.m_LocalClientId)
+		if(pMsg->m_ClientId == GameClient()->m_Snap.m_LocalClientId)
 		{
-			m_RaceState = RACE_FINISHED;
-			m_RecordStopTick = Client()->GameTick(g_Config.m_ClDummy) + Client()->GameTickSpeed();
-			m_Time = pMsg->m_Time;
+			Bkw::SaveWarningState().MarkFinished();
+			if(m_RaceState == RACE_STARTED)
+			{
+				m_RaceState = RACE_FINISHED;
+				m_RecordStopTick = Client()->GameTick(g_Config.m_ClDummy) + Client()->GameTickSpeed();
+				m_Time = pMsg->m_Time;
+			}
 		}
 	}
 }
@@ -175,6 +210,7 @@ void CRaceDemo::OnMessage(int MsgType, void *pRawMsg)
 void CRaceDemo::OnMapLoad()
 {
 	m_AllowRestart = false;
+	Bkw::SaveWarningState().ResetRace();
 }
 
 void CRaceDemo::StopRecord(int Time)
