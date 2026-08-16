@@ -23,6 +23,8 @@ enum
 	BINDCHAT_MAX_BINDS = 256,
 	BKW_PLAYER_INFO_COMMAND_MAX = 64,
 	BKW_PLAYER_INFO_NAME_MAX = 128,
+	BKW_CLANS_COMMAND_MAX = 64,
+	BKW_CLANS_NAME_MAX = 128,
 };
 
 class CBindChat : public CComponent
@@ -55,6 +57,9 @@ private:
 	static void ConBkwPlayerInfo(IConsole::IResult *pResult, void *pUserData);
 	static void ConBkwPlayerInfoEnabled(IConsole::IResult *pResult, void *pUserData);
 	static void ConBkwPlayerInfoChatCommand(IConsole::IResult *pResult, void *pUserData);
+	static void ConBkwClans(IConsole::IResult *pResult, void *pUserData);
+	static void ConBkwClansEnabled(IConsole::IResult *pResult, void *pUserData);
+	static void ConBkwClansChatCommand(IConsole::IResult *pResult, void *pUserData);
 
 	static void ConfigSaveCallback(IConfigManager *pConfigManager, void *pUserData);
 
@@ -65,11 +70,20 @@ private:
 	char m_aBkwPlayerInfoRequestedName[BKW_PLAYER_INFO_NAME_MAX] = "";
 	std::shared_ptr<IHttpRequest> m_pBkwPlayerInfoRequest;
 
+	bool m_BkwClansEnabled = true;
+	char m_aBkwClansChatCommand[BKW_CLANS_COMMAND_MAX] = ".clans";
+	char m_aBkwClansRequestedName[BKW_CLANS_NAME_MAX] = "";
+	std::shared_ptr<IHttpRequest> m_pBkwClansRequest;
+
 	bool MatchBkwPlayerInfoCommand(const char *pText, const char **ppPlayerName) const;
 	void StartBkwPlayerInfoRequest(const char *pPlayerName);
 	void FinishBkwPlayerInfoRequest();
 	void PrintBkwPlayerInfo(const json_value &Root);
 	void PrintBkwPlayerInfoLine(const char *pText);
+	bool MatchBkwClansCommand(const char *pText, const char **ppPlayerName) const;
+	void StartBkwClansRequest(const char *pPlayerName);
+	void FinishBkwClansRequest();
+	void PrintBkwClansHtml(const char *pHtml, size_t HtmlSize);
 	static std::string BkwUrlEncode(const char *pText);
 
 public:
@@ -96,6 +110,10 @@ public:
 	const char *BkwPlayerInfoChatCommand() const { return m_aBkwPlayerInfoChatCommand; }
 	void SetBkwPlayerInfoEnabled(bool Enabled);
 	void SetBkwPlayerInfoChatCommand(const char *pCommand);
+	bool BkwClansEnabled() const { return m_BkwClansEnabled; }
+	const char *BkwClansChatCommand() const { return m_aBkwClansChatCommand; }
+	void SetBkwClansEnabled(bool Enabled);
+	void SetBkwClansChatCommand(const char *pCommand);
 };
 
 #endif
