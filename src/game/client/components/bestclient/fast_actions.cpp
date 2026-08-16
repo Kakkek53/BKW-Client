@@ -26,6 +26,7 @@ namespace
 {
 constexpr const char *BKW_CHECKPOINT_SETTINGS_FILE = "bkw-checkpoints.cfg";
 constexpr float BKW_CHECKPOINT_HOLD_SECONDS = 0.35f;
+constexpr float BKW_PRACTICE_EXIT_HOLD_SECONDS = 0.50f;
 constexpr float BKW_CHECKPOINT_REMOVE_DISTANCE = 42.0f;
 constexpr float BKW_CHECKPOINT_PICK_DISTANCE = 56.0f;
 constexpr int BKW_CHECKPOINT_MAX = 32;
@@ -484,9 +485,27 @@ bool CFastActions::OnInput(const IInput::CEvent &Event)
 				m_BkwCheckpointHolding = false;
 			}
 		}
-		else if(Event.m_Key == KEY_MOUSE_3 && (Event.m_Flags & IInput::FLAG_PRESS))
+
+		if(Event.m_Key == KEY_MOUSE_3 && BkwPracticeModeActive())
 		{
-			BkwTeleportCheckpointAtCursor();
+			static bool s_MiddleHolding = false;
+			static int64_t s_MiddleHoldStart = 0;
+			if(Event.m_Flags & IInput::FLAG_PRESS)
+			{
+				s_MiddleHolding = true;
+				s_MiddleHoldStart = time_get();
+				return true;
+			}
+			if(Event.m_Flags & IInput::FLAG_RELEASE)
+			{
+				const float HeldSeconds = s_MiddleHolding ? (time_get() - s_MiddleHoldStart) / (float)time_freq() : 0.0f;
+				s_MiddleHolding = false;
+				if(HeldSeconds >= BKW_PRACTICE_EXIT_HOLD_SECONDS)
+					GameClient()->m_Chat.SendChat(0, "/practice");
+				else
+					BkwTeleportCheckpointAtCursor();
+				return true;
+			}
 		}
 	}
 
