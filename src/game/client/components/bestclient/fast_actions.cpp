@@ -26,9 +26,7 @@ namespace
 {
 constexpr const char *BKW_CHECKPOINT_SETTINGS_FILE = "bkw-checkpoints.cfg";
 constexpr float BKW_CHECKPOINT_HOLD_SECONDS = 0.35f;
-constexpr float BKW_PRACTICE_EXIT_HOLD_SECONDS = 0.50f;
 constexpr float BKW_CHECKPOINT_REMOVE_DISTANCE = 42.0f;
-constexpr float BKW_CHECKPOINT_PICK_DISTANCE = 56.0f;
 constexpr int BKW_CHECKPOINT_MAX = 32;
 
 void EnsureFixedBindSlots(std::vector<CFastActions::CBind> &vBinds)
@@ -219,25 +217,7 @@ void CFastActions::BkwTeleportCheckpointAtCursor()
 	if(!BkwPracticeModeActive() || m_vBkwCheckpoints.empty())
 		return;
 
-	const int Dummy = g_Config.m_ClDummy ? 1 : 0;
-	const vec2 CursorWorld = GameClient()->m_Controls.m_aTargetPos[Dummy];
-
-	int ClosestIndex = -1;
-	float ClosestDistance = BKW_CHECKPOINT_PICK_DISTANCE;
-	for(size_t i = 0; i < m_vBkwCheckpoints.size(); ++i)
-	{
-		const float Dist = distance(CursorWorld, m_vBkwCheckpoints[i].m_Position);
-		if(Dist <= ClosestDistance)
-		{
-			ClosestDistance = Dist;
-			ClosestIndex = (int)i;
-		}
-	}
-
-	if(ClosestIndex < 0)
-		ClosestIndex = (int)m_vBkwCheckpoints.size() - 1;
-
-	const vec2 Pos = m_vBkwCheckpoints[ClosestIndex].m_Position;
+	const vec2 Pos = m_vBkwCheckpoints.back().m_Position;
 	char aCommand[128];
 	str_format(aCommand, sizeof(aCommand), "/tpxy %.2f %.2f", Pos.x, Pos.y);
 	GameClient()->m_Chat.SendChat(0, aCommand);
@@ -464,8 +444,42 @@ bool CFastActions::OnCursorMove(float x, float y, IInput::ECursorType CursorType
 
 bool CFastActions::OnInput(const IInput::CEvent &Event)
 {
+	static bool s_LeftMouseDown = false;
+	static bool s_RightMouseDown = false;
+	static bool s_TeleportComboTriggered = false;
+
+	if(Event.m_Key == KEY_MOUSE_1)
+	{
+		if(Event.m_Flags & IInput::FLAG_PRESS)
+			s_LeftMouseDown = true;
+		else if(Event.m_Flags & IInput::FLAG_RELEASE)
+			s_LeftMouseDown = false;
+	}
+	else if(Event.m_Key == KEY_MOUSE_2)
+	{
+		if(Event.m_Flags & IInput::FLAG_PRESS)
+			s_RightMouseDown = true;
+		else if(Event.m_Flags & IInput::FLAG_RELEASE)
+			s_RightMouseDown = false;
+	}
+
+	if(!s_LeftMouseDown || !s_RightMouseDown)
+		s_TeleportComboTriggered = false;
+
 	if(m_BkwCheckpointsEnabled && Client()->State() == IClient::STATE_ONLINE && !GameClient()->m_Menus.IsActive())
 	{
+		if((Event.m_Key == KEY_MOUSE_1 || Event.m_Key == KEY_MOUSE_2) && s_LeftMouseDown && s_RightMouseDown && BkwPracticeModeActive())
+		{
+			m_BkwCheckpointHolding = false;
+			m_BkwCheckpointHoldStart = 0;
+			if(!s_TeleportComboTriggered)
+			{
+				BkwTeleportCheckpointAtCursor();
+				s_TeleportComboTriggered = true;
+			}
+			return true;
+		}
+
 		const int ActionKey = m_BkwCheckpointMouseButton == 0 ? KEY_MOUSE_1 : KEY_MOUSE_2;
 		if(Event.m_Key == ActionKey)
 		{
@@ -483,28 +497,6 @@ bool CFastActions::OnInput(const IInput::CEvent &Event)
 						BkwToggleCheckpointAtTee();
 				}
 				m_BkwCheckpointHolding = false;
-			}
-		}
-
-		if(Event.m_Key == KEY_MOUSE_3 && BkwPracticeModeActive())
-		{
-			static bool s_MiddleHolding = false;
-			static int64_t s_MiddleHoldStart = 0;
-			if(Event.m_Flags & IInput::FLAG_PRESS)
-			{
-				s_MiddleHolding = true;
-				s_MiddleHoldStart = time_get();
-				return true;
-			}
-			if(Event.m_Flags & IInput::FLAG_RELEASE)
-			{
-				const float HeldSeconds = s_MiddleHolding ? (time_get() - s_MiddleHoldStart) / (float)time_freq() : 0.0f;
-				s_MiddleHolding = false;
-				if(HeldSeconds >= BKW_PRACTICE_EXIT_HOLD_SECONDS)
-					GameClient()->m_Chat.SendChat(0, "/practice");
-				else
-					BkwTeleportCheckpointAtCursor();
-				return true;
 			}
 		}
 	}
