@@ -94,6 +94,8 @@ void CMenus::RenderSettings(CUIRect MainView)
 		static CButtonContainer s_MinimalHudLayoutCompactButton;
 		static CButtonContainer s_aMinimalHudStyleButtons[3];
 		static int s_MinimalHudAccentToggleId;
+		static int s_MinimalHudHideScoreboardToggleId;
+		static int s_MinimalHudHideMenusToggleId;
 		static int s_MinimalHudFpsToggleId;
 		static int s_MinimalHudPingToggleId;
 		static int s_MinimalHudTeamToggleId;
@@ -648,6 +650,19 @@ void CMenus::RenderSettings(CUIRect MainView)
 				}
 				StyleCard.HSplitTop(28.0f, &AccentRow, &StyleCard);
 				if(DoButton_CheckBox(&s_MinimalHudAccentToggleId, "Акцентная линия", g_Config.m_BkwMinimalHudAccent, &AccentRow)) g_Config.m_BkwMinimalHudAccent ^= 1;
+
+				PageView.HSplitTop(10.0f, nullptr, &PageView);
+				CUIRect AutoHideCard;
+				PageView.HSplitTop(88.0f, &AutoHideCard, &PageView);
+				AutoHideCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+				AutoHideCard.Margin(10.0f, &AutoHideCard);
+				CUIRect AutoTitle, AutoRow1, AutoRow2;
+				AutoHideCard.HSplitTop(20.0f, &AutoTitle, &AutoHideCard);
+				Ui()->DoLabel(&AutoTitle, "Автоскрытие", 12.0f, TEXTALIGN_ML);
+				AutoHideCard.HSplitTop(28.0f, &AutoRow1, &AutoHideCard);
+				AutoHideCard.HSplitTop(28.0f, &AutoRow2, &AutoHideCard);
+				if(DoButton_CheckBox(&s_MinimalHudHideScoreboardToggleId, "Скрывать при scoreboard", g_Config.m_BkwMinimalHudHideScoreboard, &AutoRow1)) g_Config.m_BkwMinimalHudHideScoreboard ^= 1;
+				if(DoButton_CheckBox(&s_MinimalHudHideMenusToggleId, "Скрывать в меню", g_Config.m_BkwMinimalHudHideMenus, &AutoRow2)) g_Config.m_BkwMinimalHudHideMenus ^= 1;
 			}
 		}
 		else if(s_BkwTab == BKW_TAB_BACKGROUND)

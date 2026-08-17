@@ -3504,6 +3504,10 @@ void CHud::RenderBkwMinimalHud()
 {
 	if(!g_Config.m_BkwMinimalHud || Client()->State() != IClient::STATE_ONLINE)
 		return;
+	if(g_Config.m_BkwMinimalHudHideScoreboard && GameClient()->m_Scoreboard.IsActive())
+		return;
+	if(g_Config.m_BkwMinimalHudHideMenus && GameClient()->m_Menus.IsActive())
+		return;
 	const int LocalId = GameClient()->m_Snap.m_LocalClientId;
 	if(LocalId < 0 || LocalId >= MAX_CLIENTS)
 		return;
