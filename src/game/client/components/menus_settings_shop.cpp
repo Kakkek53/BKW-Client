@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -34,6 +35,19 @@ void ExecuteAssetCommand(IConsole *pConsole, ESkinShopCategory Category, const c
 	str_format(aCommand, sizeof(aCommand), "%s \"%s\"", CSkinShop::CategoryConfigCommand(Category), pAssetName);
 	pConsole->ExecuteLine(aCommand, IConsole::CLIENT_ID_GAME);
 }
+
+bool MatchesSearch(const SSkinShopItem &Item, const char *pSearch)
+{
+	if(pSearch == nullptr || pSearch[0] == '\0')
+		return true;
+	if(str_find_nocase(Item.m_Name.c_str(), pSearch) != nullptr)
+		return true;
+	if(str_find_nocase(Item.m_FileName.c_str(), pSearch) != nullptr)
+		return true;
+	if(!Item.m_Author.empty() && str_find_nocase(Item.m_Author.c_str(), pSearch) != nullptr)
+		return true;
+	return str_find_nocase(CSkinShop::SourceName(Item.m_Source), pSearch) != nullptr;
+}
 } // namespace
 
 void CMenus::RenderSettingsAssetsShop(CUIRect MainView)
@@ -41,12 +55,41 @@ void CMenus::RenderSettingsAssetsShop(CUIRect MainView)
 	m_SkinShop.Init(Http(), Storage());
 	m_SkinShop.Update();
 
-	if(!m_SkinShop.Loading() && !m_SkinShop.Error() && m_SkinShop.HasMore() && m_SkinShop.LoadedPage() > 0)
+	if(!m_SkinShop.Loading() && m_SkinShop.HasMore())
 		m_SkinShop.LoadNextPage();
 
-	CUIRect Header, CategoryBar, ListView, Details;
+	CUIRect Header, SourceBar, CategoryBar, SearchBar, ListView, Details;
 	MainView.HSplitTop(24.0f, &Header, &MainView);
 	Ui()->DoLabel(&Header, Localize("Texture shop"), 18.0f, TEXTALIGN_ML);
+	MainView.HSplitTop(5.0f, nullptr, &MainView);
+
+	MainView.HSplitTop(22.0f, &SourceBar, &MainView);
+	CUIRect SourceLabel, CheryDataButton, TeedataButton;
+	SourceBar.VSplitLeft(80.0f, &SourceLabel, &SourceBar);
+	Ui()->DoLabel(&SourceLabel, Localize("Sources:"), 13.0f, TEXTALIGN_ML);
+	SourceBar.VSplitLeft(135.0f, &CheryDataButton, &SourceBar);
+	SourceBar.VSplitLeft(150.0f, &TeedataButton, &SourceBar);
+
+	static int s_CheryDataSourceId;
+	static int s_TeedataSourceId;
+	const bool CheryDataEnabled = m_SkinShop.SourceEnabled(ESkinShopSource::CHERYDATA);
+	if(DoButton_CheckBox(&s_CheryDataSourceId, "CheryData", CheryDataEnabled, &CheryDataButton))
+		m_SkinShop.SetSourceEnabled(ESkinShopSource::CHERYDATA, !CheryDataEnabled);
+
+	const bool TeedataAvailable = m_SkinShop.SourceAvailable(ESkinShopSource::TEEDATA);
+	if(TeedataAvailable)
+	{
+		const bool TeedataEnabled = m_SkinShop.SourceEnabled(ESkinShopSource::TEEDATA);
+		if(DoButton_CheckBox(&s_TeedataSourceId, "Teedata", TeedataEnabled, &TeedataButton))
+			m_SkinShop.SetSourceEnabled(ESkinShopSource::TEEDATA, !TeedataEnabled);
+	}
+	else
+	{
+		TextRender()->TextColor(0.55f, 0.55f, 0.55f, 1.0f);
+		Ui()->DoLabel(&TeedataButton, "Teedata (no HUD)", 12.0f, TEXTALIGN_ML);
+		TextRender()->TextColor(TextRender()->DefaultTextColor());
+	}
+
 	MainView.HSplitTop(5.0f, nullptr, &MainView);
 	MainView.HSplitTop(24.0f, &CategoryBar, &MainView);
 
@@ -62,14 +105,33 @@ void CMenus::RenderSettingsAssetsShop(CUIRect MainView)
 			m_SkinShop.SetCategory(Category);
 	}
 
+	MainView.HSplitTop(6.0f, nullptr, &MainView);
+	MainView.HSplitTop(24.0f, &SearchBar, &MainView);
+	CUIRect SearchLabel, SearchBox;
+	SearchBar.VSplitLeft(62.0f, &SearchLabel, &SearchBox);
+	Ui()->DoLabel(&SearchLabel, Localize("Search:"), 13.0f, TEXTALIGN_ML);
+	static CLineInputBuffered<128> s_SearchInput;
+	Ui()->DoClearableEditBox(&s_SearchInput, &SearchBox, 12.0f);
+
 	MainView.HSplitTop(8.0f, nullptr, &MainView);
 	MainView.HSplitBottom(210.0f, &ListView, &Details);
 	Details.HSplitTop(8.0f, nullptr, &Details);
 
 	const auto &vItems = m_SkinShop.Items();
+	std::vector<const SSkinShopItem *> vpFilteredItems;
+	vpFilteredItems.reserve(vItems.size());
+	const char *pSearch = s_SearchInput.GetString();
+	for(const SSkinShopItem &Item : vItems)
+	{
+		if(MatchesSearch(Item, pSearch))
+			vpFilteredItems.push_back(&Item);
+	}
+
 	static CListBox s_ShopListBox;
 	static int s_Selected = -1;
 	static ESkinShopCategory s_SelectedCategory = ESkinShopCategory::NUM_CATEGORIES;
+	static int s_SourceMask = -1;
+	static std::string s_LastSearch;
 	static IGraphics::CTextureHandle s_PreviewTexture;
 	static std::string s_PreviewPath;
 
@@ -80,29 +142,48 @@ void CMenus::RenderSettingsAssetsShop(CUIRect MainView)
 		s_PreviewPath.clear();
 	};
 
-	if(s_SelectedCategory != m_SkinShop.Category())
+	const int SourceMask =
+		(m_SkinShop.SourceEnabled(ESkinShopSource::CHERYDATA) ? 1 : 0) |
+		(m_SkinShop.SourceEnabled(ESkinShopSource::TEEDATA) ? 2 : 0);
+	if(s_SelectedCategory != m_SkinShop.Category() || s_SourceMask != SourceMask || s_LastSearch != pSearch)
 	{
 		s_SelectedCategory = m_SkinShop.Category();
+		s_SourceMask = SourceMask;
+		s_LastSearch = pSearch;
 		s_Selected = -1;
 		ClearPreview();
 	}
-	if(s_Selected >= (int)vItems.size())
+
+	if(s_Selected >= (int)vpFilteredItems.size())
 		s_Selected = -1;
 
-	if(vItems.empty())
+	if(vpFilteredItems.empty())
 	{
-		const char *pMessage = m_SkinShop.Error() ? Localize("Could not load the shop. Try opening the tab again.") : Localize("Loading shop items...");
+		ClearPreview();
+		const char *pMessage;
+		if(m_SkinShop.Loading())
+			pMessage = Localize("Loading shop items...");
+		else if(m_SkinShop.Error())
+			pMessage = Localize("Could not load the shop. Try opening the tab again.");
+		else if(pSearch[0] != '\0')
+			pMessage = Localize("No textures match your search.");
+		else
+			pMessage = Localize("No textures found.");
 		Ui()->DoLabel(&ListView, pMessage, 16.0f, TEXTALIGN_MC);
 	}
 	else
 	{
-		s_ShopListBox.DoStart(48.0f, vItems.size(), 1, 1, s_Selected, &ListView, false);
-		for(size_t i = 0; i < vItems.size(); ++i)
+		s_ShopListBox.DoStart(48.0f, vpFilteredItems.size(), 1, 1, s_Selected, &ListView, false);
+		int Hovered = -1;
+		for(size_t i = 0; i < vpFilteredItems.size(); ++i)
 		{
-			const SSkinShopItem &ItemData = vItems[i];
+			const SSkinShopItem &ItemData = *vpFilteredItems[i];
 			const CListboxItem Item = s_ShopListBox.DoNextItem(&ItemData, s_Selected == (int)i);
 			if(!Item.m_Visible)
 				continue;
+
+			if(Ui()->MouseInside(&Item.m_Rect))
+				Hovered = (int)i;
 
 			CUIRect Row = Item.m_Rect;
 			Row.Margin(5.0f, &Row);
@@ -110,26 +191,33 @@ void CMenus::RenderSettingsAssetsShop(CUIRect MainView)
 			Row.HSplitTop(20.0f, &Name, &Meta);
 			Ui()->DoLabel(&Name, ItemData.m_Name.c_str(), 15.0f, TEXTALIGN_ML);
 
-			char aMeta[256];
+			char aMeta[320];
+			const char *pSourceName = CSkinShop::SourceName(ItemData.m_Source);
 			if(!ItemData.m_Author.empty())
-				str_format(aMeta, sizeof(aMeta), "%s  |  %dx%d  |  %s", ItemData.m_Author.c_str(), ItemData.m_Width, ItemData.m_Height, ItemData.m_Type.c_str());
+				str_format(aMeta, sizeof(aMeta), "%s  |  %s  |  %dx%d  |  %s", pSourceName, ItemData.m_Author.c_str(), ItemData.m_Width, ItemData.m_Height, ItemData.m_Type.c_str());
 			else
-				str_format(aMeta, sizeof(aMeta), "%dx%d  |  %s", ItemData.m_Width, ItemData.m_Height, ItemData.m_Type.c_str());
+				str_format(aMeta, sizeof(aMeta), "%s  |  %dx%d  |  %s", pSourceName, ItemData.m_Width, ItemData.m_Height, ItemData.m_Type.c_str());
 			Ui()->DoLabel(&Meta, aMeta, 12.0f, TEXTALIGN_ML);
 		}
-		s_Selected = s_ShopListBox.DoEnd();
+
+		const int ClickedSelected = s_ShopListBox.DoEnd();
+		if(ClickedSelected >= 0)
+			s_Selected = ClickedSelected;
+		if(Hovered >= 0)
+			s_Selected = Hovered;
+		if(s_Selected < 0)
+			s_Selected = 0;
 	}
 
-	if(s_Selected < 0 || s_Selected >= (int)vItems.size())
+	if(s_Selected < 0 || s_Selected >= (int)vpFilteredItems.size())
 	{
-		ClearPreview();
-		char aStatus[160];
-		str_format(aStatus, sizeof(aStatus), "%zu items%s", vItems.size(), m_SkinShop.Loading() ? "  |  loading more..." : "");
+		char aStatus[192];
+		str_format(aStatus, sizeof(aStatus), "%zu / %zu items%s", vpFilteredItems.size(), vItems.size(), m_SkinShop.Loading() ? "  |  loading more..." : "");
 		Ui()->DoLabel(&Details, aStatus, 13.0f, TEXTALIGN_ML);
 		return;
 	}
 
-	const SSkinShopItem &Selected = vItems[s_Selected];
+	const SSkinShopItem &Selected = *vpFilteredItems[s_Selected];
 	m_SkinShop.RequestPreview(Selected);
 
 	const bool PreviewReady = m_SkinShop.PreviewReady(Selected);
@@ -142,6 +230,10 @@ void CMenus::RenderSettingsAssetsShop(CUIRect MainView)
 			s_PreviewPath = PreviewPath;
 			s_PreviewTexture = Graphics()->LoadTexture(s_PreviewPath.c_str(), IStorage::TYPE_SAVE);
 		}
+	}
+	else if(!s_PreviewPath.empty())
+	{
+		ClearPreview();
 	}
 
 	CUIRect PreviewColumn, InfoColumn;
@@ -179,8 +271,9 @@ void CMenus::RenderSettingsAssetsShop(CUIRect MainView)
 	InfoColumn.HSplitTop(28.0f, &Name, &InfoColumn);
 	Ui()->DoLabel(&Name, Selected.m_Name.c_str(), 18.0f, TEXTALIGN_ML);
 	InfoColumn.HSplitTop(22.0f, &Meta, &InfoColumn);
-	char aMeta[256];
-	str_format(aMeta, sizeof(aMeta), "%s%s%s  |  %dx%d",
+	char aMeta[320];
+	str_format(aMeta, sizeof(aMeta), "%s  |  %s%s%s  |  %dx%d",
+		CSkinShop::SourceName(Selected.m_Source),
 		Selected.m_Author.empty() ? "" : Selected.m_Author.c_str(),
 		Selected.m_Author.empty() ? "" : "  |  ",
 		Selected.m_Type.c_str(), Selected.m_Width, Selected.m_Height);
@@ -195,7 +288,7 @@ void CMenus::RenderSettingsAssetsShop(CUIRect MainView)
 	InfoColumn.HSplitTop(22.0f, &Status, &InfoColumn);
 	const bool IsInstalled = m_SkinShop.Installed(Selected);
 	const bool IsSelected = IsInstalled && str_comp(CurrentAssetName(m_SkinShop.Category()), AssetName.c_str()) == 0;
-	char aStatus[192];
+	char aStatus[224];
 	if(m_SkinShop.DownloadLoading(Selected))
 		str_format(aStatus, sizeof(aStatus), Localize("Downloading... %d%%"), m_SkinShop.DownloadProgress(Selected));
 	else if(m_SkinShop.DownloadError(Selected))
@@ -205,7 +298,7 @@ void CMenus::RenderSettingsAssetsShop(CUIRect MainView)
 	else if(IsInstalled)
 		str_copy(aStatus, Localize("Downloaded"));
 	else
-		str_format(aStatus, sizeof(aStatus), "%s  |  page %d%s", Selected.m_FileName.c_str(), m_SkinShop.LoadedPage(), m_SkinShop.Loading() ? "  |  loading more..." : "");
+		str_format(aStatus, sizeof(aStatus), "%s  |  %s%s", Selected.m_FileName.c_str(), CSkinShop::SourceName(Selected.m_Source), m_SkinShop.Loading() ? "  |  loading more..." : "");
 	Ui()->DoLabel(&Status, aStatus, 12.0f, TEXTALIGN_ML);
 
 	InfoColumn.HSplitBottom(34.0f, &InfoColumn, &ButtonRow);
