@@ -6,7 +6,6 @@
 
 #include <array>
 #include <chrono>
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -74,17 +73,6 @@ public:
 	};
 
 private:
-	struct SBkwMediaDecoder;
-	std::unique_ptr<SBkwMediaDecoder> m_pBkwMediaDecoder;
-	IGraphics::CTextureHandle m_BkwMediaTexture;
-	std::string m_BkwMediaLoadedPath;
-	int m_BkwMediaWidth = 0;
-	int m_BkwMediaHeight = 0;
-	bool m_BkwMediaLoaded = false;
-	bool m_BkwMediaVideo = false;
-	bool m_BkwMediaError = false;
-	float m_BkwMediaFrameAccumulator = 0.0f;
-
 	CCamera m_Camera;
 
 	vec2 m_RotationCenter;
@@ -99,10 +87,6 @@ private:
 	bool m_Loading;
 
 	void ResetPositions();
-	void ResetBkwMediaBackground();
-	bool LoadBkwMediaBackground();
-	bool UpdateBkwMediaBackground();
-	bool RenderBkwMediaBackground();
 
 	void LoadThemeIcon(CTheme &Theme);
 	static int ThemeScan(const char *pName, int IsDir, int DirType, void *pUser);
@@ -111,7 +95,6 @@ private:
 
 public:
 	CMenuBackground();
-	~CMenuBackground() override;
 	int Sizeof() const override { return sizeof(*this); }
 
 	void OnInterfacesInit(CGameClient *pClient) override;
@@ -120,14 +103,9 @@ public:
 	void OnRender() override;
 
 	void LoadMenuBackground(bool HasDayHint = true, bool HasNightHint = true);
-	void ReloadBkwMediaBackground();
 
 	bool Render();
 	bool IsLoading() const { return m_Loading; }
-	bool BkwMediaLoaded() const { return m_BkwMediaLoaded; }
-	bool BkwMediaVideo() const { return m_BkwMediaVideo; }
-	bool BkwMediaError() const { return m_BkwMediaError; }
-	const char *BkwMediaLoadedPath() const { return m_BkwMediaLoadedPath.c_str(); }
 
 	class CCamera *GetCurCamera() override;
 
