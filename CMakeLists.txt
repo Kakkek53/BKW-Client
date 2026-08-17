@@ -2879,6 +2879,7 @@ if(CLIENT)
     components/menus_settings_graphics.cpp
     components/menus_settings_language.cpp
     components/menus_settings_player.cpp
+    components/menus_settings_shop.cpp
     components/menus_settings_sound.cpp
     components/menus_settings_tee.cpp
     components/menus_settings_tee7.cpp
@@ -2896,6 +2897,8 @@ if(CLIENT)
     components/race_demo.h
     components/scoreboard.cpp
     components/scoreboard.h
+    components/skinshop.cpp
+    components/skinshop.h
     components/skins.cpp
     components/skins.h
     components/skins7.cpp

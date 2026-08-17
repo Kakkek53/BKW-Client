@@ -933,6 +933,7 @@ static size_t gs_aCustomListSize[NUMBER_OF_ASSETS_TABS] = {
 static CLineInputBuffered<64> s_aFilterInputs[NUMBER_OF_ASSETS_TABS];
 
 static int s_CurCustomTab = ASSETS_TAB_ENTITIES;
+static bool s_AssetsShopOpen = false;
 
 static const CMenus::SCustomItem *GetCustomItem(int CurTab, size_t Index)
 {
@@ -1084,6 +1085,10 @@ void CMenus::RenderSettingsAssets(CUIRect MainView)
 	};
 
 	MainView.HSplitTop(20.0f, &TabBar, &MainView);
+	CUIRect ShopButton;
+	TabBar.VSplitRight(76.0f, &TabBar, &ShopButton);
+	TabBar.VSplitRight(5.0f, &TabBar, nullptr);
+
 	const float TabWidth = TabBar.w / (float)NUMBER_OF_ASSETS_TABS;
 	static CButtonContainer s_aPageTabs[NUMBER_OF_ASSETS_TABS] = {};
 	const char *apTabNames[NUMBER_OF_ASSETS_TABS] = {
@@ -1102,10 +1107,22 @@ void CMenus::RenderSettingsAssets(CUIRect MainView)
 		CUIRect Button;
 		TabBar.VSplitLeft(TabWidth, &Button, &TabBar);
 		const int Corners = Tab == ASSETS_TAB_ENTITIES ? IGraphics::CORNER_L : (Tab == NUMBER_OF_ASSETS_TABS - 1 ? IGraphics::CORNER_R : IGraphics::CORNER_NONE);
-		if(DoButton_MenuTab(&s_aPageTabs[Tab], apTabNames[Tab], s_CurCustomTab == Tab, &Button, Corners, nullptr, nullptr, nullptr, nullptr, 4.0f))
+		if(DoButton_MenuTab(&s_aPageTabs[Tab], apTabNames[Tab], !s_AssetsShopOpen && s_CurCustomTab == Tab, &Button, Corners, nullptr, nullptr, nullptr, nullptr, 4.0f))
 		{
 			s_CurCustomTab = Tab;
+			s_AssetsShopOpen = false;
 		}
+	}
+
+	static CButtonContainer s_ShopTab;
+	if(DoButton_MenuTab(&s_ShopTab, Localize("Shop"), s_AssetsShopOpen, &ShopButton, IGraphics::CORNER_ALL, nullptr, nullptr, nullptr, nullptr, 4.0f))
+		s_AssetsShopOpen = true;
+
+	if(s_AssetsShopOpen)
+	{
+		MainView.HSplitTop(10.0f, nullptr, &MainView);
+		RenderSettingsAssetsShop(MainView);
+		return;
 	}
 
 	auto LoadStartTime = time_get_nanoseconds();

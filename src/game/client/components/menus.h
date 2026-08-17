@@ -22,6 +22,7 @@
 #include <game/client/components/menus_ingame_touch_controls.h>
 #include <game/client/components/menus_settings_controls.h>
 #include <game/client/components/menus_start.h>
+#include <game/client/components/skinshop.h>
 #include <game/client/components/skins7.h>
 #include <game/client/components/tclient/warlist.h>
 #include <game/client/lineinput.h>
@@ -156,6 +157,7 @@ protected:
 	std::vector<SCustomArrow> m_vArrowList;
 	std::vector<SCustomAudioPack> m_vAudioPackList;
 
+	CSkinShop m_SkinShop;
 	bool m_IsInit = false;
 
 	static void LoadEntities(struct SCustomEntities *pEntitiesItem, void *pUser);
@@ -658,6 +660,9 @@ protected:
 
 	// found in menus_settings_assets.cpp
 	void RenderSettingsAssets(CUIRect MainView);
+
+	// found in menus_settings_shop.cpp
+	void RenderSettingsAssetsShop(CUIRect MainView);
 
 	// found in menus_settings_appearance.cpp
 	void RenderSettingsAppearance(CUIRect MainView);

@@ -1,0 +1,103 @@
+#include "menus.h"
+
+#include <base/str.h>
+
+#include <game/client/ui_listbox.h>
+#include <game/localization.h>
+
+void CMenus::RenderSettingsAssetsShop(CUIRect MainView)
+{
+	m_SkinShop.Init(Http());
+	m_SkinShop.Update();
+
+	if(!m_SkinShop.Loading() && !m_SkinShop.Error() && m_SkinShop.HasMore() && m_SkinShop.LoadedPage() > 0)
+		m_SkinShop.LoadNextPage();
+
+	CUIRect Header, CategoryBar, ListView, Details;
+	MainView.HSplitTop(24.0f, &Header, &MainView);
+	Ui()->DoLabel(&Header, Localize("Texture shop"), 18.0f, TEXTALIGN_ML);
+	MainView.HSplitTop(5.0f, nullptr, &MainView);
+	MainView.HSplitTop(24.0f, &CategoryBar, &MainView);
+
+	static CButtonContainer s_aCategoryButtons[(int)ESkinShopCategory::NUM_CATEGORIES];
+	const float CategoryWidth = CategoryBar.w / (float)((int)ESkinShopCategory::NUM_CATEGORIES);
+	for(int i = 0; i < (int)ESkinShopCategory::NUM_CATEGORIES; ++i)
+	{
+		const ESkinShopCategory Category = (ESkinShopCategory)i;
+		CUIRect Button;
+		CategoryBar.VSplitLeft(CategoryWidth, &Button, &CategoryBar);
+		const int Corners = i == 0 ? IGraphics::CORNER_L : (i == (int)ESkinShopCategory::NUM_CATEGORIES - 1 ? IGraphics::CORNER_R : IGraphics::CORNER_NONE);
+		if(DoButton_MenuTab(&s_aCategoryButtons[i], CSkinShop::CategoryName(Category), m_SkinShop.Category() == Category, &Button, Corners, nullptr, nullptr, nullptr, nullptr, 4.0f))
+			m_SkinShop.SetCategory(Category);
+	}
+
+	MainView.HSplitTop(8.0f, nullptr, &MainView);
+	MainView.HSplitBottom(76.0f, &ListView, &Details);
+	Details.HSplitTop(8.0f, nullptr, &Details);
+
+	const auto &vItems = m_SkinShop.Items();
+	static CListBox s_ShopListBox;
+	static int s_Selected = -1;
+	static ESkinShopCategory s_SelectedCategory = ESkinShopCategory::NUM_CATEGORIES;
+	if(s_SelectedCategory != m_SkinShop.Category())
+	{
+		s_SelectedCategory = m_SkinShop.Category();
+		s_Selected = -1;
+	}
+	if(s_Selected >= (int)vItems.size())
+		s_Selected = -1;
+
+	if(vItems.empty())
+	{
+		const char *pMessage = m_SkinShop.Error() ? Localize("Could not load the shop. Try opening the tab again.") : Localize("Loading shop items...");
+		Ui()->DoLabel(&ListView, pMessage, 16.0f, TEXTALIGN_MC);
+	}
+	else
+	{
+		s_ShopListBox.DoStart(48.0f, vItems.size(), 1, 1, s_Selected, &ListView, false);
+		for(size_t i = 0; i < vItems.size(); ++i)
+		{
+			const SSkinShopItem &ItemData = vItems[i];
+			const CListboxItem Item = s_ShopListBox.DoNextItem(&ItemData, s_Selected == (int)i);
+			if(!Item.m_Visible)
+				continue;
+
+			CUIRect Row = Item.m_Rect;
+			Row.Margin(5.0f, &Row);
+			CUIRect Name, Meta;
+			Row.HSplitTop(20.0f, &Name, &Meta);
+			Ui()->DoLabel(&Name, ItemData.m_Name.c_str(), 15.0f, TEXTALIGN_ML);
+
+			char aMeta[256];
+			if(!ItemData.m_Author.empty())
+				str_format(aMeta, sizeof(aMeta), "%s  |  %dx%d  |  %s", ItemData.m_Author.c_str(), ItemData.m_Width, ItemData.m_Height, ItemData.m_Type.c_str());
+			else
+				str_format(aMeta, sizeof(aMeta), "%dx%d  |  %s", ItemData.m_Width, ItemData.m_Height, ItemData.m_Type.c_str());
+			Ui()->DoLabel(&Meta, aMeta, 12.0f, TEXTALIGN_ML);
+		}
+		s_Selected = s_ShopListBox.DoEnd();
+	}
+
+	if(s_Selected >= 0 && s_Selected < (int)vItems.size())
+	{
+		const SSkinShopItem &Selected = vItems[s_Selected];
+		CUIRect Name, Info;
+		Details.HSplitTop(24.0f, &Name, &Info);
+		Ui()->DoLabel(&Name, Selected.m_Name.c_str(), 16.0f, TEXTALIGN_ML);
+
+		char aInfo[512];
+		str_format(aInfo, sizeof(aInfo), "%s%s%s  |  page %d%s",
+			Selected.m_Author.empty() ? "" : Selected.m_Author.c_str(),
+			Selected.m_Author.empty() ? "" : "  |  ",
+			Selected.m_FileName.c_str(),
+			m_SkinShop.LoadedPage(),
+			m_SkinShop.Loading() ? "  |  loading more..." : "");
+		Ui()->DoLabel(&Info, aInfo, 12.0f, TEXTALIGN_ML);
+	}
+	else
+	{
+		char aStatus[128];
+		str_format(aStatus, sizeof(aStatus), "%zu items%s", vItems.size(), m_SkinShop.Loading() ? "  |  loading more..." : "");
+		Ui()->DoLabel(&Details, aStatus, 13.0f, TEXTALIGN_ML);
+	}
+}
