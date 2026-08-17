@@ -9,6 +9,7 @@
 
 class IHttp;
 class IHttpRequest;
+class IStorage;
 typedef struct _json_value json_value;
 
 enum class ESkinShopCategory
@@ -43,7 +44,7 @@ public:
 	CSkinShop() = default;
 	~CSkinShop();
 
-	void Init(IHttp *pHttp);
+	void Init(IHttp *pHttp, IStorage *pStorage);
 	void SetCategory(ESkinShopCategory Category);
 	void Refresh();
 	void Update();
@@ -57,24 +58,53 @@ public:
 	bool Error() const { return m_Error; }
 	int LoadedPage() const { return m_LoadedPage; }
 
+	void RequestPreview(const SSkinShopItem &Item);
+	bool PreviewReady(const SSkinShopItem &Item) const;
+	bool PreviewLoading(const SSkinShopItem &Item) const;
+	bool PreviewError(const SSkinShopItem &Item) const;
+	std::string PreviewPath(const SSkinShopItem &Item) const;
+
+	void Download(const SSkinShopItem &Item);
+	bool Installed(const SSkinShopItem &Item) const;
+	bool DownloadLoading(const SSkinShopItem &Item) const;
+	bool DownloadError(const SSkinShopItem &Item) const;
+	int DownloadProgress(const SSkinShopItem &Item) const;
+	bool DeleteInstalled(const SSkinShopItem &Item);
+	std::string InstallPath(const SSkinShopItem &Item) const;
+
 	static const char *CategoryType(ESkinShopCategory Category);
 	static const char *CategoryName(ESkinShopCategory Category);
+	static const char *CategoryAssetFolder(ESkinShopCategory Category);
+	static const char *CategoryConfigCommand(ESkinShopCategory Category);
 	static void BuildPageUrl(char *pBuffer, size_t BufferSize, ESkinShopCategory Category, int Page);
 	static std::string BuildImageUrl(const char *pImageUrl);
+	static std::string AssetName(const SSkinShopItem &Item);
 
 private:
 	void StartPage(int Page);
 	bool ParsePage(json_value *pJson, std::vector<SSkinShopItem> &vItems, bool &HasMore) const;
+	void PrepareStorage();
+	std::string CachedPreviewPath(const SSkinShopItem &Item) const;
 
 	IHttp *m_pHttp = nullptr;
+	IStorage *m_pStorage = nullptr;
 	std::shared_ptr<IHttpRequest> m_pRequest;
+	std::shared_ptr<IHttpRequest> m_pPreviewRequest;
+	std::shared_ptr<IHttpRequest> m_pDownloadRequest;
 	ESkinShopCategory m_Category = ESkinShopCategory::GAMESKIN;
 	std::vector<SSkinShopItem> m_vItems;
 	std::unordered_set<std::string> m_ItemIds;
+	std::string m_PreviewItemId;
+	std::string m_PreviewRequestPath;
+	std::string m_DownloadItemId;
+	std::string m_DownloadRequestPath;
 	int m_LoadedPage = 0;
 	int m_RequestPage = 0;
 	bool m_HasMore = true;
 	bool m_Error = false;
+	bool m_PreviewError = false;
+	bool m_DownloadError = false;
+	bool m_StoragePrepared = false;
 };
 
 #endif // GAME_CLIENT_COMPONENTS_SKINSHOP_H
