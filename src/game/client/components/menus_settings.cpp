@@ -94,6 +94,8 @@ void CMenus::RenderSettings(CUIRect MainView)
 		static CButtonContainer s_MinimalHudLayoutCompactButton;
 		static CButtonContainer s_aMinimalHudStyleButtons[3];
 		static int s_MinimalHudAccentToggleId;
+		static CButtonContainer s_MinimalHudAccentColorResetButton;
+		static CButtonContainer s_MinimalHudTextColorResetButton;
 		static int s_MinimalHudHideScoreboardToggleId;
 		static int s_MinimalHudHideMenusToggleId;
 		static int s_MinimalHudFpsToggleId;
@@ -574,7 +576,52 @@ void CMenus::RenderSettings(CUIRect MainView)
 			if(DoButton_CheckBox(&s_MinimalHudToggleId, "Минималистичный HUD", g_Config.m_BkwMinimalHud, &Toggle))
 				g_Config.m_BkwMinimalHud ^= 1;
 
-\t\t\tif(g_Config.m_BkwMinimalHud)\n\t\t\t{\n\t\t\t\tPageView.HSplitTop(8.0f, nullptr, &PageView);\n\t\t\t\tCUIRect PreviewCard;\n\t\t\t\tPageView.HSplitTop(g_Config.m_BkwMinimalHudLayout ? 84.0f : 62.0f, &PreviewCard, &PageView);\n\t\t\t\tPreviewCard.Draw(ColorRGBA(0.055f, 0.06f, 0.075f, 0.55f), IGraphics::CORNER_ALL, 6.0f);\n\t\t\t\tCUIRect PreviewLabel, PreviewArea;\n\t\t\t\tPreviewCard.HSplitTop(20.0f, &PreviewLabel, &PreviewArea);\n\t\t\t\tPreviewLabel.Margin(8.0f, &PreviewLabel);\n\t\t\t\tUi()->DoLabel(&PreviewLabel, "Предпросмотр", 11.0f, TEXTALIGN_ML);\n\t\t\t\tPreviewArea.Margin(8.0f, &PreviewArea);\n\n\t\t\t\tconst float PreviewScale = std::clamp(g_Config.m_BkwMinimalHudScale / 100.0f, 0.75f, 1.25f);\n\t\t\t\tconst float FontSize = 6.5f * PreviewScale;\n\t\t\t\tconst float PadX = 6.0f * PreviewScale;\n\t\t\t\tconst float PadY = 4.0f * PreviewScale;\n\t\t\t\tconst float Alpha = std::clamp(g_Config.m_BkwMinimalHudAlpha / 100.0f, 0.4f, 0.8f);\n\t\t\t\tconst char *pLine1 = "144 FPS   38 ms   TEAM 3   SPD 12.4   CP 3";\n\t\t\t\tconst char *pLine2 = "TIME 01:24.38   PB -0.42";\n\t\t\t\tconst bool CompactPreview = g_Config.m_BkwMinimalHudLayout != 0;\n\t\t\t\tconst float W1 = TextRender()->TextWidth(FontSize, pLine1);\n\t\t\t\tconst float W2 = CompactPreview ? TextRender()->TextWidth(FontSize, pLine2) : 0.0f;\n\t\t\t\tconst float HudW = minimum(PreviewArea.w, maximum(W1, W2) + PadX * 2.0f);\n\t\t\t\tconst float HudH = (CompactPreview ? FontSize * 2.0f + 2.0f * PreviewScale : FontSize) + PadY * 2.0f;\n\t\t\t\tconst float HudX = PreviewArea.x + (PreviewArea.w - HudW) / 2.0f;\n\t\t\t\tconst float HudY = PreviewArea.y + maximum(0.0f, (PreviewArea.h - HudH) / 2.0f);\n\t\t\t\tconst int Style = std::clamp(g_Config.m_BkwMinimalHudStyle, 0, 2);\n\t\t\t\tif(Style != 2)\n\t\t\t\t{\n\t\t\t\t\tconst ColorRGBA Bg = Style == 1 ? ColorRGBA(0.08f, 0.11f, 0.16f, Alpha * 0.72f) : ColorRGBA(0.03f, 0.03f, 0.03f, Alpha);\n\t\t\t\t\tGraphics()->DrawRect(HudX, HudY, HudW, HudH, Bg, IGraphics::CORNER_ALL, 4.5f * PreviewScale);\n\t\t\t\t}\n\t\t\t\tif(g_Config.m_BkwMinimalHudAccent)\n\t\t\t\t\tGraphics()->DrawRect(HudX, HudY, 1.5f * PreviewScale, HudH, ColorRGBA(0.35f, 0.72f, 1.0f, 0.95f), IGraphics::CORNER_L, 4.5f * PreviewScale);\n\t\t\t\tTextRender()->TextColor(0.94f, 0.96f, 1.0f, 1.0f);\n\t\t\t\tTextRender()->Text(HudX + PadX, HudY + PadY, FontSize, pLine1, HudW - PadX * 2.0f);\n\t\t\t\tif(CompactPreview)\n\t\t\t\t{\n\t\t\t\t\tTextRender()->TextColor(0.45f, 1.0f, 0.55f, 1.0f);\n\t\t\t\t\tTextRender()->Text(HudX + PadX, HudY + PadY + FontSize + 2.0f * PreviewScale, FontSize, pLine2, HudW - PadX * 2.0f);\n\t\t\t\t}\n\t\t\t\tTextRender()->TextColor(TextRender()->DefaultTextColor());\n\t\t\t\tPageView.HSplitTop(10.0f, nullptr, &PageView);\n				CUIRect ElementsCard;
+			if(g_Config.m_BkwMinimalHud)
+			{
+				PageView.HSplitTop(8.0f, nullptr, &PageView);
+				CUIRect PreviewCard;
+				PageView.HSplitTop(g_Config.m_BkwMinimalHudLayout ? 84.0f : 62.0f, &PreviewCard, &PageView);
+				PreviewCard.Draw(ColorRGBA(0.055f, 0.06f, 0.075f, 0.55f), IGraphics::CORNER_ALL, 6.0f);
+				CUIRect PreviewLabel, PreviewArea;
+				PreviewCard.HSplitTop(20.0f, &PreviewLabel, &PreviewArea);
+				PreviewLabel.Margin(8.0f, &PreviewLabel);
+				Ui()->DoLabel(&PreviewLabel, "Предпросмотр", 11.0f, TEXTALIGN_ML);
+				PreviewArea.Margin(8.0f, &PreviewArea);
+
+				const float PreviewScale = std::clamp(g_Config.m_BkwMinimalHudScale / 100.0f, 0.75f, 1.25f);
+				const float FontSize = 6.5f * PreviewScale;
+				const float PadX = 6.0f * PreviewScale;
+				const float PadY = 4.0f * PreviewScale;
+				const float Alpha = std::clamp(g_Config.m_BkwMinimalHudAlpha / 100.0f, 0.4f, 0.8f);
+				const ColorRGBA PreviewAccentColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_BkwMinimalHudAccentColor)).WithAlpha(0.95f);
+				const ColorRGBA PreviewTextColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_BkwMinimalHudTextColor));
+				const char *pLine1 = "144 FPS   38 ms   TEAM 3   SPD 12.4   CP 3";
+				const char *pLine2 = "TIME 01:24.38   PB -0.42";
+				const bool CompactPreview = g_Config.m_BkwMinimalHudLayout != 0;
+				const float W1 = TextRender()->TextWidth(FontSize, pLine1);
+				const float W2 = CompactPreview ? TextRender()->TextWidth(FontSize, pLine2) : 0.0f;
+				const float HudW = minimum(PreviewArea.w, maximum(W1, W2) + PadX * 2.0f);
+				const float HudH = (CompactPreview ? FontSize * 2.0f + 2.0f * PreviewScale : FontSize) + PadY * 2.0f;
+				const float HudX = PreviewArea.x + (PreviewArea.w - HudW) / 2.0f;
+				const float HudY = PreviewArea.y + maximum(0.0f, (PreviewArea.h - HudH) / 2.0f);
+				const int Style = std::clamp(g_Config.m_BkwMinimalHudStyle, 0, 2);
+				if(Style != 2)
+				{
+					const ColorRGBA Bg = Style == 1 ? ColorRGBA(0.08f, 0.11f, 0.16f, Alpha * 0.72f) : ColorRGBA(0.03f, 0.03f, 0.03f, Alpha);
+					Graphics()->DrawRect(HudX, HudY, HudW, HudH, Bg, IGraphics::CORNER_ALL, 4.5f * PreviewScale);
+				}
+				if(g_Config.m_BkwMinimalHudAccent)
+					Graphics()->DrawRect(HudX, HudY, 1.5f * PreviewScale, HudH, PreviewAccentColor, IGraphics::CORNER_L, 4.5f * PreviewScale);
+				TextRender()->TextColor(PreviewTextColor);
+				TextRender()->Text(HudX + PadX, HudY + PadY, FontSize, pLine1, HudW - PadX * 2.0f);
+				if(CompactPreview)
+				{
+					TextRender()->TextColor(PreviewTextColor);
+					TextRender()->Text(HudX + PadX, HudY + PadY + FontSize + 2.0f * PreviewScale, FontSize, pLine2, HudW - PadX * 2.0f);
+				}
+				TextRender()->TextColor(TextRender()->DefaultTextColor());
+				PageView.HSplitTop(10.0f, nullptr, &PageView);
+				CUIRect ElementsCard;
 				PageView.HSplitTop(124.0f, &ElementsCard, &PageView);
 				ElementsCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
 				ElementsCard.Margin(10.0f, &ElementsCard);
@@ -631,7 +678,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 				}
 				PageView.HSplitTop(10.0f, nullptr, &PageView);
 				CUIRect StyleCard;
-				PageView.HSplitTop(92.0f, &StyleCard, &PageView);
+				PageView.HSplitTop(178.0f, &StyleCard, &PageView);
 				StyleCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
 				StyleCard.Margin(10.0f, &StyleCard);
 				CUIRect StyleLabel, StyleButtons, AccentRow;
@@ -647,6 +694,11 @@ void CMenus::RenderSettings(CUIRect MainView)
 				}
 				StyleCard.HSplitTop(28.0f, &AccentRow, &StyleCard);
 				if(DoButton_CheckBox(&s_MinimalHudAccentToggleId, "Акцентная линия", g_Config.m_BkwMinimalHudAccent, &AccentRow)) g_Config.m_BkwMinimalHudAccent ^= 1;
+
+				const ColorRGBA DefaultAccentColor(0.35f, 0.72f, 1.0f, 1.0f);
+				const ColorRGBA DefaultTextColor(0.94f, 0.96f, 1.0f, 1.0f);
+				DoLine_ColorPicker(&s_MinimalHudAccentColorResetButton, 25.0f, 13.0f, 5.0f, &StyleCard, "Цвет акцентной линии", &g_Config.m_BkwMinimalHudAccentColor, DefaultAccentColor, false);
+				DoLine_ColorPicker(&s_MinimalHudTextColorResetButton, 25.0f, 13.0f, 5.0f, &StyleCard, "Цвет текста", &g_Config.m_BkwMinimalHudTextColor, DefaultTextColor, false);
 
 				PageView.HSplitTop(10.0f, nullptr, &PageView);
 				CUIRect AutoHideCard;

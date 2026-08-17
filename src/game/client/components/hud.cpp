@@ -3518,6 +3518,8 @@ void CHud::RenderBkwMinimalHud()
 	const float PaddingY = 4.0f * Scale;
 	const float Gap = 5.0f * Scale;
 	const float Alpha = std::clamp(g_Config.m_BkwMinimalHudAlpha / 100.0f, 0.4f, 0.8f);
+	const ColorRGBA AccentColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_BkwMinimalHudAccentColor)).WithAlpha(0.95f);
+	const ColorRGBA TextColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_BkwMinimalHudTextColor));
 
 	char aLine[256] = {};
 	char aLine2[192] = {};
@@ -3615,11 +3617,11 @@ void CHud::RenderBkwMinimalHud()
 		Graphics()->DrawRect(X, Y, Width, Height, Background, IGraphics::CORNER_ALL, 4.5f * Scale);
 	}
 	if(g_Config.m_BkwMinimalHudAccent)
-		Graphics()->DrawRect(X, Y, 1.5f * Scale, Height, ColorRGBA(0.35f, 0.72f, 1.0f, 0.95f), IGraphics::CORNER_L, 4.5f * Scale);
+		Graphics()->DrawRect(X, Y, 1.5f * Scale, Height, AccentColor, IGraphics::CORNER_L, 4.5f * Scale);
 	float TextX = X + PaddingX;
 	if(aLine[0])
 	{
-		TextRender()->TextColor(0.94f, 0.96f, 1.0f, 1.0f);
+		TextRender()->TextColor(TextColor);
 		TextRender()->Text(TextX, Y + PaddingY, FontSize, aLine, -1.0f);
 		if(!Compact)
 			TextX += MainWidth + Gap;
@@ -3631,7 +3633,7 @@ void CHud::RenderBkwMinimalHud()
 		DeltaY += FontSize + 2.0f * Scale;
 		if(aLine2[0])
 		{
-			TextRender()->TextColor(0.94f, 0.96f, 1.0f, 1.0f);
+			TextRender()->TextColor(TextColor);
 			TextRender()->Text(TextX, DeltaY, FontSize, aLine2, -1.0f);
 			TextX += Line2Width + Gap;
 		}
