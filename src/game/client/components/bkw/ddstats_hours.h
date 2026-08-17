@@ -101,7 +101,7 @@ public:
 
 		std::string Url = "https://ddstats.tw/player/json?player=";
 		Url += UrlEncode(pPlayer);
-		auto pGet = HttpGet(Url.c_str());
+		std::shared_ptr<IHttpRequest> pGet = HttpGet(Url.c_str());
 		pGet->Timeout(CTimeout{8000, 0, 4096, 8});
 		pGet->MaxResponseSize(MAX_RESPONSE_SIZE);
 		pGet->FailOnErrorStatus(false);
