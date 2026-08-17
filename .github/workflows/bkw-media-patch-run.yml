@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - 'scripts/bkw_media_ui_patch.py'
+      - '.github/workflows/bkw-media-patch-run.yml'
 permissions:
   contents: write
 jobs:
