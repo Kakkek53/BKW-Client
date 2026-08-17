@@ -219,7 +219,7 @@ void CFastActions::BkwTeleportCheckpointAtCursor()
 
 	const vec2 Pos = m_vBkwCheckpoints.back().m_Position;
 	char aCommand[128];
-	str_format(aCommand, sizeof(aCommand), "/tpxy %.2f %.2f", Pos.x, Pos.y);
+	str_format(aCommand, sizeof(aCommand), "/tpxy %.2f %.2f", Pos.x / 32.0f, Pos.y / 32.0f);
 	GameClient()->m_Chat.SendChat(0, aCommand);
 }
 
@@ -444,39 +444,15 @@ bool CFastActions::OnCursorMove(float x, float y, IInput::ECursorType CursorType
 
 bool CFastActions::OnInput(const IInput::CEvent &Event)
 {
-	static bool s_LeftMouseDown = false;
-	static bool s_RightMouseDown = false;
-	static bool s_TeleportComboTriggered = false;
-
-	if(Event.m_Key == KEY_MOUSE_1)
-	{
-		if(Event.m_Flags & IInput::FLAG_PRESS)
-			s_LeftMouseDown = true;
-		else if(Event.m_Flags & IInput::FLAG_RELEASE)
-			s_LeftMouseDown = false;
-	}
-	else if(Event.m_Key == KEY_MOUSE_2)
-	{
-		if(Event.m_Flags & IInput::FLAG_PRESS)
-			s_RightMouseDown = true;
-		else if(Event.m_Flags & IInput::FLAG_RELEASE)
-			s_RightMouseDown = false;
-	}
-
-	if(!s_LeftMouseDown || !s_RightMouseDown)
-		s_TeleportComboTriggered = false;
 
 	if(m_BkwCheckpointsEnabled && Client()->State() == IClient::STATE_ONLINE && !GameClient()->m_Menus.IsActive())
 	{
-		if((Event.m_Key == KEY_MOUSE_1 || Event.m_Key == KEY_MOUSE_2) && s_LeftMouseDown && s_RightMouseDown && BkwPracticeModeActive())
+
+		if(Event.m_Key == KEY_MOUSE_3 && (Event.m_Flags & IInput::FLAG_PRESS) && BkwPracticeModeActive())
 		{
 			m_BkwCheckpointHolding = false;
 			m_BkwCheckpointHoldStart = 0;
-			if(!s_TeleportComboTriggered)
-			{
-				BkwTeleportCheckpointAtCursor();
-				s_TeleportComboTriggered = true;
-			}
+			BkwTeleportCheckpointAtCursor();
 			return true;
 		}
 

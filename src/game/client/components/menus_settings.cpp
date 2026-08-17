@@ -62,6 +62,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 		BKW_TAB_HOURS,
 		BKW_TAB_HUD,
 		BKW_TAB_BACKGROUND,
+		BKW_TAB_SHOP,
 		BKW_TAB_EXIT,
 		BKW_TAB_LENGTH,
 	};
@@ -141,7 +142,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 		s_BkwTab = std::clamp(s_BkwTab, 0, BKW_TAB_LENGTH - 1);
 		CUIRect BkwTabBar;
 		PageView.HSplitTop(30.0f, &BkwTabBar, &PageView);
-		const char *apBkwTabs[BKW_TAB_LENGTH] = {"Сохранение", "Чекпоинты", "Игрок", "Кланы", "Часы", "HUD", "Фон", "Выход"};
+		const char *apBkwTabs[BKW_TAB_LENGTH] = {"Сохранение", "Чекпоинты", "Игрок", "Кланы", "Часы", "HUD", "Фон", "Магазин", "Выход"};
 		CUIRect RemainingTabs = BkwTabBar;
 		const float TabWidth = BkwTabBar.w / (float)BKW_TAB_LENGTH;
 		for(int i = 0; i < BKW_TAB_LENGTH; ++i)
@@ -807,6 +808,10 @@ void CMenus::RenderSettings(CUIRect MainView)
 				TextRender()->TextColor(ColorRGBA(0.55f, 1.0f, 0.55f, 1.0f));
 			Ui()->DoLabel(&Status, pStatus[0] != '\\0' ? pStatus : "Фон не загружен.", 11.0f, TEXTALIGN_ML);
 			TextRender()->TextColor(TextRender()->DefaultTextColor());
+		}
+		else if(s_BkwTab == BKW_TAB_SHOP)
+		{
+			RenderSettingsAssetsShop(PageView);
 		}
 		else if(s_BkwTab == BKW_TAB_EXIT)
 		{
