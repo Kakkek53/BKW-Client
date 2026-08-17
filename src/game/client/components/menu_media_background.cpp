@@ -355,7 +355,10 @@ bool CMenuMediaBackground::LoadStaticMedia(const char *pPath, int StorageType)
 	if(!Success)
 	{
 		char aAbsolutePath[IO_MAX_PATH_LENGTH];
-		m_pStorage->GetCompletePath(StorageType, pPath, aAbsolutePath, sizeof(aAbsolutePath));
+		if(StorageType == IStorage::TYPE_ABSOLUTE)
+			str_copy(aAbsolutePath, pPath, sizeof(aAbsolutePath));
+		else
+			m_pStorage->GetCompletePath(StorageType, pPath, aAbsolutePath, sizeof(aAbsolutePath));
 
 		CImageInfo FallbackImage;
 		if(DecodeFirstFrameFromFile(aAbsolutePath, FallbackImage))
@@ -534,7 +537,10 @@ bool CMenuMediaBackground::LoadVideo(const char *pPath, int StorageType)
 	m_IsVideo = true;
 
 	char aPath[IO_MAX_PATH_LENGTH];
-	m_pStorage->GetCompletePath(StorageType, pPath, aPath, sizeof(aPath));
+	if(StorageType == IStorage::TYPE_ABSOLUTE)
+		str_copy(aPath, pPath, sizeof(aPath));
+	else
+		m_pStorage->GetCompletePath(StorageType, pPath, aPath, sizeof(aPath));
 
 	if(avformat_open_input(&m_pFormatCtx, aPath, nullptr, nullptr) != 0)
 	{
