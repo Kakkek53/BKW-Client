@@ -1,0 +1,24 @@
+name: BKW media patch runner
+on:
+  push:
+    paths:
+      - 'scripts/bkw_media_ui_patch.py'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/bkw-save-system
+      - name: Apply patch
+        run: python3 scripts/bkw_media_ui_patch.py
+      - name: Commit result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm scripts/bkw_media_ui_patch.py .github/workflows/bkw-media-patch-run.yml .github/workflows/bkw-media-ui-patch.yml
+          git add src/game/client/components/menu_background.h src/game/client/components/menu_background.cpp src/game/client/components/menus_settings.cpp
+          git commit -m "BKW: add media background tab"
+          git push origin HEAD:agent/bkw-save-system
