@@ -86,6 +86,13 @@ void CMenus::RenderSettings(CUIRect MainView)
 		static bool s_HoursAutoRequested = false;
 		static CButtonContainer s_HoursRefreshButton;
 		static int s_MinimalHudToggleId;
+		static int s_MinimalHudFpsToggleId;
+		static int s_MinimalHudPingToggleId;
+		static int s_MinimalHudTeamToggleId;
+		static int s_MinimalHudPracticeToggleId;
+		static CButtonContainer s_aMinimalHudCornerButtons[4];
+		static CButtonContainer s_aMinimalHudScaleButtons[3];
+		static CButtonContainer s_aMinimalHudAlphaButtons[3];
 		static int s_MediaBackgroundToggleId;
 		static CLineInputBuffered<IO_MAX_PATH_LENGTH> s_MediaBackgroundPathInput;
 		static bool s_MediaBackgroundPathInitialized = false;
@@ -551,22 +558,71 @@ void CMenus::RenderSettings(CUIRect MainView)
 			PageView.HSplitTop(28.0f, &Header, &PageView);
 			Ui()->DoLabel(&Header, "BKW — Минималистичный HUD", 22.0f, TEXTALIGN_ML);
 			PageView.HSplitTop(8.0f, nullptr, &PageView);
+
 			CUIRect Toggle;
 			PageView.HSplitTop(28.0f, &Toggle, &PageView);
 			if(DoButton_CheckBox(&s_MinimalHudToggleId, "Минималистичный HUD", g_Config.m_BkwMinimalHud, &Toggle))
 				g_Config.m_BkwMinimalHud ^= 1;
-			PageView.HSplitTop(10.0f, nullptr, &PageView);
-			CUIRect Card;
-			PageView.HSplitTop(92.0f, &Card, &PageView);
-			Card.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
-			Card.Margin(10.0f, &Card);
-			CUIRect L1, L2, L3;
-			Card.HSplitTop(24.0f, &L1, &Card);
-			Card.HSplitTop(24.0f, &L2, &Card);
-			Card.HSplitTop(24.0f, &L3, &Card);
-			Ui()->DoLabel(&L1, "Компактная панель в левом верхнем углу.", 12.0f, TEXTALIGN_ML);
-			Ui()->DoLabel(&L2, "Показывает FPS, точный ping и номер team.", 11.0f, TEXTALIGN_ML);
-			Ui()->DoLabel(&L3, "В режиме /practice дополнительно показывает PRACTICE.", 11.0f, TEXTALIGN_ML);
+
+			if(g_Config.m_BkwMinimalHud)
+			{
+				PageView.HSplitTop(8.0f, nullptr, &PageView);
+				CUIRect ElementsCard;
+				PageView.HSplitTop(124.0f, &ElementsCard, &PageView);
+				ElementsCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+				ElementsCard.Margin(10.0f, &ElementsCard);
+				CUIRect Title, Row1, Row2;
+				ElementsCard.HSplitTop(24.0f, &Title, &ElementsCard);
+				Ui()->DoLabel(&Title, "Элементы", 15.0f, TEXTALIGN_ML);
+				ElementsCard.HSplitTop(34.0f, &Row1, &ElementsCard);
+				ElementsCard.HSplitTop(34.0f, &Row2, &ElementsCard);
+				CUIRect Fps, Ping, Team, Practice;
+				Row1.VSplitMid(&Fps, &Ping, 8.0f);
+				Row2.VSplitMid(&Team, &Practice, 8.0f);
+				if(DoButton_CheckBox(&s_MinimalHudFpsToggleId, "FPS", g_Config.m_BkwMinimalHudFps, &Fps)) g_Config.m_BkwMinimalHudFps ^= 1;
+				if(DoButton_CheckBox(&s_MinimalHudPingToggleId, "Ping", g_Config.m_BkwMinimalHudPing, &Ping)) g_Config.m_BkwMinimalHudPing ^= 1;
+				if(DoButton_CheckBox(&s_MinimalHudTeamToggleId, "Team", g_Config.m_BkwMinimalHudTeam, &Team)) g_Config.m_BkwMinimalHudTeam ^= 1;
+				if(DoButton_CheckBox(&s_MinimalHudPracticeToggleId, "Practice", g_Config.m_BkwMinimalHudPractice, &Practice)) g_Config.m_BkwMinimalHudPractice ^= 1;
+
+				PageView.HSplitTop(10.0f, nullptr, &PageView);
+				CUIRect LayoutCard;
+				PageView.HSplitTop(166.0f, &LayoutCard, &PageView);
+				LayoutCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+				LayoutCard.Margin(10.0f, &LayoutCard);
+				CUIRect L1, Corners, L2, Scales, L3, Alphas;
+				LayoutCard.HSplitTop(20.0f, &L1, &LayoutCard);
+				Ui()->DoLabel(&L1, "Положение", 12.0f, TEXTALIGN_ML);
+				LayoutCard.HSplitTop(30.0f, &Corners, &LayoutCard);
+				const char *apCorners[4] = {"↖", "↗", "↙", "↘"};
+				CUIRect CornerRemain = Corners;
+				for(int i = 0; i < 4; ++i)
+				{
+					CUIRect B; CornerRemain.VSplitLeft(Corners.w / 4.0f, &B, &CornerRemain);
+					if(DoButton_Menu(&s_aMinimalHudCornerButtons[i], apCorners[i], g_Config.m_BkwMinimalHudCorner == i, &B)) g_Config.m_BkwMinimalHudCorner = i;
+				}
+				LayoutCard.HSplitTop(20.0f, &L2, &LayoutCard);
+				Ui()->DoLabel(&L2, "Масштаб", 12.0f, TEXTALIGN_ML);
+				LayoutCard.HSplitTop(30.0f, &Scales, &LayoutCard);
+				const int aScales[3] = {75, 100, 125};
+				const char *apScales[3] = {"75%", "100%", "125%"};
+				CUIRect ScaleRemain = Scales;
+				for(int i = 0; i < 3; ++i)
+				{
+					CUIRect B; ScaleRemain.VSplitLeft(Scales.w / 3.0f, &B, &ScaleRemain);
+					if(DoButton_Menu(&s_aMinimalHudScaleButtons[i], apScales[i], g_Config.m_BkwMinimalHudScale == aScales[i], &B)) g_Config.m_BkwMinimalHudScale = aScales[i];
+				}
+				LayoutCard.HSplitTop(20.0f, &L3, &LayoutCard);
+				Ui()->DoLabel(&L3, "Прозрачность фона", 12.0f, TEXTALIGN_ML);
+				LayoutCard.HSplitTop(30.0f, &Alphas, &LayoutCard);
+				const int aAlphas[3] = {40, 60, 80};
+				const char *apAlphas[3] = {"40%", "60%", "80%"};
+				CUIRect AlphaRemain = Alphas;
+				for(int i = 0; i < 3; ++i)
+				{
+					CUIRect B; AlphaRemain.VSplitLeft(Alphas.w / 3.0f, &B, &AlphaRemain);
+					if(DoButton_Menu(&s_aMinimalHudAlphaButtons[i], apAlphas[i], g_Config.m_BkwMinimalHudAlpha == aAlphas[i], &B)) g_Config.m_BkwMinimalHudAlpha = aAlphas[i];
+				}
+			}
 		}
 		else if(s_BkwTab == BKW_TAB_BACKGROUND)
 		{

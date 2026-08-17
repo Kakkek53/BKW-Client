@@ -3504,32 +3504,73 @@ void CHud::RenderBkwMinimalHud()
 {
 	if(!g_Config.m_BkwMinimalHud || Client()->State() != IClient::STATE_ONLINE)
 		return;
+
 	const int LocalId = GameClient()->m_Snap.m_LocalClientId;
 	if(LocalId < 0 || LocalId >= MAX_CLIENTS)
 		return;
-	const float FrameTime = Client()->RenderFrameTime();
-	const int Fps = FrameTime > 0.000001f ? (int)std::round(1.0f / FrameTime) : 0;
-	int Ping = 0;
-	if(GameClient()->m_Snap.m_apPlayerInfos[LocalId])
-		Ping = maximum(0, GameClient()->m_Snap.m_apPlayerInfos[LocalId]->m_Latency);
-	const int Team = GameClient()->m_Teams.Team(LocalId);
-	bool Practice = false;
-	const auto &Character = GameClient()->m_Snap.m_aCharacters[LocalId];
-	if(Character.m_Active && Character.m_HasExtendedData)
-		Practice = (Character.m_ExtendedData.m_Flags & CHARACTERFLAG_PRACTICE_MODE) != 0;
-	char aLine[128];
-	if(Practice)
-		str_format(aLine, sizeof(aLine), "%d FPS   %d ms   TEAM %d   PRACTICE", Fps, Ping, Team);
-	else
-		str_format(aLine, sizeof(aLine), "%d FPS   %d ms   TEAM %d", Fps, Ping, Team);
-	const float FontSize = 6.5f;
-	const float PaddingX = 6.0f;
-	const float PaddingY = 4.0f;
+
+	char aLine[256] = {};
+	auto AppendPart = [&](const char *pText) {
+		if(aLine[0] != '\0')
+			str_append(aLine, "   ", sizeof(aLine));
+		str_append(aLine, pText, sizeof(aLine));
+	};
+
+	if(g_Config.m_BkwMinimalHudFps)
+	{
+		const float FrameTime = Client()->RenderFrameTime();
+		const int Fps = FrameTime > 0.000001f ? (int)std::round(1.0f / FrameTime) : 0;
+		char aPart[32];
+		str_format(aPart, sizeof(aPart), "%d FPS", Fps);
+		AppendPart(aPart);
+	}
+
+	if(g_Config.m_BkwMinimalHudPing)
+	{
+		int Ping = 0;
+		if(GameClient()->m_Snap.m_apPlayerInfos[LocalId])
+			Ping = maximum(0, GameClient()->m_Snap.m_apPlayerInfos[LocalId]->m_Latency);
+		char aPart[32];
+		str_format(aPart, sizeof(aPart), "%d ms", Ping);
+		AppendPart(aPart);
+	}
+
+	if(g_Config.m_BkwMinimalHudTeam)
+	{
+		char aPart[32];
+		str_format(aPart, sizeof(aPart), "TEAM %d", GameClient()->m_Teams.Team(LocalId));
+		AppendPart(aPart);
+	}
+
+	if(g_Config.m_BkwMinimalHudPractice)
+	{
+		const auto &Character = GameClient()->m_Snap.m_aCharacters[LocalId];
+		const bool Practice = Character.m_Active && Character.m_HasExtendedData && (Character.m_ExtendedData.m_Flags & CHARACTERFLAG_PRACTICE_MODE) != 0;
+		if(Practice)
+			AppendPart("PRACTICE");
+	}
+
+	if(aLine[0] == '\0')
+		return;
+
+	const float Scale = std::clamp(g_Config.m_BkwMinimalHudScale / 100.0f, 0.75f, 1.25f);
+	const float FontSize = 6.5f * Scale;
+	const float PaddingX = 6.0f * Scale;
+	const float PaddingY = 4.0f * Scale;
+	const float Margin = 5.0f * Scale;
 	const float Width = TextRender()->TextWidth(FontSize, aLine) + PaddingX * 2.0f;
 	const float Height = FontSize + PaddingY * 2.0f;
-	const float X = 5.0f;
-	const float Y = 5.0f;
-	Graphics()->DrawRect(X, Y, Width, Height, ColorRGBA(0.03f, 0.03f, 0.03f, 0.62f), IGraphics::CORNER_ALL, 4.5f);
+
+	float X = Margin;
+	float Y = Margin;
+	const int Corner = std::clamp(g_Config.m_BkwMinimalHudCorner, 0, 3);
+	if(Corner == 1 || Corner == 3)
+		X = m_Width - Width - Margin;
+	if(Corner == 2 || Corner == 3)
+		Y = m_Height - Height - Margin;
+
+	const float Alpha = std::clamp(g_Config.m_BkwMinimalHudAlpha / 100.0f, 0.4f, 0.8f);
+	Graphics()->DrawRect(X, Y, Width, Height, ColorRGBA(0.03f, 0.03f, 0.03f, Alpha), IGraphics::CORNER_ALL, 4.5f * Scale);
 	TextRender()->TextColor(0.94f, 0.96f, 1.0f, 1.0f);
 	TextRender()->Text(X + PaddingX, Y + PaddingY, FontSize, aLine, -1.0f);
 	TextRender()->TextColor(TextRender()->DefaultTextColor());

@@ -419,3 +419,10 @@ MACRO_CONFIG_INT(BcClansAllowLocalDev, bc_clans_allow_local_dev, 0, 0, 1, CFGFLA
 MACRO_CONFIG_INT(BcClansUnreadBadge, bc_clans_unread_badge, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show unread badge on Clans menubar button")
 
 MACRO_CONFIG_INT(BkwMinimalHud, bkw_minimal_hud, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable BKW minimal HUD")
+MACRO_CONFIG_INT(BkwMinimalHudFps, bkw_minimal_hud_fps, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show FPS in BKW minimal HUD")
+MACRO_CONFIG_INT(BkwMinimalHudPing, bkw_minimal_hud_ping, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show ping in BKW minimal HUD")
+MACRO_CONFIG_INT(BkwMinimalHudTeam, bkw_minimal_hud_team, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show team in BKW minimal HUD")
+MACRO_CONFIG_INT(BkwMinimalHudPractice, bkw_minimal_hud_practice, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show practice state in BKW minimal HUD")
+MACRO_CONFIG_INT(BkwMinimalHudCorner, bkw_minimal_hud_corner, 0, 0, 3, CFGFLAG_CLIENT | CFGFLAG_SAVE, "BKW minimal HUD corner: 0 TL, 1 TR, 2 BL, 3 BR")
+MACRO_CONFIG_INT(BkwMinimalHudScale, bkw_minimal_hud_scale, 100, 75, 125, CFGFLAG_CLIENT | CFGFLAG_SAVE, "BKW minimal HUD scale percent")
+MACRO_CONFIG_INT(BkwMinimalHudAlpha, bkw_minimal_hud_alpha, 60, 40, 80, CFGFLAG_CLIENT | CFGFLAG_SAVE, "BKW minimal HUD background opacity percent")
