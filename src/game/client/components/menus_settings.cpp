@@ -1193,7 +1193,7 @@ bool CMenus::RenderHslaScrollbars(CUIRect *pRect, unsigned int *pColor, bool Alp
 		CUIRect Button, Label;
 		pRect->HSplitTop(SizePerEntry, &Button, pRect);
 		pRect->HSplitTop(MarginPerEntry, nullptr, pRect);
-		Button.VSplitLeft(140.0f, &Label, pRect);
+		Button.VSplitLeft(140.0f, &Label, &Button);
 		Label.VMargin(10.0f, &Label);
 		Button.Draw(ColorRGBA(0.15f, 0.15f, 0.15f, 1.0f), IGraphics::CORNER_ALL, 1.0f);
 
@@ -1231,7 +1231,7 @@ bool CMenus::RenderHslaScrollbars(CUIRect *pRect, unsigned int *pColor, bool Alp
 		}
 		else if(i == 3)
 		{
-			RenderAlphaRect(&Rail, color_cast<ColorRGBA>(ColorHSLA(Color.h, Color.s, Color.l, 1.0f).UnclampLighting(DarkestLight));
+			RenderAlphaRect(&Rail, color_cast<ColorRGBA>(ColorHSLA(Color.h, Color.s, Color.l, 1.0f).UnclampLighting(DarkestLight)));
 			HandleColor = color_cast<ColorRGBA>(Color.UnclampLighting(DarkestLight));
 		}
 		Graphics()->TrianglesEnd();
