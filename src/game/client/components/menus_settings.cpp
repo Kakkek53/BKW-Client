@@ -9,6 +9,7 @@
 #include <engine/graphics.h>
 #include <engine/shared/config.h>
 
+#include <game/client/components/bkw/ddstats_hours.h>
 #include <game/client/components/bkw/save_store.h>
 #include <game/client/components/bkw/save_warning.h>
 #include <game/client/components/menu_background.h>
@@ -58,6 +59,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 		BKW_TAB_CHECKPOINTS,
 		BKW_TAB_PLAYER,
 		BKW_TAB_CLANS,
+		BKW_TAB_HOURS,
 		BKW_TAB_EXIT,
 		BKW_TAB_LENGTH,
 	};
@@ -77,6 +79,10 @@ void CMenus::RenderSettings(CUIRect MainView)
 		static int s_ClansToggleId;
 		static CLineInputBuffered<64> s_ClansCommandInput;
 		static bool s_ClansCommandInitialized = false;
+		static CLineInputBuffered<64> s_HoursPlayerInput;
+		static bool s_HoursPlayerInitialized = false;
+		static bool s_HoursAutoRequested = false;
+		static CButtonContainer s_HoursRefreshButton;
 		static int s_SaveWarningToggleId;
 		static CLineInputBuffered<256> s_SaveWarningIpsInput;
 		static CLineInputBuffered<256> s_SaveWarningCommunitiesInput;
@@ -108,7 +114,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 		s_BkwTab = std::clamp(s_BkwTab, 0, BKW_TAB_LENGTH - 1);
 		CUIRect BkwTabBar;
 		PageView.HSplitTop(30.0f, &BkwTabBar, &PageView);
-		const char *apBkwTabs[BKW_TAB_LENGTH] = {"Сохранение", "Чекпоинты", "Игрок", "Кланы", "Выход"};
+		const char *apBkwTabs[BKW_TAB_LENGTH] = {"Сохранение", "Чекпоинты", "Игрок", "Кланы", "Часы", "Выход"};
 		CUIRect RemainingTabs = BkwTabBar;
 		const float TabWidth = BkwTabBar.w / (float)BKW_TAB_LENGTH;
 		for(int i = 0; i < BKW_TAB_LENGTH; ++i)
@@ -315,11 +321,11 @@ void CMenus::RenderSettings(CUIRect MainView)
 			{
 				PageView.HSplitTop(8.0f, nullptr, &PageView);
 				CUIRect CheckpointCard;
-				PageView.HSplitTop(180.0f, &CheckpointCard, &PageView);
+				PageView.HSplitTop(158.0f, &CheckpointCard, &PageView);
 				CheckpointCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
 				CheckpointCard.Margin(10.0f, &CheckpointCard);
 
-				CUIRect Description, MouseLabel, MouseButtons, Help1, Help2, Help3, Status;
+				CUIRect Description, MouseLabel, MouseButtons, Help1, Help2, Status;
 				CheckpointCard.HSplitTop(30.0f, &Description, &CheckpointCard);
 				Ui()->DoLabel(&Description, "Работает только когда сервер подтвердил режим /practice.", 12.0f, TEXTALIGN_ML);
 				CheckpointCard.HSplitTop(22.0f, &MouseLabel, &CheckpointCard);
@@ -336,9 +342,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 				CheckpointCard.HSplitTop(22.0f, &Help1, &CheckpointCard);
 				Ui()->DoLabel(&Help1, "Удержание 0.35 сек.: создать точку у tee. Повторить рядом с точкой — удалить.", 11.0f, TEXTALIGN_ML);
 				CheckpointCard.HSplitTop(22.0f, &Help2, &CheckpointCard);
-				Ui()->DoLabel(&Help2, "Короткое нажатие колёсика: /tpxy к точке возле курсора или к последней.", 11.0f, TEXTALIGN_ML);
-				CheckpointCard.HSplitTop(22.0f, &Help3, &CheckpointCard);
-				Ui()->DoLabel(&Help3, "Удержание колёсика 0.5 сек.: выключить /practice.", 11.0f, TEXTALIGN_ML);
+				Ui()->DoLabel(&Help2, "ЛКМ + ПКМ одновременно: /tpxy к последнему чекпоинту.", 11.0f, TEXTALIGN_ML);
 				CheckpointCard.HSplitTop(22.0f, &Status, &CheckpointCard);
 
 				bool PracticeActive = false;
@@ -440,7 +444,99 @@ void CMenus::RenderSettings(CUIRect MainView)
 				TextRender()->TextColor(TextRender()->DefaultTextColor());
 			}
 		}
+		else if(s_BkwTab == BKW_TAB_HOURS)
+		{
+			auto &Hours = Bkw::DdStatsHoursState();
+			Hours.Poll();
 
+			if(!s_HoursPlayerInitialized)
+			{
+				if(Online && LocalClientId >= 0 && LocalClientId < MAX_CLIENTS && GameClient()->m_aClients[LocalClientId].m_Active)
+					s_HoursPlayerInput.Set(GameClient()->m_aClients[LocalClientId].m_aName);
+				s_HoursPlayerInitialized = true;
+			}
+			if(!s_HoursAutoRequested && s_HoursPlayerInput.GetString()[0] != '\0')
+			{
+				Hours.RequestIfStale(Http(), s_HoursPlayerInput.GetString());
+				s_HoursAutoRequested = true;
+			}
+
+			CUIRect Header;
+			PageView.HSplitTop(28.0f, &Header, &PageView);
+			Ui()->DoLabel(&Header, "BKW — Часы", 22.0f, TEXTALIGN_ML);
+			PageView.HSplitTop(8.0f, nullptr, &PageView);
+
+			CUIRect Info;
+			PageView.HSplitTop(54.0f, &Info, &PageView);
+			Info.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+			Info.Margin(10.0f, &Info);
+			Ui()->DoLabel(&Info, "Игровое время берётся из DDStats. Данные кэшируются на 10 минут.", 11.0f, TEXTALIGN_ML);
+
+			PageView.HSplitTop(12.0f, nullptr, &PageView);
+			CUIRect PlayerLabel, PlayerRow;
+			PageView.HSplitTop(20.0f, &PlayerLabel, &PageView);
+			Ui()->DoLabel(&PlayerLabel, "Ник DDStats:", 12.0f, TEXTALIGN_ML);
+			PageView.HSplitTop(30.0f, &PlayerRow, &PageView);
+			CUIRect PlayerEdit, RefreshButton;
+			PlayerRow.VSplitRight(120.0f, &PlayerEdit, &RefreshButton);
+			PlayerEdit.VSplitRight(8.0f, &PlayerEdit, nullptr);
+			Ui()->DoEditBox(&s_HoursPlayerInput, &PlayerEdit, 12.0f);
+			if(DoButton_Menu(&s_HoursRefreshButton, Hours.Loading() ? "Загрузка..." : "Обновить", 0, &RefreshButton) && !Hours.Loading() && s_HoursPlayerInput.GetString()[0] != '\0')
+				Hours.Request(Http(), s_HoursPlayerInput.GetString(), true);
+
+			PageView.HSplitTop(14.0f, nullptr, &PageView);
+			CUIRect StatsCard;
+			PageView.HSplitTop(176.0f, &StatsCard, &PageView);
+			StatsCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+			StatsCard.Margin(12.0f, &StatsCard);
+
+			if(Hours.Loading())
+			{
+				Ui()->DoLabel(&StatsCard, "Получаю статистику DDStats...", 16.0f, TEXTALIGN_MC);
+			}
+			else if(Hours.Error())
+			{
+				char aError[160];
+				str_format(aError, sizeof(aError), "Не удалось получить DDStats (HTTP %d).", Hours.HttpStatus());
+				TextRender()->TextColor(ColorRGBA(1.0f, 0.55f, 0.55f, 1.0f));
+				Ui()->DoLabel(&StatsCard, aError, 14.0f, TEXTALIGN_MC);
+				TextRender()->TextColor(TextRender()->DefaultTextColor());
+			}
+			else if(Hours.Loaded())
+			{
+				CUIRect PlayerLine, BigHours, ExactLine, StartLine, AverageLine, SourceLine;
+				StatsCard.HSplitTop(20.0f, &PlayerLine, &StatsCard);
+				char aPlayer[128];
+				str_format(aPlayer, sizeof(aPlayer), "Игрок: %s", Hours.Player());
+				Ui()->DoLabel(&PlayerLine, aPlayer, 12.0f, TEXTALIGN_MC);
+				StatsCard.HSplitTop(48.0f, &BigHours, &StatsCard);
+				char aBigHours[96];
+				str_format(aBigHours, sizeof(aBigHours), "%.1f ч", Hours.TotalHours());
+				Ui()->DoLabel(&BigHours, aBigHours, 30.0f, TEXTALIGN_MC);
+				StatsCard.HSplitTop(22.0f, &ExactLine, &StatsCard);
+				char aExact[128];
+				Bkw::CDdStatsHours::FormatDuration(Hours.TotalSecondsPlayed(), aExact, sizeof(aExact), true);
+				Ui()->DoLabel(&ExactLine, aExact, 12.0f, TEXTALIGN_MC);
+				StatsCard.HSplitTop(22.0f, &StartLine, &StatsCard);
+				char aStart[128];
+				str_format(aStart, sizeof(aStart), "Статистика учитывается с: %s", Hours.StartOfPlaytime()[0] != '\0' ? Hours.StartOfPlaytime() : "неизвестно");
+				Ui()->DoLabel(&StartLine, aStart, 11.0f, TEXTALIGN_MC);
+				StatsCard.HSplitTop(22.0f, &AverageLine, &StatsCard);
+				char aAverageDuration[96];
+				Bkw::CDdStatsHours::FormatDuration(Hours.AverageSecondsPlayed(), aAverageDuration, sizeof(aAverageDuration));
+				char aAverage[160];
+				str_format(aAverage, sizeof(aAverage), "Среднее игровое время: %s", aAverageDuration);
+				Ui()->DoLabel(&AverageLine, aAverage, 11.0f, TEXTALIGN_MC);
+				StatsCard.HSplitTop(22.0f, &SourceLine, &StatsCard);
+				TextRender()->TextColor(ColorRGBA(0.65f, 0.85f, 1.0f, 1.0f));
+				Ui()->DoLabel(&SourceLine, "Источник: DDStats", 10.0f, TEXTALIGN_MC);
+				TextRender()->TextColor(TextRender()->DefaultTextColor());
+			}
+			else
+			{
+				Ui()->DoLabel(&StatsCard, "Введите ник и нажмите «Обновить».", 14.0f, TEXTALIGN_MC);
+			}
+		}
 		else if(s_BkwTab == BKW_TAB_EXIT)
 		{
 			CUIRect Header, Toggle;
@@ -1097,7 +1193,7 @@ bool CMenus::RenderHslaScrollbars(CUIRect *pRect, unsigned int *pColor, bool Alp
 		CUIRect Button, Label;
 		pRect->HSplitTop(SizePerEntry, &Button, pRect);
 		pRect->HSplitTop(MarginPerEntry, nullptr, pRect);
-		Button.VSplitLeft(140.0f, &Label, &Button);
+		Button.VSplitLeft(140.0f, &Label, pRect);
 		Label.VMargin(10.0f, &Label);
 		Button.Draw(ColorRGBA(0.15f, 0.15f, 0.15f, 1.0f), IGraphics::CORNER_ALL, 1.0f);
 
@@ -1135,7 +1231,7 @@ bool CMenus::RenderHslaScrollbars(CUIRect *pRect, unsigned int *pColor, bool Alp
 		}
 		else if(i == 3)
 		{
-			RenderAlphaRect(&Rail, color_cast<ColorRGBA>(ColorHSLA(Color.h, Color.s, Color.l, 1.0f).UnclampLighting(DarkestLight)));
+			RenderAlphaRect(&Rail, color_cast<ColorRGBA>(ColorHSLA(Color.h, Color.s, Color.l, 1.0f).UnclampLighting(DarkestLight));
 			HandleColor = color_cast<ColorRGBA>(Color.UnclampLighting(DarkestLight));
 		}
 		Graphics()->TrianglesEnd();
