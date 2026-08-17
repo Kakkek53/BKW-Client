@@ -3500,6 +3500,41 @@ void CHud::RenderLocalTime(bool ForcePreview)
 	TextRender()->Text(Rect.x + Padding, Rect.y + (Rect.h - FontSize) / 2.f, FontSize, aTimeStr, -1.0f);
 }
 
+void CHud::RenderBkwMinimalHud()
+{
+	if(!g_Config.m_BkwMinimalHud || Client()->State() != IClient::STATE_ONLINE)
+		return;
+	const int LocalId = GameClient()->m_Snap.m_LocalClientId;
+	if(LocalId < 0 || LocalId >= MAX_CLIENTS)
+		return;
+	const float FrameTime = Client()->RenderFrameTime();
+	const int Fps = FrameTime > 0.000001f ? (int)std::round(1.0f / FrameTime) : 0;
+	int Ping = 0;
+	if(GameClient()->m_Snap.m_apPlayerInfos[LocalId])
+		Ping = maximum(0, GameClient()->m_Snap.m_apPlayerInfos[LocalId]->m_Latency);
+	const int Team = GameClient()->m_Teams.Team(LocalId);
+	bool Practice = false;
+	const auto &Character = GameClient()->m_Snap.m_aCharacters[LocalId];
+	if(Character.m_Active && Character.m_HasExtendedData)
+		Practice = (Character.m_ExtendedData.m_Flags & CHARACTERFLAG_PRACTICE_MODE) != 0;
+	char aLine[128];
+	if(Practice)
+		str_format(aLine, sizeof(aLine), "%d FPS   %d ms   TEAM %d   PRACTICE", Fps, Ping, Team);
+	else
+		str_format(aLine, sizeof(aLine), "%d FPS   %d ms   TEAM %d", Fps, Ping, Team);
+	const float FontSize = 6.5f;
+	const float PaddingX = 6.0f;
+	const float PaddingY = 4.0f;
+	const float Width = TextRender()->TextWidth(FontSize, aLine) + PaddingX * 2.0f;
+	const float Height = FontSize + PaddingY * 2.0f;
+	const float X = 5.0f;
+	const float Y = 5.0f;
+	Graphics()->DrawRect(X, Y, Width, Height, ColorRGBA(0.03f, 0.03f, 0.03f, 0.62f), IGraphics::CORNER_ALL, 4.5f);
+	TextRender()->TextColor(0.94f, 0.96f, 1.0f, 1.0f);
+	TextRender()->Text(X + PaddingX, Y + PaddingY, FontSize, aLine, -1.0f);
+	TextRender()->TextColor(TextRender()->DefaultTextColor());
+}
+
 bool CHud::RebuildFinishPredictionPathData() const
 {
 	m_vFinishPredictionDistances.clear();
@@ -4279,6 +4314,7 @@ void CHud::OnRender()
 		GameClient()->m_TClient.RenderCenterLines();
 		if(!(FocusModeActive && HideUIInFocusMode))
 			RenderLocalTime();
+	RenderBkwMinimalHud();
 		if(Client()->State() != IClient::STATE_DEMOPLAYBACK)
 			RenderConnectionWarning();
 		RenderTeambalanceWarning();

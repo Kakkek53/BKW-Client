@@ -417,3 +417,5 @@ MACRO_CONFIG_INT(BcClansEnabled, bc_clans_enabled, 1, 0, 1, CFGFLAG_CLIENT | CFG
 MACRO_CONFIG_STR(BcClansApiUrl, bc_clans_api_url, 128, "https://clans.bestclient.fun", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Clans API base URL (allowlisted)")
 MACRO_CONFIG_INT(BcClansAllowLocalDev, bc_clans_allow_local_dev, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Allow localhost clans API for development")
 MACRO_CONFIG_INT(BcClansUnreadBadge, bc_clans_unread_badge, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show unread badge on Clans menubar button")
+
+MACRO_CONFIG_INT(BkwMinimalHud, bkw_minimal_hud, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable BKW minimal HUD")

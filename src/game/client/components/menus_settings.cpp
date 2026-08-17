@@ -60,6 +60,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 		BKW_TAB_PLAYER,
 		BKW_TAB_CLANS,
 		BKW_TAB_HOURS,
+		BKW_TAB_HUD,
 		BKW_TAB_BACKGROUND,
 		BKW_TAB_EXIT,
 		BKW_TAB_LENGTH,
@@ -84,6 +85,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 		static bool s_HoursPlayerInitialized = false;
 		static bool s_HoursAutoRequested = false;
 		static CButtonContainer s_HoursRefreshButton;
+		static int s_MinimalHudToggleId;
 		static int s_MediaBackgroundToggleId;
 		static CLineInputBuffered<IO_MAX_PATH_LENGTH> s_MediaBackgroundPathInput;
 		static bool s_MediaBackgroundPathInitialized = false;
@@ -120,7 +122,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 		s_BkwTab = std::clamp(s_BkwTab, 0, BKW_TAB_LENGTH - 1);
 		CUIRect BkwTabBar;
 		PageView.HSplitTop(30.0f, &BkwTabBar, &PageView);
-		const char *apBkwTabs[BKW_TAB_LENGTH] = {"Сохранение", "Чекпоинты", "Игрок", "Кланы", "Часы", "Фон", "Выход"};
+		const char *apBkwTabs[BKW_TAB_LENGTH] = {"Сохранение", "Чекпоинты", "Игрок", "Кланы", "Часы", "HUD", "Фон", "Выход"};
 		CUIRect RemainingTabs = BkwTabBar;
 		const float TabWidth = BkwTabBar.w / (float)BKW_TAB_LENGTH;
 		for(int i = 0; i < BKW_TAB_LENGTH; ++i)
@@ -542,6 +544,29 @@ void CMenus::RenderSettings(CUIRect MainView)
 			{
 				Ui()->DoLabel(&StatsCard, "Введите ник и нажмите «Обновить».", 14.0f, TEXTALIGN_MC);
 			}
+		}
+		else if(s_BkwTab == BKW_TAB_HUD)
+		{
+			CUIRect Header;
+			PageView.HSplitTop(28.0f, &Header, &PageView);
+			Ui()->DoLabel(&Header, "BKW — Минималистичный HUD", 22.0f, TEXTALIGN_ML);
+			PageView.HSplitTop(8.0f, nullptr, &PageView);
+			CUIRect Toggle;
+			PageView.HSplitTop(28.0f, &Toggle, &PageView);
+			if(DoButton_CheckBox(&s_MinimalHudToggleId, "Минималистичный HUD", g_Config.m_BkwMinimalHud, &Toggle))
+				g_Config.m_BkwMinimalHud ^= 1;
+			PageView.HSplitTop(10.0f, nullptr, &PageView);
+			CUIRect Card;
+			PageView.HSplitTop(92.0f, &Card, &PageView);
+			Card.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+			Card.Margin(10.0f, &Card);
+			CUIRect L1, L2, L3;
+			Card.HSplitTop(24.0f, &L1, &Card);
+			Card.HSplitTop(24.0f, &L2, &Card);
+			Card.HSplitTop(24.0f, &L3, &Card);
+			Ui()->DoLabel(&L1, "Компактная панель в левом верхнем углу.", 12.0f, TEXTALIGN_ML);
+			Ui()->DoLabel(&L2, "Показывает FPS, точный ping и номер team.", 11.0f, TEXTALIGN_ML);
+			Ui()->DoLabel(&L3, "В режиме /practice дополнительно показывает PRACTICE.", 11.0f, TEXTALIGN_ML);
 		}
 		else if(s_BkwTab == BKW_TAB_BACKGROUND)
 		{

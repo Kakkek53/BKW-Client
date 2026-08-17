@@ -160,6 +160,7 @@ class CHud : public CComponent
 	void RenderWarmupTimer();
 	CUIRect GetLocalTimeRect(bool ForcePreview = false) const;
 	void RenderLocalTime(bool ForcePreview = false);
+	void RenderBkwMinimalHud();
 	void RenderSpeedrunTimer();
 	int m_SpeedrunTimerExpiredTick;
 
