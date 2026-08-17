@@ -1,0 +1,31 @@
+name: Apply skin shop UI v2
+on:
+  push:
+    branches: [agent/hud-accent-text-colors]
+    paths: [.github/workflows/apply-skinshop-ui-v2.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/hud-accent-text-colors
+          fetch-depth: 0
+      - name: Apply patch
+        run: python3 .github/scripts/apply_skinshop_ui.py
+      - name: Validate
+        run: |
+          git diff --check
+          grep -q 'components/skinshop.cpp' CMakeLists.txt
+          grep -q 'components/menus_settings_shop.cpp' CMakeLists.txt
+          grep -q 'RenderSettingsAssetsShop' src/game/client/components/menus.h
+          grep -q 'Localize("Shop")' src/game/client/components/menus_settings_assets.cpp
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "BKW: add skin shop browser UI"
+          git push origin HEAD:agent/hud-accent-text-colors
