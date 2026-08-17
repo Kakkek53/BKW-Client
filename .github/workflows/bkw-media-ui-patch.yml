@@ -1,0 +1,121 @@
+name: BKW media UI patch
+on:
+  push:
+    paths:
+      - '.github/workflows/bkw-media-ui-patch.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/bkw-save-system
+      - name: Apply BKW media background integration
+        shell: python
+        run: |
+          from pathlib import Path
+
+          # 1) Wire existing CMenuMediaBackground into CMenuBackground.
+          p = Path('src/game/client/components/menu_background.h')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('#include <game/client/components/camera.h>\n', '#include <game/client/components/camera.h>\n#include <game/client/components/menu_media_background.h>\n')
+          s = s.replace('\tCCamera m_Camera;\n', '\tCCamera m_Camera;\n\tCMenuMediaBackground m_BkwMediaBackground;\n')
+          s = s.replace('\tbool Render();\n', '\tbool Render();\n\tvoid ReloadBkwMediaBackground() { m_BkwMediaBackground.ReloadFromConfig(); }\n\tconst char *BkwMediaBackgroundStatus() const { return m_BkwMediaBackground.StatusText(); }\n\tbool BkwMediaBackgroundLoaded() const { return m_BkwMediaBackground.IsLoaded(); }\n\tbool BkwMediaBackgroundHasError() const { return m_BkwMediaBackground.HasError(); }\n')
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('src/game/client/components/menu_background.cpp')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('\tm_IsInit = true;\n\n\tif(g_Config.m_ClMenuMap[0]', '\tm_IsInit = true;\n\tm_BkwMediaBackground.Init(Graphics(), Storage());\n\tm_BkwMediaBackground.SyncFromConfig();\n\n\tif(g_Config.m_ClMenuMap[0]')
+          old = 'bool CMenuBackground::Render()\n{\n\tif(!m_Loaded)\n\t\treturn false;\n'
+          new = 'bool CMenuBackground::Render()\n{\n\tm_BkwMediaBackground.SyncFromConfig();\n\tm_BkwMediaBackground.Update();\n\tif(g_Config.m_BcMenuMediaBackground && m_BkwMediaBackground.Render((float)Graphics()->ScreenWidth(), (float)Graphics()->ScreenHeight()))\n\t\treturn true;\n\n\tif(!m_Loaded)\n\t\treturn false;\n'
+          if old not in s:
+              raise SystemExit('menu_background Render anchor not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+
+          # 2) Add BKW -> Фон tab and controls.
+          p = Path('src/game/client/components/menus_settings.cpp')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('\t\tBKW_TAB_HOURS,\n\t\tBKW_TAB_EXIT,', '\t\tBKW_TAB_HOURS,\n\t\tBKW_TAB_BACKGROUND,\n\t\tBKW_TAB_EXIT,', 1)
+          s = s.replace('\t\tstatic CButtonContainer s_HoursRefreshButton;\n', '\t\tstatic CButtonContainer s_HoursRefreshButton;\n\t\tstatic int s_MediaBackgroundToggleId;\n\t\tstatic CLineInputBuffered<IO_MAX_PATH_LENGTH> s_MediaBackgroundPathInput;\n\t\tstatic bool s_MediaBackgroundPathInitialized = false;\n\t\tstatic CButtonContainer s_MediaBackgroundReloadButton;\n\t\tstatic CButtonContainer s_MediaBackgroundClearButton;\n', 1)
+          s = s.replace('const char *apBkwTabs[BKW_TAB_LENGTH] = {"Сохранение", "Чекпоинты", "Игрок", "Кланы", "Часы", "Выход"};', 'const char *apBkwTabs[BKW_TAB_LENGTH] = {"Сохранение", "Чекпоинты", "Игрок", "Кланы", "Часы", "Фон", "Выход"};', 1)
+          anchor = '\t\telse if(s_BkwTab == BKW_TAB_EXIT)\n\t\t{'
+          if anchor not in s:
+              raise SystemExit('BKW exit tab anchor not found')
+          block = r'''		else if(s_BkwTab == BKW_TAB_BACKGROUND)
+		{
+			if(!s_MediaBackgroundPathInitialized)
+			{
+				s_MediaBackgroundPathInput.Set(g_Config.m_BcMenuMediaBackgroundPath);
+				s_MediaBackgroundPathInitialized = true;
+			}
+
+			CUIRect Header, Toggle, Info, PathLabel, PathEdit, Buttons, Status;
+			PageView.HSplitTop(28.0f, &Header, &PageView);
+			Ui()->DoLabel(&Header, "BKW — Фон", 22.0f, TEXTALIGN_ML);
+			PageView.HSplitTop(8.0f, nullptr, &PageView);
+			PageView.HSplitTop(28.0f, &Toggle, &PageView);
+			if(DoButton_CheckBox(&s_MediaBackgroundToggleId, "Пользовательский фон главного меню", g_Config.m_BcMenuMediaBackground, &Toggle))
+			{
+				g_Config.m_BcMenuMediaBackground ^= 1;
+				GameClient()->m_MenuBackground.ReloadBkwMediaBackground();
+			}
+
+			PageView.HSplitTop(10.0f, nullptr, &PageView);
+			PageView.HSplitTop(66.0f, &Info, &PageView);
+			Info.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+			Info.Margin(10.0f, &Info);
+			Ui()->DoLabel(&Info, "Укажите путь к картинке или видео. Поддержка формата зависит от media decoder сборки.\nПри ошибке BKW автоматически оставит обычный .map-фон.", 11.0f, TEXTALIGN_ML);
+
+			PageView.HSplitTop(12.0f, nullptr, &PageView);
+			PageView.HSplitTop(20.0f, &PathLabel, &PageView);
+			Ui()->DoLabel(&PathLabel, "Файл фона (PNG/JPG/GIF/WebP/MP4/MOV/WebM и др.):", 12.0f, TEXTALIGN_ML);
+			PageView.HSplitTop(30.0f, &PathEdit, &PageView);
+			if(Ui()->DoEditBox(&s_MediaBackgroundPathInput, &PathEdit, 12.0f))
+			{
+				str_copy(g_Config.m_BcMenuMediaBackgroundPath, s_MediaBackgroundPathInput.GetString());
+			}
+
+			PageView.HSplitTop(10.0f, nullptr, &PageView);
+			PageView.HSplitTop(30.0f, &Buttons, &PageView);
+			CUIRect ReloadButton, ClearButton;
+			Buttons.VSplitMid(&ReloadButton, &ClearButton, 8.0f);
+			if(DoButton_Menu(&s_MediaBackgroundReloadButton, "Загрузить / обновить", 0, &ReloadButton))
+			{
+				str_copy(g_Config.m_BcMenuMediaBackgroundPath, s_MediaBackgroundPathInput.GetString());
+				g_Config.m_BcMenuMediaBackground = 1;
+				GameClient()->m_MenuBackground.ReloadBkwMediaBackground();
+			}
+			if(DoButton_Menu(&s_MediaBackgroundClearButton, "Убрать фон", 0, &ClearButton))
+			{
+				g_Config.m_BcMenuMediaBackground = 0;
+				g_Config.m_BcMenuMediaBackgroundPath[0] = '\0';
+				s_MediaBackgroundPathInput.Set("");
+				GameClient()->m_MenuBackground.ReloadBkwMediaBackground();
+			}
+
+			PageView.HSplitTop(12.0f, nullptr, &PageView);
+			PageView.HSplitTop(44.0f, &Status, &PageView);
+			Status.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+			Status.Margin(8.0f, &Status);
+			const char *pStatus = GameClient()->m_MenuBackground.BkwMediaBackgroundStatus();
+			if(GameClient()->m_MenuBackground.BkwMediaBackgroundHasError())
+				TextRender()->TextColor(ColorRGBA(1.0f, 0.55f, 0.55f, 1.0f));
+			else if(GameClient()->m_MenuBackground.BkwMediaBackgroundLoaded())
+				TextRender()->TextColor(ColorRGBA(0.55f, 1.0f, 0.55f, 1.0f));
+			Ui()->DoLabel(&Status, pStatus[0] != '\0' ? pStatus : "Фон не загружен.", 11.0f, TEXTALIGN_ML);
+			TextRender()->TextColor(TextRender()->DefaultTextColor());
+		}
+'''
+          s = s.replace(anchor, block + anchor, 1)
+          p.write_text(s, encoding='utf-8')
+      - name: Commit patch and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/bkw-media-ui-patch.yml
+          git add src/game/client/components/menu_background.h src/game/client/components/menu_background.cpp src/game/client/components/menus_settings.cpp
+          git commit -m "BKW: add media background settings tab"
+          git push origin HEAD:agent/bkw-save-system
