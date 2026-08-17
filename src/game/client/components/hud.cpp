@@ -3579,7 +3579,12 @@ void CHud::RenderBkwMinimalHud()
 	{
 		char aTime[32];
 		str_time(m_DDRaceTime, ETimeFormat::HOURS_CENTISECS, aTime, sizeof(aTime));
-		char aBuf[48]; str_format(aBuf, sizeof(aBuf), "TIME %s", aTime); (g_Config.m_BkwMinimalHudLayout ? Append2 : Append)(aBuf);
+		char aBuf[48];
+		str_format(aBuf, sizeof(aBuf), "TIME %s", aTime);
+		if(g_Config.m_BkwMinimalHudLayout)
+			Append2(aBuf);
+		else
+			Append(aBuf);
 	}
 
 	char aDelta[48] = {};
