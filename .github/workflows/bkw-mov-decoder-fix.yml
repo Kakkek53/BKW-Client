@@ -1,0 +1,42 @@
+name: BKW MOV decoder fix
+on:
+  push:
+    paths:
+      - '.github/workflows/bkw-mov-decoder-fix.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/bkw-save-system
+      - name: Patch MOV decoding
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/game/client/components/menu_media_background.cpp')
+          s = p.read_text(encoding='utf-8')
+
+          old = '''\tif(m_pGraphics == nullptr || m_pFrame == nullptr || m_pFrameRgba == nullptr || m_pSwsCtx == nullptr || m_Width <= 0 || m_Height <= 0)\n\t\treturn false;\n\n\tconst size_t FrameBytes = (size_t)m_Width * (size_t)m_Height * 4ull;\n\tif(m_vVideoUploadBuffer.size() != FrameBytes)\n\t\tm_vVideoUploadBuffer.resize(FrameBytes);\n\tCImageInfo Image;\n\tImage.m_Width = m_Width;\n\tImage.m_Height = m_Height;\n\tImage.m_Format = CImageInfo::FORMAT_RGBA;\n\n\tif(av_frame_make_writable(m_pFrameRgba) < 0)\n\t\treturn false;\n\n\tsws_scale(m_pSwsCtx, m_pFrame->data, m_pFrame->linesize, 0, m_Height, m_pFrameRgba->data, m_pFrameRgba->linesize);\n'''
+          new = '''\tif(m_pGraphics == nullptr || m_pFrame == nullptr)\n\t\treturn false;\n\n\tconst int FrameWidth = m_pFrame->width > 0 ? m_pFrame->width : m_Width;\n\tconst int FrameHeight = m_pFrame->height > 0 ? m_pFrame->height : m_Height;\n\tif(FrameWidth <= 0 || FrameHeight <= 0 || m_pFrame->format < 0)\n\t\treturn false;\n\tconstexpr int BKW_MEDIA_MAX_DIMENSION = 4096;\n\tconstexpr int64_t BKW_MEDIA_MAX_PIXELS = 4096ll * 4096ll;\n\tif(FrameWidth > BKW_MEDIA_MAX_DIMENSION || FrameHeight > BKW_MEDIA_MAX_DIMENSION || (int64_t)FrameWidth * (int64_t)FrameHeight > BKW_MEDIA_MAX_PIXELS)\n\t\treturn false;\n\n\tm_pSwsCtx = sws_getCachedContext(m_pSwsCtx,\n\t\tFrameWidth, FrameHeight, (AVPixelFormat)m_pFrame->format,\n\t\tFrameWidth, FrameHeight, AV_PIX_FMT_RGBA,\n\t\tSWS_BILINEAR, nullptr, nullptr, nullptr);\n\tif(!m_pSwsCtx)\n\t\treturn false;\n\n\tif(!m_pFrameRgba || m_pFrameRgba->width != FrameWidth || m_pFrameRgba->height != FrameHeight)\n\t{\n\t\tif(m_pFrameRgba)\n\t\t\tav_frame_free(&m_pFrameRgba);\n\t\tm_pFrameRgba = av_frame_alloc();\n\t\tif(!m_pFrameRgba)\n\t\t\treturn false;\n\t\tm_pFrameRgba->format = AV_PIX_FMT_RGBA;\n\t\tm_pFrameRgba->width = FrameWidth;\n\t\tm_pFrameRgba->height = FrameHeight;\n\t\tif(av_frame_get_buffer(m_pFrameRgba, 1) < 0)\n\t\t\treturn false;\n\t}\n\n\tm_Width = FrameWidth;\n\tm_Height = FrameHeight;\n\tconst size_t FrameBytes = (size_t)m_Width * (size_t)m_Height * 4ull;\n\tif(m_vVideoUploadBuffer.size() != FrameBytes)\n\t\tm_vVideoUploadBuffer.resize(FrameBytes);\n\tCImageInfo Image;\n\tImage.m_Width = m_Width;\n\tImage.m_Height = m_Height;\n\tImage.m_Format = CImageInfo::FORMAT_RGBA;\n\n\tif(av_frame_make_writable(m_pFrameRgba) < 0)\n\t\treturn false;\n\n\tconst int ScaledLines = sws_scale(m_pSwsCtx, m_pFrame->data, m_pFrame->linesize, 0, m_Height, m_pFrameRgba->data, m_pFrameRgba->linesize);\n\tif(ScaledLines <= 0 || m_pFrameRgba->linesize[0] < m_Width * 4)\n\t\treturn false;\n'''
+          if old not in s:
+              raise SystemExit('UploadCurrentVideoFrame anchor not found')
+          s = s.replace(old, new, 1)
+
+          old2 = '''\tm_pFrameRgba = av_frame_alloc();\n\tm_pPacket = av_packet_alloc();\n\tif(!m_pFrame || !m_pFrameRgba || !m_pPacket)\n\t{\n\t\tSetError(Localize("Failed to allocate video frames."));\n\t\tClearVideoState();\n\t\treturn false;\n\t}\n\n\tm_pFrameRgba->format = AV_PIX_FMT_RGBA;\n\tm_pFrameRgba->width = m_Width;\n\tm_pFrameRgba->height = m_Height;\n\tif(av_frame_get_buffer(m_pFrameRgba, 1) < 0)\n\t{\n\t\tSetError(Localize("Failed to allocate RGBA frame."));\n\t\tClearVideoState();\n\t\treturn false;\n\t}\n\n\tm_pSwsCtx = sws_getContext(m_Width, m_Height, m_pCodecCtx->pix_fmt, m_Width, m_Height, AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);\n\tif(!m_pSwsCtx)\n\t{\n\t\tSetError(Localize("Failed to initialize video scaler."));\n\t\tClearVideoState();\n\t\treturn false;\n\t}\n'''
+          new2 = '''\tm_pPacket = av_packet_alloc();\n\tif(!m_pFrame || !m_pPacket)\n\t{\n\t\tSetError(Localize("Failed to allocate video frames."));\n\t\tClearVideoState();\n\t\treturn false;\n\t}\n\n\t// Do not create the scaler from AVCodecContext::pix_fmt here.\n\t// For MOV containers/codecs (including ProRes and some H.264/HEVC files),\n\t// the actual pixel format can be finalized only after the first decoded frame.\n\t// UploadCurrentVideoFrame creates/reuses the scaler from AVFrame::format.\n'''
+          if old2 not in s:
+              raise SystemExit('LoadVideo scaler anchor not found')
+          s = s.replace(old2, new2, 1)
+
+          p.write_text(s, encoding='utf-8')
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/bkw-mov-decoder-fix.yml
+          git add src/game/client/components/menu_media_background.cpp
+          git commit -m "BKW: decode MOV frames using actual pixel format"
+          git push origin HEAD:agent/bkw-save-system
