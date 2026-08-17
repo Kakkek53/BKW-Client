@@ -20,7 +20,7 @@ extern "C" {
 namespace
 {
 	constexpr int MENU_MEDIA_MAX_VIDEO_FRAME_MS = 250;
-	constexpr int MENU_MEDIA_DEFAULT_VIDEO_FRAME_MS = 33;
+	constexpr int MENU_MEDIA_DEFAULT_VIDEO_FRAME_MS = 50;
 	constexpr int64_t MENU_MEDIA_PTS_UNSET = std::numeric_limits<int64_t>::min();
 
 #if defined(CONF_VIDEORECORDER)
@@ -404,19 +404,35 @@ bool CMenuMediaBackground::UploadCurrentVideoFrame(const char *pContextName, int
 	if(m_pGraphics == nullptr || m_pFrame == nullptr)
 		return false;
 
-	const int FrameWidth = m_pFrame->width > 0 ? m_pFrame->width : m_Width;
-	const int FrameHeight = m_pFrame->height > 0 ? m_pFrame->height : m_Height;
-	if(FrameWidth <= 0 || FrameHeight <= 0 || m_pFrame->format < 0)
+	const int SourceWidth = m_pFrame->width > 0 ? m_pFrame->width : m_Width;
+	const int SourceHeight = m_pFrame->height > 0 ? m_pFrame->height : m_Height;
+	if(SourceWidth <= 0 || SourceHeight <= 0 || m_pFrame->format < 0)
 		return false;
 	constexpr int BKW_MEDIA_MAX_DIMENSION = 4096;
 	constexpr int64_t BKW_MEDIA_MAX_PIXELS = 4096ll * 4096ll;
-	if(FrameWidth > BKW_MEDIA_MAX_DIMENSION || FrameHeight > BKW_MEDIA_MAX_DIMENSION || (int64_t)FrameWidth * (int64_t)FrameHeight > BKW_MEDIA_MAX_PIXELS)
+	if(SourceWidth > BKW_MEDIA_MAX_DIMENSION || SourceHeight > BKW_MEDIA_MAX_DIMENSION || (int64_t)SourceWidth * (int64_t)SourceHeight > BKW_MEDIA_MAX_PIXELS)
 		return false;
 
+	// Video backgrounds don't need source-resolution uploads. Recreating a full HD/4K
+	// OpenGL texture every video frame stalls older drivers badly. Keep the upload
+	// texture near 720p while preserving aspect ratio; rendering still scales it to
+	// the menu size.
+	constexpr int BKW_MEDIA_UPLOAD_MAX_WIDTH = 1280;
+	constexpr int BKW_MEDIA_UPLOAD_MAX_HEIGHT = 720;
+	double Scale = 1.0;
+	if(SourceWidth > BKW_MEDIA_UPLOAD_MAX_WIDTH || SourceHeight > BKW_MEDIA_UPLOAD_MAX_HEIGHT)
+	{
+		const double ScaleX = (double)BKW_MEDIA_UPLOAD_MAX_WIDTH / (double)SourceWidth;
+		const double ScaleY = (double)BKW_MEDIA_UPLOAD_MAX_HEIGHT / (double)SourceHeight;
+		Scale = std::min(ScaleX, ScaleY);
+	}
+	const int FrameWidth = std::max(1, (int)(SourceWidth * Scale));
+	const int FrameHeight = std::max(1, (int)(SourceHeight * Scale));
+
 	m_pSwsCtx = sws_getCachedContext(m_pSwsCtx,
-		FrameWidth, FrameHeight, (AVPixelFormat)m_pFrame->format,
+		SourceWidth, SourceHeight, (AVPixelFormat)m_pFrame->format,
 		FrameWidth, FrameHeight, AV_PIX_FMT_RGBA,
-		SWS_BILINEAR, nullptr, nullptr, nullptr);
+		SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
 	if(!m_pSwsCtx)
 		return false;
 
@@ -447,7 +463,7 @@ bool CMenuMediaBackground::UploadCurrentVideoFrame(const char *pContextName, int
 	if(av_frame_make_writable(m_pFrameRgba) < 0)
 		return false;
 
-	const int ScaledLines = sws_scale(m_pSwsCtx, m_pFrame->data, m_pFrame->linesize, 0, m_Height, m_pFrameRgba->data, m_pFrameRgba->linesize);
+	const int ScaledLines = sws_scale(m_pSwsCtx, m_pFrame->data, m_pFrame->linesize, 0, SourceHeight, m_pFrameRgba->data, m_pFrameRgba->linesize);
 	if(ScaledLines <= 0 || m_pFrameRgba->linesize[0] < m_Width * 4)
 		return false;
 	for(int y = 0; y < m_Height; ++y)
@@ -496,6 +512,9 @@ bool CMenuMediaBackground::DecodeNextVideoFrame(bool LoopOnEof)
 				if(Rescaled > 0)
 					DurationMs = (int)Rescaled;
 			}
+			// Cap the GPU upload rate to 20 FPS. The menu itself keeps rendering at
+			// full client FPS using the most recently uploaded frame.
+			DurationMs = std::max(DurationMs, MENU_MEDIA_DEFAULT_VIDEO_FRAME_MS);
 			return UploadCurrentVideoFrame(m_aLoadedPath, DurationMs);
 		}
 
