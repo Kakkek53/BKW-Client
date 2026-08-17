@@ -1,0 +1,1 @@
+Temporary CI trigger for BKW shop/checkpoint patch validation.
