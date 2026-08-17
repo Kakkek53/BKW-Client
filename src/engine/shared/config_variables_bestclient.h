@@ -431,3 +431,5 @@ MACRO_CONFIG_INT(BkwMinimalHudCorner, bkw_minimal_hud_corner, 0, 0, 3, CFGFLAG_C
 MACRO_CONFIG_INT(BkwMinimalHudScale, bkw_minimal_hud_scale, 100, 75, 125, CFGFLAG_CLIENT | CFGFLAG_SAVE, "BKW minimal HUD scale percent")
 MACRO_CONFIG_INT(BkwMinimalHudAlpha, bkw_minimal_hud_alpha, 60, 40, 80, CFGFLAG_CLIENT | CFGFLAG_SAVE, "BKW minimal HUD background opacity percent")
 MACRO_CONFIG_INT(BkwMinimalHudLayout, bkw_minimal_hud_layout, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "BKW minimal HUD layout: 0 horizontal, 1 compact two-line")
+MACRO_CONFIG_INT(BkwMinimalHudStyle, bkw_minimal_hud_style, 0, 0, 2, CFGFLAG_CLIENT | CFGFLAG_SAVE, "BKW minimal HUD style: 0 dark, 1 glass, 2 transparent")
+MACRO_CONFIG_INT(BkwMinimalHudAccent, bkw_minimal_hud_accent, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show BKW minimal HUD accent line")

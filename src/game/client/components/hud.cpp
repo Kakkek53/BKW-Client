@@ -3604,7 +3604,14 @@ void CHud::RenderBkwMinimalHud()
 	if(Corner == 1 || Corner == 3) X = m_Width - Width - Margin;
 	if(Corner == 2 || Corner == 3) Y = m_Height - Height - Margin;
 
-	Graphics()->DrawRect(X, Y, Width, Height, ColorRGBA(0.03f, 0.03f, 0.03f, Alpha), IGraphics::CORNER_ALL, 4.5f * Scale);
+	const int Style = std::clamp(g_Config.m_BkwMinimalHudStyle, 0, 2);
+	if(Style != 2)
+	{
+		const ColorRGBA Background = Style == 1 ? ColorRGBA(0.08f, 0.11f, 0.16f, Alpha * 0.72f) : ColorRGBA(0.03f, 0.03f, 0.03f, Alpha);
+		Graphics()->DrawRect(X, Y, Width, Height, Background, IGraphics::CORNER_ALL, 4.5f * Scale);
+	}
+	if(g_Config.m_BkwMinimalHudAccent)
+		Graphics()->DrawRect(X, Y, 1.5f * Scale, Height, ColorRGBA(0.35f, 0.72f, 1.0f, 0.95f), IGraphics::CORNER_L, 4.5f * Scale);
 	float TextX = X + PaddingX;
 	if(aLine[0])
 	{

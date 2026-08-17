@@ -92,6 +92,8 @@ void CMenus::RenderSettings(CUIRect MainView)
 		static int s_MinimalHudCheckpointToggleId;
 		static CButtonContainer s_MinimalHudLayoutHorizontalButton;
 		static CButtonContainer s_MinimalHudLayoutCompactButton;
+		static CButtonContainer s_aMinimalHudStyleButtons[3];
+		static int s_MinimalHudAccentToggleId;
 		static int s_MinimalHudFpsToggleId;
 		static int s_MinimalHudPingToggleId;
 		static int s_MinimalHudTeamToggleId;
@@ -628,6 +630,24 @@ void CMenus::RenderSettings(CUIRect MainView)
 					CUIRect B; AlphaRemain.VSplitLeft(Alphas.w / 3.0f, &B, &AlphaRemain);
 					if(DoButton_Menu(&s_aMinimalHudAlphaButtons[i], apAlphas[i], g_Config.m_BkwMinimalHudAlpha == aAlphas[i], &B)) g_Config.m_BkwMinimalHudAlpha = aAlphas[i];
 				}
+				PageView.HSplitTop(10.0f, nullptr, &PageView);
+				CUIRect StyleCard;
+				PageView.HSplitTop(92.0f, &StyleCard, &PageView);
+				StyleCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+				StyleCard.Margin(10.0f, &StyleCard);
+				CUIRect StyleLabel, StyleButtons, AccentRow;
+				StyleCard.HSplitTop(20.0f, &StyleLabel, &StyleCard);
+				Ui()->DoLabel(&StyleLabel, "Стиль", 12.0f, TEXTALIGN_ML);
+				StyleCard.HSplitTop(30.0f, &StyleButtons, &StyleCard);
+				const char *apStyles[3] = {"Тёмный", "Стекло", "Без фона"};
+				CUIRect StyleRemain = StyleButtons;
+				for(int i = 0; i < 3; ++i)
+				{
+					CUIRect B; StyleRemain.VSplitLeft(StyleButtons.w / 3.0f, &B, &StyleRemain);
+					if(DoButton_Menu(&s_aMinimalHudStyleButtons[i], apStyles[i], g_Config.m_BkwMinimalHudStyle == i, &B)) g_Config.m_BkwMinimalHudStyle = i;
+				}
+				StyleCard.HSplitTop(28.0f, &AccentRow, &StyleCard);
+				if(DoButton_CheckBox(&s_MinimalHudAccentToggleId, "Акцентная линия", g_Config.m_BkwMinimalHudAccent, &AccentRow)) g_Config.m_BkwMinimalHudAccent ^= 1;
 			}
 		}
 		else if(s_BkwTab == BKW_TAB_BACKGROUND)
