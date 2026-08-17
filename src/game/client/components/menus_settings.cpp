@@ -558,7 +558,10 @@ void CMenus::RenderSettings(CUIRect MainView)
 			PageView.HSplitTop(28.0f, &Toggle, &PageView);
 			if(DoButton_CheckBox(&s_MediaBackgroundToggleId, "Пользовательский фон главного меню", g_Config.m_BcMenuMediaBackground, &Toggle))
 			{
-				g_Config.m_BcMenuMediaBackground ^= 1;
+				const bool Enable = g_Config.m_BcMenuMediaBackground == 0;
+				if(Enable)
+					str_copy(g_Config.m_BcMenuMediaBackgroundPath, s_MediaBackgroundPathInput.GetString());
+				g_Config.m_BcMenuMediaBackground = Enable ? 1 : 0;
 				GameClient()->m_MenuBackground.ReloadBkwMediaBackground();
 			}
 
@@ -572,8 +575,10 @@ void CMenus::RenderSettings(CUIRect MainView)
 			PageView.HSplitTop(20.0f, &PathLabel, &PageView);
 			Ui()->DoLabel(&PathLabel, "Файл фона (PNG/JPG/GIF/WebP/MP4/MOV/WebM и др.):", 12.0f, TEXTALIGN_ML);
 			PageView.HSplitTop(30.0f, &PathEdit, &PageView);
-			if(Ui()->DoEditBox(&s_MediaBackgroundPathInput, &PathEdit, 12.0f))
-				str_copy(g_Config.m_BcMenuMediaBackgroundPath, s_MediaBackgroundPathInput.GetString());
+			// Keep edits local until the user explicitly applies them.
+			// Updating g_Config on every keystroke made CMenuBackground::Render()
+			// repeatedly unload/reload the decoder through SyncFromConfig().
+			Ui()->DoEditBox(&s_MediaBackgroundPathInput, &PathEdit, 12.0f);
 
 			PageView.HSplitTop(10.0f, nullptr, &PageView);
 			PageView.HSplitTop(30.0f, &Buttons, &PageView);
