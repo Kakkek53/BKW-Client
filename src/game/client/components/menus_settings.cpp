@@ -90,6 +90,8 @@ void CMenus::RenderSettings(CUIRect MainView)
 		static int s_MinimalHudPbDeltaToggleId;
 		static int s_MinimalHudSpeedToggleId;
 		static int s_MinimalHudCheckpointToggleId;
+		static CButtonContainer s_MinimalHudLayoutHorizontalButton;
+		static CButtonContainer s_MinimalHudLayoutCompactButton;
 		static int s_MinimalHudFpsToggleId;
 		static int s_MinimalHudPingToggleId;
 		static int s_MinimalHudTeamToggleId;
@@ -672,6 +674,17 @@ void CMenus::RenderSettings(CUIRect MainView)
 				g_Config.m_BkwMinimalHudSpeed ^= 1;
 			if(DoButton_CheckBox(&s_MinimalHudCheckpointToggleId, "Checkpoint", g_Config.m_BkwMinimalHudCheckpoint, &CheckpointOpt))
 				g_Config.m_BkwMinimalHudCheckpoint ^= 1;
+			PageView.HSplitTop(8.0f, nullptr, &PageView);
+			CUIRect LayoutLabel, LayoutButtons;
+			PageView.HSplitTop(20.0f, &LayoutLabel, &PageView);
+			Ui()->DoLabel(&LayoutLabel, "Режим HUD:", 12.0f, TEXTALIGN_ML);
+			PageView.HSplitTop(30.0f, &LayoutButtons, &PageView);
+			CUIRect HorizontalBtn, CompactBtn;
+			LayoutButtons.VSplitMid(&HorizontalBtn, &CompactBtn, 6.0f);
+			if(DoButton_Menu(&s_MinimalHudLayoutHorizontalButton, "Горизонтальный", g_Config.m_BkwMinimalHudLayout == 0, &HorizontalBtn))
+				g_Config.m_BkwMinimalHudLayout = 0;
+			if(DoButton_Menu(&s_MinimalHudLayoutCompactButton, "Двухстрочный", g_Config.m_BkwMinimalHudLayout == 1, &CompactBtn))
+				g_Config.m_BkwMinimalHudLayout = 1;
 			PageView.HSplitTop(12.0f, nullptr, &PageView);
 			PageView.HSplitTop(20.0f, &PathLabel, &PageView);
 			Ui()->DoLabel(&PathLabel, "Файл фона (PNG/JPG/GIF/WebP/MP4/MOV/WebM и др.):", 12.0f, TEXTALIGN_ML);

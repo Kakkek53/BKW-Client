@@ -3516,10 +3516,16 @@ void CHud::RenderBkwMinimalHud()
 	const float Alpha = std::clamp(g_Config.m_BkwMinimalHudAlpha / 100.0f, 0.4f, 0.8f);
 
 	char aLine[256] = {};
+	char aLine2[192] = {};
 	auto Append = [&](const char *pText) {
 		if(aLine[0])
 			str_append(aLine, "   ", sizeof(aLine));
 		str_append(aLine, pText, sizeof(aLine));
+	};
+	auto Append2 = [&](const char *pText) {
+		if(aLine2[0])
+			str_append(aLine2, "   ", sizeof(aLine2));
+		str_append(aLine2, pText, sizeof(aLine2));
 	};
 
 	if(g_Config.m_BkwMinimalHudFps)
@@ -3567,7 +3573,7 @@ void CHud::RenderBkwMinimalHud()
 	{
 		char aTime[32];
 		str_time(m_DDRaceTime, ETimeFormat::HOURS_CENTISECS, aTime, sizeof(aTime));
-		char aBuf[48]; str_format(aBuf, sizeof(aBuf), "TIME %s", aTime); Append(aBuf);
+		char aBuf[48]; str_format(aBuf, sizeof(aBuf), "TIME %s", aTime); (g_Config.m_BkwMinimalHudLayout ? Append2 : Append)(aBuf);
 	}
 
 	char aDelta[48] = {};
@@ -3585,9 +3591,13 @@ void CHud::RenderBkwMinimalHud()
 	if(!aLine[0] && !HasDelta)
 		return;
 	const float MainWidth = TextRender()->TextWidth(FontSize, aLine);
+	const float Line2Width = TextRender()->TextWidth(FontSize, aLine2);
 	const float DeltaWidth = HasDelta ? TextRender()->TextWidth(FontSize, aDelta) : 0.0f;
-	const float Width = PaddingX * 2.0f + MainWidth + (HasDelta && aLine[0] ? Gap : 0.0f) + DeltaWidth;
-	const float Height = FontSize + PaddingY * 2.0f;
+	const bool Compact = g_Config.m_BkwMinimalHudLayout != 0;
+	const float CompactSecondWidth = Line2Width + (HasDelta && aLine2[0] ? Gap : 0.0f) + DeltaWidth;
+	const float HorizontalWidth = MainWidth + (HasDelta && aLine[0] ? Gap : 0.0f) + DeltaWidth;
+	const float Width = PaddingX * 2.0f + (Compact ? maximum(MainWidth, CompactSecondWidth) : HorizontalWidth);
+	const float Height = (Compact && (aLine2[0] || HasDelta) ? FontSize * 2.0f + PaddingY * 2.0f + 2.0f * Scale : FontSize + PaddingY * 2.0f);
 	const float Margin = 5.0f * Scale;
 	float X = Margin, Y = Margin;
 	const int Corner = std::clamp(g_Config.m_BkwMinimalHudCorner, 0, 3);
@@ -3600,12 +3610,25 @@ void CHud::RenderBkwMinimalHud()
 	{
 		TextRender()->TextColor(0.94f, 0.96f, 1.0f, 1.0f);
 		TextRender()->Text(TextX, Y + PaddingY, FontSize, aLine, -1.0f);
-		TextX += MainWidth + Gap;
+		if(!Compact)
+			TextX += MainWidth + Gap;
+	}
+	float DeltaY = Y + PaddingY;
+	if(Compact && (aLine2[0] || HasDelta))
+	{
+		TextX = X + PaddingX;
+		DeltaY += FontSize + 2.0f * Scale;
+		if(aLine2[0])
+		{
+			TextRender()->TextColor(0.94f, 0.96f, 1.0f, 1.0f);
+			TextRender()->Text(TextX, DeltaY, FontSize, aLine2, -1.0f);
+			TextX += Line2Width + Gap;
+		}
 	}
 	if(HasDelta)
 	{
 		TextRender()->TextColor(Delta <= 0.0f ? ColorRGBA(0.45f, 1.0f, 0.55f, 1.0f) : ColorRGBA(1.0f, 0.45f, 0.45f, 1.0f));
-		TextRender()->Text(TextX, Y + PaddingY, FontSize, aDelta, -1.0f);
+		TextRender()->Text(TextX, DeltaY, FontSize, aDelta, -1.0f);
 	}
 	TextRender()->TextColor(TextRender()->DefaultTextColor());
 }
