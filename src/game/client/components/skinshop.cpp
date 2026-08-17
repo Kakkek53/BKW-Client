@@ -11,6 +11,8 @@
 
 namespace
 {
+constexpr int TEEDATA_PAGE_LIMIT = 20;
+
 const char *JsonString(const json_value &Object, const char *pKey)
 {
 	const json_value &Value = Object[pKey];
@@ -61,6 +63,59 @@ bool EndsWithPng(const std::string &Value)
 		std::tolower((unsigned char)Value[Pos + 2]) == 'n' &&
 		std::tolower((unsigned char)Value[Pos + 3]) == 'g';
 }
+
+std::string FileNameFromPath(const char *pPath)
+{
+	if(pPath == nullptr)
+		return {};
+	std::string Result(pPath);
+	const size_t Slash = Result.find_last_of("/\\");
+	if(Slash != std::string::npos)
+		Result.erase(0, Slash + 1);
+	return Result;
+}
+
+const char *TeedataEndpoint(ESkinShopCategory Category)
+{
+	switch(Category)
+	{
+	case ESkinShopCategory::GAMESKIN: return "gameskin";
+	case ESkinShopCategory::PARTICLE: return "particle";
+	case ESkinShopCategory::ENTITY: return "entity";
+	case ESkinShopCategory::EMOTICON: return "emoticon";
+	case ESkinShopCategory::CURSOR: return "cursor";
+	case ESkinShopCategory::HUD:
+	case ESkinShopCategory::NUM_CATEGORIES: break;
+	}
+	return nullptr;
+}
+
+const char *TeedataPathPrefix(ESkinShopCategory Category)
+{
+	switch(Category)
+	{
+	case ESkinShopCategory::GAMESKIN: return "/gameskins/";
+	case ESkinShopCategory::PARTICLE: return "/particles/";
+	case ESkinShopCategory::ENTITY: return "/entities/";
+	case ESkinShopCategory::EMOTICON: return "/emoticons/";
+	case ESkinShopCategory::CURSOR: return "/cursors/";
+	case ESkinShopCategory::HUD:
+	case ESkinShopCategory::NUM_CATEGORIES: break;
+	}
+	return nullptr;
+}
+
+bool SafeRemotePath(const char *pPath)
+{
+	return pPath != nullptr && pPath[0] != '\0' &&
+		str_find(pPath, "..") == nullptr &&
+		str_find(pPath, "\\") == nullptr;
+}
+
+int SourceIndex(ESkinShopSource Source)
+{
+	return (int)Source;
+}
 } // namespace
 
 CSkinShop::~CSkinShop()
@@ -73,8 +128,8 @@ void CSkinShop::Init(IHttp *pHttp, IStorage *pStorage)
 	m_pHttp = pHttp;
 	m_pStorage = pStorage;
 	PrepareStorage();
-	if(m_pHttp != nullptr && m_vItems.empty() && m_pRequest == nullptr)
-		StartPage(1);
+	if(m_pHttp != nullptr && m_pRequest == nullptr && HasMore())
+		LoadNextPage();
 }
 
 void CSkinShop::PrepareStorage()
@@ -150,20 +205,128 @@ const char *CSkinShop::CategoryConfigCommand(ESkinShopCategory Category)
 	return "cl_asset_game";
 }
 
-void CSkinShop::BuildPageUrl(char *pBuffer, size_t BufferSize, ESkinShopCategory Category, int Page)
+const char *CSkinShop::SourceName(ESkinShopSource Source)
+{
+	switch(Source)
+	{
+	case ESkinShopSource::CHERYDATA: return "CheryData";
+	case ESkinShopSource::TEEDATA: return "Teedata";
+	case ESkinShopSource::NUM_SOURCES: break;
+	}
+	return "Unknown";
+}
+
+bool CSkinShop::SourceEnabled(ESkinShopSource Source) const
+{
+	const int Index = SourceIndex(Source);
+	return Index >= 0 && Index < SOURCE_COUNT && m_aSourceEnabled[Index];
+}
+
+bool CSkinShop::SourceAvailable(ESkinShopSource Source) const
+{
+	if(Source == ESkinShopSource::CHERYDATA)
+		return true;
+	if(Source == ESkinShopSource::TEEDATA)
+		return m_Category != ESkinShopCategory::HUD;
+	return false;
+}
+
+bool CSkinShop::HasMore() const
+{
+	for(int i = 0; i < SOURCE_COUNT; ++i)
+	{
+		const ESkinShopSource Source = (ESkinShopSource)i;
+		if(SourceEnabled(Source) && SourceAvailable(Source) && m_aHasMore[i])
+			return true;
+	}
+	return false;
+}
+
+bool CSkinShop::Error() const
+{
+	bool HasActiveSource = false;
+	bool HasHealthySource = false;
+	for(int i = 0; i < SOURCE_COUNT; ++i)
+	{
+		const ESkinShopSource Source = (ESkinShopSource)i;
+		if(!SourceEnabled(Source) || !SourceAvailable(Source))
+			continue;
+		HasActiveSource = true;
+		if(!m_aSourceError[i])
+			HasHealthySource = true;
+	}
+	return HasActiveSource && !HasHealthySource;
+}
+
+int CSkinShop::LoadedPage() const
+{
+	int Page = 0;
+	for(int i = 0; i < SOURCE_COUNT; ++i)
+	{
+		const ESkinShopSource Source = (ESkinShopSource)i;
+		if(SourceEnabled(Source) && SourceAvailable(Source))
+			Page = std::max(Page, m_aLoadedPage[i]);
+	}
+	return Page;
+}
+
+void CSkinShop::BuildPageUrl(char *pBuffer, size_t BufferSize, ESkinShopSource Source, ESkinShopCategory Category, int Page)
 {
 	if(Page < 1)
 		Page = 1;
-	str_format(pBuffer, BufferSize, "https://teeworlds.xyz/api/skins?page=%d&limit=%d&type=%s&sort=newest", Page, PAGE_LIMIT, CategoryType(Category));
+
+	if(Source == ESkinShopSource::CHERYDATA)
+	{
+		str_format(pBuffer, BufferSize, "https://teeworlds.xyz/api/skins?page=%d&limit=%d&type=%s&sort=newest", Page, PAGE_LIMIT, CategoryType(Category));
+		return;
+	}
+
+	if(Source == ESkinShopSource::TEEDATA)
+	{
+		const char *pEndpoint = TeedataEndpoint(Category);
+		if(pEndpoint != nullptr)
+		{
+			str_format(pBuffer, BufferSize, "https://teedata.net/api/%s/read?page=%d", pEndpoint, Page);
+			return;
+		}
+	}
+
+	pBuffer[0] = '\0';
 }
 
-std::string CSkinShop::BuildImageUrl(const char *pImageUrl)
+std::string CSkinShop::BuildImageUrl(ESkinShopSource Source, ESkinShopCategory Category, const char *pImageUrl)
 {
-	if(pImageUrl == nullptr || pImageUrl[0] == '\0')
+	if(!SafeRemotePath(pImageUrl))
 		return {};
-	if(pImageUrl[0] == '/')
-		return std::string("https://teeworlds.xyz") + pImageUrl;
-	return pImageUrl;
+
+	if(Source == ESkinShopSource::CHERYDATA)
+	{
+		if(str_startswith(pImageUrl, "https://teeworlds.xyz/"))
+			return pImageUrl;
+		if(str_startswith(pImageUrl, "/uploads/"))
+			return std::string("https://teeworlds.xyz") + pImageUrl;
+		return {};
+	}
+
+	if(Source == ESkinShopSource::TEEDATA)
+	{
+		const char *pExpectedPrefix = TeedataPathPrefix(Category);
+		if(pExpectedPrefix == nullptr)
+			return {};
+
+		if(str_startswith(pImageUrl, pExpectedPrefix))
+			return std::string("https://teedata.net") + pImageUrl;
+
+		constexpr const char *pTeedataRoot = "https://teedata.net";
+		if(str_startswith(pImageUrl, pTeedataRoot))
+		{
+			const char *pPath = pImageUrl + str_length(pTeedataRoot);
+			if(str_startswith(pPath, pExpectedPrefix))
+				return pImageUrl;
+		}
+	}
+
+	return {};
 }
 
 std::string CSkinShop::AssetName(const SSkinShopItem &Item)
@@ -181,10 +344,10 @@ std::string CSkinShop::AssetName(const SSkinShopItem &Item)
 	std::string Id = SafePart(Item.m_Id);
 	if(Id.empty())
 		Id = "item";
-	if(Id.size() > 8)
-		Id.resize(8);
+	if(Id.size() > 16)
+		Id.erase(0, Id.size() - 16);
 	const std::string Suffix = "_" + Id;
-	const size_t MaxBaseLength = 48 > Suffix.size() ? 48 - Suffix.size() : 1;
+	const size_t MaxBaseLength = 56 > Suffix.size() ? 56 - Suffix.size() : 1;
 	if(Base.size() > MaxBaseLength)
 		Base.resize(MaxBaseLength);
 	return Base + Suffix;
@@ -251,7 +414,8 @@ int CSkinShop::DownloadProgress(const SSkinShopItem &Item) const
 
 void CSkinShop::RequestPreview(const SSkinShopItem &Item)
 {
-	if(m_pHttp == nullptr || m_pStorage == nullptr || Item.m_ImageUrl.empty() || PreviewReady(Item))
+	const std::string &PreviewUrl = Item.m_PreviewUrl.empty() ? Item.m_ImageUrl : Item.m_PreviewUrl;
+	if(m_pHttp == nullptr || m_pStorage == nullptr || PreviewUrl.empty() || PreviewReady(Item))
 		return;
 
 	if(m_pPreviewRequest != nullptr)
@@ -265,7 +429,7 @@ void CSkinShop::RequestPreview(const SSkinShopItem &Item)
 	m_PreviewItemId = Item.m_Id;
 	m_PreviewRequestPath = CachedPreviewPath(Item);
 	m_PreviewError = false;
-	m_pPreviewRequest = HttpGetFile(Item.m_ImageUrl.c_str(), m_pStorage, m_PreviewRequestPath.c_str(), IStorage::TYPE_SAVE);
+	m_pPreviewRequest = HttpGetFile(PreviewUrl.c_str(), m_pStorage, m_PreviewRequestPath.c_str(), IStorage::TYPE_SAVE);
 	m_pPreviewRequest->Timeout(CTimeout{10000, 30000, 500, 5});
 	m_pPreviewRequest->LogProgress(HTTPLOG::FAILURE);
 	m_pHttp->Run(m_pPreviewRequest);
@@ -313,6 +477,17 @@ bool CSkinShop::DeleteInstalled(const SSkinShopItem &Item)
 	return m_pStorage->RemoveFile(Path.c_str(), IStorage::TYPE_SAVE);
 }
 
+void CSkinShop::ResetSourceState()
+{
+	for(int i = 0; i < SOURCE_COUNT; ++i)
+	{
+		m_aLoadedPage[i] = 0;
+		m_aRequestPage[i] = 0;
+		m_aHasMore[i] = true;
+		m_aSourceError[i] = false;
+	}
+}
+
 void CSkinShop::SetCategory(ESkinShopCategory Category)
 {
 	if(Category == ESkinShopCategory::NUM_CATEGORIES)
@@ -324,11 +499,35 @@ void CSkinShop::SetCategory(ESkinShopCategory Category)
 	m_Category = Category;
 	m_vItems.clear();
 	m_ItemIds.clear();
-	m_LoadedPage = 0;
-	m_RequestPage = 0;
-	m_HasMore = true;
-	m_Error = false;
-	StartPage(1);
+	ResetSourceState();
+	LoadNextPage();
+}
+
+void CSkinShop::SetSourceEnabled(ESkinShopSource Source, bool Enabled)
+{
+	const int Index = SourceIndex(Source);
+	if(Index < 0 || Index >= SOURCE_COUNT || Source == ESkinShopSource::NUM_SOURCES)
+		return;
+	if(!SourceAvailable(Source) && Enabled)
+		return;
+	if(m_aSourceEnabled[Index] == Enabled)
+		return;
+
+	if(!Enabled && SourceAvailable(Source))
+	{
+		int ActiveSources = 0;
+		for(int i = 0; i < SOURCE_COUNT; ++i)
+		{
+			const ESkinShopSource Other = (ESkinShopSource)i;
+			if(SourceEnabled(Other) && SourceAvailable(Other))
+				++ActiveSources;
+		}
+		if(ActiveSources <= 1)
+			return;
+	}
+
+	m_aSourceEnabled[Index] = Enabled;
+	Refresh();
 }
 
 void CSkinShop::Refresh()
@@ -336,11 +535,8 @@ void CSkinShop::Refresh()
 	Abort();
 	m_vItems.clear();
 	m_ItemIds.clear();
-	m_LoadedPage = 0;
-	m_RequestPage = 0;
-	m_HasMore = true;
-	m_Error = false;
-	StartPage(1);
+	ResetSourceState();
+	LoadNextPage();
 }
 
 void CSkinShop::Abort()
@@ -360,30 +556,64 @@ void CSkinShop::Abort()
 		m_pDownloadRequest->Abort();
 		m_pDownloadRequest.reset();
 	}
-	m_RequestPage = 0;
+	for(int i = 0; i < SOURCE_COUNT; ++i)
+		m_aRequestPage[i] = 0;
 	m_PreviewError = false;
 	m_DownloadError = false;
 }
 
-void CSkinShop::StartPage(int Page)
+void CSkinShop::StartPage(ESkinShopSource Source, int Page)
 {
-	if(m_pHttp == nullptr || m_pRequest != nullptr || !m_HasMore || Page < 1)
+	if(m_pHttp == nullptr || m_pRequest != nullptr || Page < 1 || !SourceEnabled(Source) || !SourceAvailable(Source))
+		return;
+
+	const int Index = SourceIndex(Source);
+	if(!m_aHasMore[Index])
 		return;
 
 	char aUrl[256];
-	BuildPageUrl(aUrl, sizeof(aUrl), m_Category, Page);
+	BuildPageUrl(aUrl, sizeof(aUrl), Source, m_Category, Page);
+	if(aUrl[0] == '\0')
+	{
+		m_aHasMore[Index] = false;
+		m_aSourceError[Index] = true;
+		return;
+	}
+
 	m_pRequest = HttpGet(aUrl);
 	m_pRequest->Timeout(CTimeout{10000, 20000, 500, 5});
 	m_pRequest->LogProgress(HTTPLOG::FAILURE);
-	m_RequestPage = Page;
+	m_RequestSource = Source;
+	m_aRequestPage[Index] = Page;
 	m_pHttp->Run(m_pRequest);
 }
 
 void CSkinShop::LoadNextPage()
 {
-	if(m_pRequest != nullptr || !m_HasMore)
+	if(m_pRequest != nullptr)
 		return;
-	StartPage(m_LoadedPage + 1);
+
+	for(int i = 0; i < SOURCE_COUNT; ++i)
+	{
+		const ESkinShopSource Source = (ESkinShopSource)i;
+		if(SourceEnabled(Source) && SourceAvailable(Source) && m_aHasMore[i] && m_aLoadedPage[i] == 0)
+		{
+			StartPage(Source, 1);
+			return;
+		}
+	}
+
+	int BestSource = -1;
+	for(int i = 0; i < SOURCE_COUNT; ++i)
+	{
+		const ESkinShopSource Source = (ESkinShopSource)i;
+		if(!SourceEnabled(Source) || !SourceAvailable(Source) || !m_aHasMore[i])
+			continue;
+		if(BestSource < 0 || m_aLoadedPage[i] < m_aLoadedPage[BestSource])
+			BestSource = i;
+	}
+	if(BestSource >= 0)
+		StartPage((ESkinShopSource)BestSource, m_aLoadedPage[BestSource] + 1);
 }
 
 void CSkinShop::Update()
@@ -392,25 +622,29 @@ void CSkinShop::Update()
 	{
 		std::shared_ptr<IHttpRequest> pRequest;
 		std::swap(m_pRequest, pRequest);
-		const int RequestPage = m_RequestPage;
-		m_RequestPage = 0;
+		const ESkinShopSource RequestSource = m_RequestSource;
+		const int Source = SourceIndex(RequestSource);
+		const int RequestPage = m_aRequestPage[Source];
+		m_aRequestPage[Source] = 0;
 
 		if(pRequest->State() != EHttpState::DONE)
 		{
-			m_Error = true;
+			m_aSourceError[Source] = true;
+			m_aHasMore[Source] = false;
 		}
 		else
 		{
 			json_value *pJson = pRequest->ResultJson();
 			std::vector<SSkinShopItem> vPageItems;
-			bool HasMore = false;
-			const bool Success = pJson != nullptr && ParsePage(pJson, vPageItems, HasMore);
+			bool HasMoreItems = false;
+			const bool Success = pJson != nullptr && ParsePage(RequestSource, RequestPage, pJson, vPageItems, HasMoreItems);
 			if(pJson != nullptr)
 				json_value_free(pJson);
 
 			if(!Success)
 			{
-				m_Error = true;
+				m_aSourceError[Source] = true;
+				m_aHasMore[Source] = false;
 			}
 			else
 			{
@@ -419,9 +653,9 @@ void CSkinShop::Update()
 					if(m_ItemIds.insert(Item.m_Id).second)
 						m_vItems.emplace_back(std::move(Item));
 				}
-				m_LoadedPage = RequestPage;
-				m_HasMore = HasMore;
-				m_Error = false;
+				m_aLoadedPage[Source] = RequestPage;
+				m_aHasMore[Source] = HasMoreItems;
+				m_aSourceError[Source] = false;
 			}
 		}
 	}
@@ -441,57 +675,130 @@ void CSkinShop::Update()
 	}
 }
 
-bool CSkinShop::ParsePage(json_value *pJson, std::vector<SSkinShopItem> &vItems, bool &HasMore) const
+bool CSkinShop::ParsePage(ESkinShopSource Source, int Page, json_value *pJson, std::vector<SSkinShopItem> &vItems, bool &HasMoreItems) const
 {
 	if(pJson == nullptr || pJson->type != json_object)
 		return false;
 
-	const json_value &Skins = (*pJson)["skins"];
-	if(Skins.type != json_array)
-		return false;
-
 	vItems.clear();
-	vItems.reserve(Skins.u.array.length);
-	for(unsigned int i = 0; i < Skins.u.array.length; ++i)
+
+	if(Source == ESkinShopSource::CHERYDATA)
 	{
-		const json_value &Skin = Skins[i];
-		if(Skin.type != json_object)
-			continue;
+		const json_value &Skins = (*pJson)["skins"];
+		if(Skins.type != json_array)
+			return false;
 
-		const std::string Id = JsonId(Skin);
-		const char *pName = JsonString(Skin, "name");
-		const char *pFileName = JsonString(Skin, "filename");
-		const char *pType = JsonString(Skin, "type");
-		const char *pImageUrl = JsonString(Skin, "imageUrl");
-		if(pImageUrl == nullptr)
-			pImageUrl = JsonString(Skin, "image_url");
+		vItems.reserve(Skins.u.array.length);
+		for(unsigned int i = 0; i < Skins.u.array.length; ++i)
+		{
+			const json_value &Skin = Skins[i];
+			if(Skin.type != json_object)
+				continue;
 
-		if(Id.empty() || pName == nullptr || pFileName == nullptr || pType == nullptr || pImageUrl == nullptr)
-			continue;
-		if(str_comp(pType, CategoryType(m_Category)) != 0)
-			continue;
+			const std::string RawId = JsonId(Skin);
+			const char *pName = JsonString(Skin, "name");
+			const char *pFileName = JsonString(Skin, "filename");
+			const char *pType = JsonString(Skin, "type");
+			const char *pImageUrl = JsonString(Skin, "imageUrl");
+			if(pImageUrl == nullptr)
+				pImageUrl = JsonString(Skin, "image_url");
 
-		const char *pAuthor = JsonString(Skin, "author_name");
-		if(pAuthor == nullptr || pAuthor[0] == '\0')
-			pAuthor = JsonString(Skin, "author_username");
-		if(pAuthor == nullptr || pAuthor[0] == '\0')
-			pAuthor = JsonString(Skin, "username");
-		if(pAuthor == nullptr || pAuthor[0] == '\0')
-			pAuthor = JsonString(Skin, "author");
+			if(RawId.empty() || pName == nullptr || pFileName == nullptr || pType == nullptr || pImageUrl == nullptr)
+				continue;
+			if(str_comp(pType, CategoryType(m_Category)) != 0)
+				continue;
 
-		SSkinShopItem Item;
-		Item.m_Id = Id;
-		Item.m_Name = pName;
-		Item.m_FileName = pFileName;
-		Item.m_Type = pType;
-		Item.m_Author = pAuthor != nullptr ? pAuthor : "";
-		Item.m_ImageUrl = BuildImageUrl(pImageUrl);
-		Item.m_Width = JsonInt(Skin, "width");
-		Item.m_Height = JsonInt(Skin, "height");
-		Item.m_Downloads = JsonInt(Skin, "downloads");
-		vItems.emplace_back(std::move(Item));
+			const std::string ImageUrl = BuildImageUrl(Source, m_Category, pImageUrl);
+			if(ImageUrl.empty())
+				continue;
+
+			const char *pAuthor = JsonString(Skin, "author_name");
+			if(pAuthor == nullptr || pAuthor[0] == '\0')
+				pAuthor = JsonString(Skin, "author_username");
+			if(pAuthor == nullptr || pAuthor[0] == '\0')
+				pAuthor = JsonString(Skin, "username");
+			if(pAuthor == nullptr || pAuthor[0] == '\0')
+				pAuthor = JsonString(Skin, "author");
+
+			SSkinShopItem Item;
+			Item.m_Id = "cherydata:" + RawId;
+			Item.m_Name = pName;
+			Item.m_FileName = pFileName;
+			Item.m_Type = pType;
+			Item.m_Author = pAuthor != nullptr ? pAuthor : "";
+			Item.m_ImageUrl = ImageUrl;
+			Item.m_PreviewUrl = ImageUrl;
+			Item.m_Source = Source;
+			Item.m_Width = JsonInt(Skin, "width");
+			Item.m_Height = JsonInt(Skin, "height");
+			Item.m_Downloads = JsonInt(Skin, "downloads");
+			vItems.emplace_back(std::move(Item));
+		}
+
+		HasMoreItems = Skins.u.array.length >= PAGE_LIMIT;
+		return true;
 	}
 
-	HasMore = Skins.u.array.length >= PAGE_LIMIT;
-	return true;
+	if(Source == ESkinShopSource::TEEDATA)
+	{
+		if(!SourceAvailable(Source))
+			return false;
+
+		const json_value &Result = (*pJson)["result"];
+		if(Result.type != json_object)
+			return false;
+
+		const json_value &Items = Result["items"];
+		if(Items.type != json_array)
+			return false;
+
+		const int TotalCount = JsonInt(Result, "totalCount");
+		vItems.reserve(Items.u.array.length);
+		for(unsigned int i = 0; i < Items.u.array.length; ++i)
+		{
+			const json_value &Data = Items[i];
+			if(Data.type != json_object)
+				continue;
+
+			const std::string RawId = JsonId(Data);
+			const char *pName = JsonString(Data, "name");
+			const char *pFilePath = JsonString(Data, "file_path");
+			const char *pThumbnailPath = JsonString(Data, "thumbnail_path");
+			if(RawId.empty() || pName == nullptr || pFilePath == nullptr)
+				continue;
+
+			const std::string ImageUrl = BuildImageUrl(Source, m_Category, pFilePath);
+			if(ImageUrl.empty())
+				continue;
+			std::string PreviewUrl = BuildImageUrl(Source, m_Category, pThumbnailPath);
+			if(PreviewUrl.empty())
+				PreviewUrl = ImageUrl;
+
+			const json_value &Author = Data["author"];
+			const char *pAuthor = Author.type == json_object ? JsonString(Author, "name") : nullptr;
+			const json_value &Counts = Data["_count"];
+
+			SSkinShopItem Item;
+			Item.m_Id = "teedata:" + RawId;
+			Item.m_Name = pName;
+			Item.m_FileName = FileNameFromPath(pFilePath);
+			Item.m_Type = CategoryType(m_Category);
+			Item.m_Author = pAuthor != nullptr ? pAuthor : "";
+			Item.m_ImageUrl = ImageUrl;
+			Item.m_PreviewUrl = PreviewUrl;
+			Item.m_Source = Source;
+			Item.m_Width = JsonInt(Data, "width");
+			Item.m_Height = JsonInt(Data, "height");
+			Item.m_Downloads = Counts.type == json_object ? JsonInt(Counts, "downloads") : 0;
+			vItems.emplace_back(std::move(Item));
+		}
+
+		if(TotalCount > 0)
+			HasMoreItems = Page * TEEDATA_PAGE_LIMIT < TotalCount;
+		else
+			HasMoreItems = Items.u.array.length >= TEEDATA_PAGE_LIMIT;
+		return true;
+	}
+
+	return false;
 }
