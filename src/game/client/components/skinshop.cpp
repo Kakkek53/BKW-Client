@@ -11,8 +11,6 @@
 
 namespace
 {
-constexpr int TEEDATA_PAGE_LIMIT = 20;
-
 const char *JsonString(const json_value &Object, const char *pKey)
 {
 	const json_value &Value = Object[pKey];
@@ -286,7 +284,7 @@ void CSkinShop::BuildPageUrl(char *pBuffer, size_t BufferSize, ESkinShopSource S
 		const char *pEndpoint = TeedataEndpoint(Category);
 		if(pEndpoint != nullptr)
 		{
-			str_format(pBuffer, BufferSize, "https://teedata.net/api/%s/read?page=%d", pEndpoint, Page);
+			str_format(pBuffer, BufferSize, "https://teedata.net/api/%s/read?limit=1000000000000000000", pEndpoint);
 			return;
 		}
 	}
@@ -675,7 +673,7 @@ void CSkinShop::Update()
 	}
 }
 
-bool CSkinShop::ParsePage(ESkinShopSource Source, int Page, json_value *pJson, std::vector<SSkinShopItem> &vItems, bool &HasMoreItems) const
+bool CSkinShop::ParsePage(ESkinShopSource Source, int /*Page*/, json_value *pJson, std::vector<SSkinShopItem> &vItems, bool &HasMoreItems) const
 {
 	if(pJson == nullptr || pJson->type != json_object)
 		return false;
@@ -752,7 +750,6 @@ bool CSkinShop::ParsePage(ESkinShopSource Source, int Page, json_value *pJson, s
 		if(Items.type != json_array)
 			return false;
 
-		const int TotalCount = JsonInt(Result, "totalCount");
 		vItems.reserve(Items.u.array.length);
 		for(unsigned int i = 0; i < Items.u.array.length; ++i)
 		{
@@ -793,10 +790,7 @@ bool CSkinShop::ParsePage(ESkinShopSource Source, int Page, json_value *pJson, s
 			vItems.emplace_back(std::move(Item));
 		}
 
-		if(TotalCount > 0)
-			HasMoreItems = Page * TEEDATA_PAGE_LIMIT < TotalCount;
-		else
-			HasMoreItems = Items.u.array.length >= TEEDATA_PAGE_LIMIT;
+		HasMoreItems = false;
 		return true;
 	}
 
