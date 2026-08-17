@@ -3544,6 +3544,25 @@ void CHud::RenderBkwMinimalHud()
 	if(g_Config.m_BkwMinimalHudPractice && Practice)
 		Append("PRACTICE");
 
+	if(g_Config.m_BkwMinimalHudSpeed && Character.m_Active)
+	{
+		const CMovementInformation Move = GetMovementInformation(LocalId, g_Config.m_ClDummy);
+		const float Speed = length(Move.m_Speed);
+		char aBuf[40];
+		str_format(aBuf, sizeof(aBuf), "SPD %.1f", Speed);
+		Append(aBuf);
+	}
+	if(g_Config.m_BkwMinimalHudCheckpoint)
+	{
+		const int Checkpoint = GetCheckpointId();
+		if(Checkpoint >= 0)
+		{
+			char aBuf[32];
+			str_format(aBuf, sizeof(aBuf), "CP %d", Checkpoint);
+			Append(aBuf);
+		}
+	}
+
 	if(g_Config.m_BkwMinimalHudRaceTime && m_DDRaceTime > 0)
 	{
 		char aTime[32];

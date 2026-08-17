@@ -88,6 +88,8 @@ void CMenus::RenderSettings(CUIRect MainView)
 		static int s_MinimalHudToggleId;
 		static int s_MinimalHudRaceTimeToggleId;
 		static int s_MinimalHudPbDeltaToggleId;
+		static int s_MinimalHudSpeedToggleId;
+		static int s_MinimalHudCheckpointToggleId;
 		static int s_MinimalHudFpsToggleId;
 		static int s_MinimalHudPingToggleId;
 		static int s_MinimalHudTeamToggleId;
@@ -662,6 +664,14 @@ void CMenus::RenderSettings(CUIRect MainView)
 				g_Config.m_BkwMinimalHudRaceTime ^= 1;
 			if(DoButton_CheckBox(&s_MinimalHudPbDeltaToggleId, "PB delta", g_Config.m_BkwMinimalHudPbDelta, &PbDeltaOpt))
 				g_Config.m_BkwMinimalHudPbDelta ^= 1;
+			CUIRect MovementOptions;
+			PageView.HSplitTop(28.0f, &MovementOptions, &PageView);
+			CUIRect SpeedOpt, CheckpointOpt;
+			MovementOptions.VSplitMid(&SpeedOpt, &CheckpointOpt, 6.0f);
+			if(DoButton_CheckBox(&s_MinimalHudSpeedToggleId, "Speed", g_Config.m_BkwMinimalHudSpeed, &SpeedOpt))
+				g_Config.m_BkwMinimalHudSpeed ^= 1;
+			if(DoButton_CheckBox(&s_MinimalHudCheckpointToggleId, "Checkpoint", g_Config.m_BkwMinimalHudCheckpoint, &CheckpointOpt))
+				g_Config.m_BkwMinimalHudCheckpoint ^= 1;
 			PageView.HSplitTop(12.0f, nullptr, &PageView);
 			PageView.HSplitTop(20.0f, &PathLabel, &PageView);
 			Ui()->DoLabel(&PathLabel, "Файл фона (PNG/JPG/GIF/WebP/MP4/MOV/WebM и др.):", 12.0f, TEXTALIGN_ML);

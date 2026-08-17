@@ -425,6 +425,8 @@ MACRO_CONFIG_INT(BkwMinimalHudTeam, bkw_minimal_hud_team, 1, 0, 1, CFGFLAG_CLIEN
 MACRO_CONFIG_INT(BkwMinimalHudPractice, bkw_minimal_hud_practice, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show practice state in BKW minimal HUD")
 MACRO_CONFIG_INT(BkwMinimalHudRaceTime, bkw_minimal_hud_race_time, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show race time in BKW minimal HUD")
 MACRO_CONFIG_INT(BkwMinimalHudPbDelta, bkw_minimal_hud_pb_delta, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show PB delta in BKW minimal HUD")
+MACRO_CONFIG_INT(BkwMinimalHudSpeed, bkw_minimal_hud_speed, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show speed in BKW minimal HUD")
+MACRO_CONFIG_INT(BkwMinimalHudCheckpoint, bkw_minimal_hud_checkpoint, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show checkpoint in BKW minimal HUD")
 MACRO_CONFIG_INT(BkwMinimalHudCorner, bkw_minimal_hud_corner, 0, 0, 3, CFGFLAG_CLIENT | CFGFLAG_SAVE, "BKW minimal HUD corner: 0 TL, 1 TR, 2 BL, 3 BR")
 MACRO_CONFIG_INT(BkwMinimalHudScale, bkw_minimal_hud_scale, 100, 75, 125, CFGFLAG_CLIENT | CFGFLAG_SAVE, "BKW minimal HUD scale percent")
 MACRO_CONFIG_INT(BkwMinimalHudAlpha, bkw_minimal_hud_alpha, 60, 40, 80, CFGFLAG_CLIENT | CFGFLAG_SAVE, "BKW minimal HUD background opacity percent")
