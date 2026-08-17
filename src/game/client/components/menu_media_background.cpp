@@ -398,9 +398,41 @@ bool CMenuMediaBackground::UploadCurrentVideoFrame(const char *pContextName, int
 	(void)DurationMs;
 	return false;
 #else
-	if(m_pGraphics == nullptr || m_pFrame == nullptr || m_pFrameRgba == nullptr || m_pSwsCtx == nullptr || m_Width <= 0 || m_Height <= 0)
+	if(m_pGraphics == nullptr || m_pFrame == nullptr)
 		return false;
 
+	const int FrameWidth = m_pFrame->width > 0 ? m_pFrame->width : m_Width;
+	const int FrameHeight = m_pFrame->height > 0 ? m_pFrame->height : m_Height;
+	if(FrameWidth <= 0 || FrameHeight <= 0 || m_pFrame->format < 0)
+		return false;
+	constexpr int BKW_MEDIA_MAX_DIMENSION = 4096;
+	constexpr int64_t BKW_MEDIA_MAX_PIXELS = 4096ll * 4096ll;
+	if(FrameWidth > BKW_MEDIA_MAX_DIMENSION || FrameHeight > BKW_MEDIA_MAX_DIMENSION || (int64_t)FrameWidth * (int64_t)FrameHeight > BKW_MEDIA_MAX_PIXELS)
+		return false;
+
+	m_pSwsCtx = sws_getCachedContext(m_pSwsCtx,
+		FrameWidth, FrameHeight, (AVPixelFormat)m_pFrame->format,
+		FrameWidth, FrameHeight, AV_PIX_FMT_RGBA,
+		SWS_BILINEAR, nullptr, nullptr, nullptr);
+	if(!m_pSwsCtx)
+		return false;
+
+	if(!m_pFrameRgba || m_pFrameRgba->width != FrameWidth || m_pFrameRgba->height != FrameHeight)
+	{
+		if(m_pFrameRgba)
+			av_frame_free(&m_pFrameRgba);
+		m_pFrameRgba = av_frame_alloc();
+		if(!m_pFrameRgba)
+			return false;
+		m_pFrameRgba->format = AV_PIX_FMT_RGBA;
+		m_pFrameRgba->width = FrameWidth;
+		m_pFrameRgba->height = FrameHeight;
+		if(av_frame_get_buffer(m_pFrameRgba, 1) < 0)
+			return false;
+	}
+
+	m_Width = FrameWidth;
+	m_Height = FrameHeight;
 	const size_t FrameBytes = (size_t)m_Width * (size_t)m_Height * 4ull;
 	if(m_vVideoUploadBuffer.size() != FrameBytes)
 		m_vVideoUploadBuffer.resize(FrameBytes);
@@ -412,7 +444,9 @@ bool CMenuMediaBackground::UploadCurrentVideoFrame(const char *pContextName, int
 	if(av_frame_make_writable(m_pFrameRgba) < 0)
 		return false;
 
-	sws_scale(m_pSwsCtx, m_pFrame->data, m_pFrame->linesize, 0, m_Height, m_pFrameRgba->data, m_pFrameRgba->linesize);
+	const int ScaledLines = sws_scale(m_pSwsCtx, m_pFrame->data, m_pFrame->linesize, 0, m_Height, m_pFrameRgba->data, m_pFrameRgba->linesize);
+	if(ScaledLines <= 0 || m_pFrameRgba->linesize[0] < m_Width * 4)
+		return false;
 	for(int y = 0; y < m_Height; ++y)
 		mem_copy(m_vVideoUploadBuffer.data() + (size_t)y * (size_t)m_Width * 4ull, m_pFrameRgba->data[0] + (size_t)y * (size_t)m_pFrameRgba->linesize[0], (size_t)m_Width * 4ull);
 	Image.m_pData = m_vVideoUploadBuffer.data();
@@ -555,32 +589,18 @@ bool CMenuMediaBackground::LoadVideo(const char *pPath, int StorageType)
 	}
 
 	m_pFrame = av_frame_alloc();
-	m_pFrameRgba = av_frame_alloc();
 	m_pPacket = av_packet_alloc();
-	if(!m_pFrame || !m_pFrameRgba || !m_pPacket)
+	if(!m_pFrame || !m_pPacket)
 	{
 		SetError(Localize("Failed to allocate video frames."));
 		ClearVideoState();
 		return false;
 	}
 
-	m_pFrameRgba->format = AV_PIX_FMT_RGBA;
-	m_pFrameRgba->width = m_Width;
-	m_pFrameRgba->height = m_Height;
-	if(av_frame_get_buffer(m_pFrameRgba, 1) < 0)
-	{
-		SetError(Localize("Failed to allocate RGBA frame."));
-		ClearVideoState();
-		return false;
-	}
-
-	m_pSwsCtx = sws_getContext(m_Width, m_Height, m_pCodecCtx->pix_fmt, m_Width, m_Height, AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
-	if(!m_pSwsCtx)
-	{
-		SetError(Localize("Failed to initialize video scaler."));
-		ClearVideoState();
-		return false;
-	}
+	// Do not create the scaler from AVCodecContext::pix_fmt here.
+	// For MOV containers/codecs (including ProRes and some H.264/HEVC files),
+	// the actual pixel format can be finalized only after the first decoded frame.
+	// UploadCurrentVideoFrame creates/reuses the scaler from AVFrame::format.
 
 	if(!DecodeNextVideoFrame(true))
 	{
