@@ -20,7 +20,7 @@ extern "C" {
 namespace
 {
 	constexpr int MENU_MEDIA_MAX_VIDEO_FRAME_MS = 250;
-	constexpr int MENU_MEDIA_DEFAULT_VIDEO_FRAME_MS = 50;
+	constexpr int MENU_MEDIA_DEFAULT_VIDEO_FRAME_MS = 67;
 	constexpr int64_t MENU_MEDIA_PTS_UNSET = std::numeric_limits<int64_t>::min();
 
 #if defined(CONF_VIDEORECORDER)
@@ -415,10 +415,10 @@ bool CMenuMediaBackground::UploadCurrentVideoFrame(const char *pContextName, int
 
 	// Video backgrounds don't need source-resolution uploads. Recreating a full HD/4K
 	// OpenGL texture every video frame stalls older drivers badly. Keep the upload
-	// texture near 720p while preserving aspect ratio; rendering still scales it to
+	// texture near 540p while preserving aspect ratio; rendering still scales it to
 	// the menu size.
-	constexpr int BKW_MEDIA_UPLOAD_MAX_WIDTH = 1280;
-	constexpr int BKW_MEDIA_UPLOAD_MAX_HEIGHT = 720;
+	constexpr int BKW_MEDIA_UPLOAD_MAX_WIDTH = 960;
+	constexpr int BKW_MEDIA_UPLOAD_MAX_HEIGHT = 540;
 	double Scale = 1.0;
 	if(SourceWidth > BKW_MEDIA_UPLOAD_MAX_WIDTH || SourceHeight > BKW_MEDIA_UPLOAD_MAX_HEIGHT)
 	{
@@ -503,17 +503,21 @@ bool CMenuMediaBackground::DecodeNextVideoFrame(bool LoopOnEof)
 		while(avcodec_receive_frame(m_pCodecCtx, m_pFrame) == 0)
 		{
 			int DurationMs = MENU_MEDIA_DEFAULT_VIDEO_FRAME_MS;
-			int64_t DurationTs = 0;
 			if(m_LastVideoPts != MENU_MEDIA_PTS_UNSET && m_pFrame->best_effort_timestamp != AV_NOPTS_VALUE)
-				DurationTs = m_pFrame->best_effort_timestamp - m_LastVideoPts;
-			if(DurationTs > 0)
 			{
-				const int64_t Rescaled = av_rescale_q(DurationTs, m_pFormatCtx->streams[m_VideoStream]->time_base, AVRational{1, 1000});
-				if(Rescaled > 0)
-					DurationMs = (int)Rescaled;
+				const int64_t DurationTs = m_pFrame->best_effort_timestamp - m_LastVideoPts;
+				if(DurationTs > 0)
+				{
+					const int64_t Rescaled = av_rescale_q(DurationTs, m_pFormatCtx->streams[m_VideoStream]->time_base, AVRational{1, 1000});
+					// Keep source playback speed while limiting expensive GPU texture uploads.
+					// For 30/60 FPS videos, intermediate decoded frames are discarded until
+					// roughly 15 FPS worth of source time has elapsed since the last upload.
+					if(Rescaled > 0 && Rescaled < MENU_MEDIA_DEFAULT_VIDEO_FRAME_MS)
+						continue;
+					if(Rescaled > 0)
+						DurationMs = (int)Rescaled;
+				}
 			}
-			// Cap the GPU upload rate to 20 FPS. The menu itself keeps rendering at
-			// full client FPS using the most recently uploaded frame.
 			DurationMs = std::max(DurationMs, MENU_MEDIA_DEFAULT_VIDEO_FRAME_MS);
 			return UploadCurrentVideoFrame(m_aLoadedPath, DurationMs);
 		}
