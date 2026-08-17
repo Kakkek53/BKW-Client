@@ -60,6 +60,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 		BKW_TAB_PLAYER,
 		BKW_TAB_CLANS,
 		BKW_TAB_HOURS,
+		BKW_TAB_BACKGROUND,
 		BKW_TAB_EXIT,
 		BKW_TAB_LENGTH,
 	};
@@ -83,6 +84,11 @@ void CMenus::RenderSettings(CUIRect MainView)
 		static bool s_HoursPlayerInitialized = false;
 		static bool s_HoursAutoRequested = false;
 		static CButtonContainer s_HoursRefreshButton;
+		static int s_MediaBackgroundToggleId;
+		static CLineInputBuffered<IO_MAX_PATH_LENGTH> s_MediaBackgroundPathInput;
+		static bool s_MediaBackgroundPathInitialized = false;
+		static CButtonContainer s_MediaBackgroundReloadButton;
+		static CButtonContainer s_MediaBackgroundClearButton;
 		static int s_SaveWarningToggleId;
 		static CLineInputBuffered<256> s_SaveWarningIpsInput;
 		static CLineInputBuffered<256> s_SaveWarningCommunitiesInput;
@@ -114,7 +120,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 		s_BkwTab = std::clamp(s_BkwTab, 0, BKW_TAB_LENGTH - 1);
 		CUIRect BkwTabBar;
 		PageView.HSplitTop(30.0f, &BkwTabBar, &PageView);
-		const char *apBkwTabs[BKW_TAB_LENGTH] = {"Сохранение", "Чекпоинты", "Игрок", "Кланы", "Часы", "Выход"};
+		const char *apBkwTabs[BKW_TAB_LENGTH] = {"Сохранение", "Чекпоинты", "Игрок", "Кланы", "Часы", "Фон", "Выход"};
 		CUIRect RemainingTabs = BkwTabBar;
 		const float TabWidth = BkwTabBar.w / (float)BKW_TAB_LENGTH;
 		for(int i = 0; i < BKW_TAB_LENGTH; ++i)
@@ -536,6 +542,68 @@ void CMenus::RenderSettings(CUIRect MainView)
 			{
 				Ui()->DoLabel(&StatsCard, "Введите ник и нажмите «Обновить».", 14.0f, TEXTALIGN_MC);
 			}
+		}
+		else if(s_BkwTab == BKW_TAB_BACKGROUND)
+		{
+			if(!s_MediaBackgroundPathInitialized)
+			{
+				s_MediaBackgroundPathInput.Set(g_Config.m_BcMenuMediaBackgroundPath);
+				s_MediaBackgroundPathInitialized = true;
+			}
+
+			CUIRect Header, Toggle, Info, PathLabel, PathEdit, Buttons, Status;
+			PageView.HSplitTop(28.0f, &Header, &PageView);
+			Ui()->DoLabel(&Header, "BKW — Фон", 22.0f, TEXTALIGN_ML);
+			PageView.HSplitTop(8.0f, nullptr, &PageView);
+			PageView.HSplitTop(28.0f, &Toggle, &PageView);
+			if(DoButton_CheckBox(&s_MediaBackgroundToggleId, "Пользовательский фон главного меню", g_Config.m_BcMenuMediaBackground, &Toggle))
+			{
+				g_Config.m_BcMenuMediaBackground ^= 1;
+				GameClient()->m_MenuBackground.ReloadBkwMediaBackground();
+			}
+
+			PageView.HSplitTop(10.0f, nullptr, &PageView);
+			PageView.HSplitTop(66.0f, &Info, &PageView);
+			Info.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+			Info.Margin(10.0f, &Info);
+			Ui()->DoLabel(&Info, "Укажите путь к картинке или видео. Поддержка формата зависит от media decoder сборки.\nПри ошибке BKW автоматически оставит обычный .map-фон.", 11.0f, TEXTALIGN_ML);
+
+			PageView.HSplitTop(12.0f, nullptr, &PageView);
+			PageView.HSplitTop(20.0f, &PathLabel, &PageView);
+			Ui()->DoLabel(&PathLabel, "Файл фона (PNG/JPG/GIF/WebP/MP4/MOV/WebM и др.):", 12.0f, TEXTALIGN_ML);
+			PageView.HSplitTop(30.0f, &PathEdit, &PageView);
+			if(Ui()->DoEditBox(&s_MediaBackgroundPathInput, &PathEdit, 12.0f))
+				str_copy(g_Config.m_BcMenuMediaBackgroundPath, s_MediaBackgroundPathInput.GetString());
+
+			PageView.HSplitTop(10.0f, nullptr, &PageView);
+			PageView.HSplitTop(30.0f, &Buttons, &PageView);
+			CUIRect ReloadButton, ClearButton;
+			Buttons.VSplitMid(&ReloadButton, &ClearButton, 8.0f);
+			if(DoButton_Menu(&s_MediaBackgroundReloadButton, "Загрузить / обновить", 0, &ReloadButton))
+			{
+				str_copy(g_Config.m_BcMenuMediaBackgroundPath, s_MediaBackgroundPathInput.GetString());
+				g_Config.m_BcMenuMediaBackground = 1;
+				GameClient()->m_MenuBackground.ReloadBkwMediaBackground();
+			}
+			if(DoButton_Menu(&s_MediaBackgroundClearButton, "Убрать фон", 0, &ClearButton))
+			{
+				g_Config.m_BcMenuMediaBackground = 0;
+				g_Config.m_BcMenuMediaBackgroundPath[0] = '\\0';
+				s_MediaBackgroundPathInput.Set("");
+				GameClient()->m_MenuBackground.ReloadBkwMediaBackground();
+			}
+
+			PageView.HSplitTop(12.0f, nullptr, &PageView);
+			PageView.HSplitTop(44.0f, &Status, &PageView);
+			Status.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+			Status.Margin(8.0f, &Status);
+			const char *pStatus = GameClient()->m_MenuBackground.BkwMediaBackgroundStatus();
+			if(GameClient()->m_MenuBackground.BkwMediaBackgroundHasError())
+				TextRender()->TextColor(ColorRGBA(1.0f, 0.55f, 0.55f, 1.0f));
+			else if(GameClient()->m_MenuBackground.BkwMediaBackgroundLoaded())
+				TextRender()->TextColor(ColorRGBA(0.55f, 1.0f, 0.55f, 1.0f));
+			Ui()->DoLabel(&Status, pStatus[0] != '\\0' ? pStatus : "Фон не загружен.", 11.0f, TEXTALIGN_ML);
+			TextRender()->TextColor(TextRender()->DefaultTextColor());
 		}
 		else if(s_BkwTab == BKW_TAB_EXIT)
 		{

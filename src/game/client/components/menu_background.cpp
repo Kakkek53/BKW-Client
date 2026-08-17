@@ -84,6 +84,8 @@ void CMenuBackground::OnInit()
 	m_pMap = m_pBackgroundMap.get();
 
 	m_IsInit = true;
+	m_BkwMediaBackground.Init(Graphics(), Storage());
+	m_BkwMediaBackground.SyncFromConfig();
 
 	if(g_Config.m_ClMenuMap[0] != '\0')
 		LoadMenuBackground();
@@ -307,6 +309,11 @@ void CMenuBackground::OnRender()
 
 bool CMenuBackground::Render()
 {
+	m_BkwMediaBackground.SyncFromConfig();
+	m_BkwMediaBackground.Update();
+	if(g_Config.m_BcMenuMediaBackground && m_BkwMediaBackground.Render((float)Graphics()->ScreenWidth(), (float)Graphics()->ScreenHeight()))
+		return true;
+
 	if(!m_Loaded)
 		return false;
 

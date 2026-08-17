@@ -3,6 +3,7 @@
 
 #include <game/client/components/background.h>
 #include <game/client/components/camera.h>
+#include <game/client/components/menu_media_background.h>
 
 #include <array>
 #include <chrono>
@@ -74,6 +75,7 @@ public:
 
 private:
 	CCamera m_Camera;
+	CMenuMediaBackground m_BkwMediaBackground;
 
 	vec2 m_RotationCenter;
 	std::array<vec2, NUM_POS> m_aPositions;
@@ -105,6 +107,10 @@ public:
 	void LoadMenuBackground(bool HasDayHint = true, bool HasNightHint = true);
 
 	bool Render();
+	void ReloadBkwMediaBackground() { m_BkwMediaBackground.ReloadFromConfig(); }
+	const char *BkwMediaBackgroundStatus() const { return m_BkwMediaBackground.StatusText(); }
+	bool BkwMediaBackgroundLoaded() const { return m_BkwMediaBackground.IsLoaded(); }
+	bool BkwMediaBackgroundHasError() const { return m_BkwMediaBackground.HasError(); }
 	bool IsLoading() const { return m_Loading; }
 
 	class CCamera *GetCurCamera() override;
