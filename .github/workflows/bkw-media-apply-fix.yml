@@ -1,0 +1,40 @@
+name: BKW media apply fix
+on:
+  push:
+    paths:
+      - '.github/workflows/bkw-media-apply-fix.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/bkw-save-system
+      - name: Fix media apply behavior
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/game/client/components/menus_settings.cpp')
+          s = p.read_text(encoding='utf-8')
+          old = '''\t\t\tPageView.HSplitTop(30.0f, &PathEdit, &PageView);\n\t\t\tif(Ui()->DoEditBox(&s_MediaBackgroundPathInput, &PathEdit, 12.0f))\n\t\t\t\tstr_copy(g_Config.m_BcMenuMediaBackgroundPath, s_MediaBackgroundPathInput.GetString());\n'''
+          new = '''\t\t\tPageView.HSplitTop(30.0f, &PathEdit, &PageView);\n\t\t\t// Keep edits local until the user explicitly applies them.\n\t\t\t// Updating g_Config on every keystroke made CMenuBackground::Render()\n\t\t\t// repeatedly unload/reload the decoder through SyncFromConfig().\n\t\t\tUi()->DoEditBox(&s_MediaBackgroundPathInput, &PathEdit, 12.0f);\n'''
+          if old not in s:
+              raise SystemExit('media path edit anchor not found')
+          s = s.replace(old, new, 1)
+
+          old2 = '''\t\t\tif(DoButton_CheckBox(&s_MediaBackgroundToggleId, "Пользовательский фон главного меню", g_Config.m_BcMenuMediaBackground, &Toggle))\n\t\t\t{\n\t\t\t\tg_Config.m_BcMenuMediaBackground ^= 1;\n\t\t\t\tGameClient()->m_MenuBackground.ReloadBkwMediaBackground();\n\t\t\t}\n'''
+          new2 = '''\t\t\tif(DoButton_CheckBox(&s_MediaBackgroundToggleId, "Пользовательский фон главного меню", g_Config.m_BcMenuMediaBackground, &Toggle))\n\t\t\t{\n\t\t\t\tconst bool Enable = g_Config.m_BcMenuMediaBackground == 0;\n\t\t\t\tif(Enable)\n\t\t\t\t\tstr_copy(g_Config.m_BcMenuMediaBackgroundPath, s_MediaBackgroundPathInput.GetString());\n\t\t\t\tg_Config.m_BcMenuMediaBackground = Enable ? 1 : 0;\n\t\t\t\tGameClient()->m_MenuBackground.ReloadBkwMediaBackground();\n\t\t\t}\n'''
+          if old2 not in s:
+              raise SystemExit('media toggle anchor not found')
+          s = s.replace(old2, new2, 1)
+          p.write_text(s, encoding='utf-8')
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/bkw-media-apply-fix.yml
+          git add src/game/client/components/menus_settings.cpp
+          git commit -m "BKW: apply media background only on confirmation"
+          git push origin HEAD:agent/bkw-save-system
