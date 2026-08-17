@@ -1,0 +1,19 @@
+name: BKW HUD options apply
+on: push
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/bkw-save-system
+      - run: python3 .github/scripts/bkw_hud_options_patch.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f .github/workflows/bkw-hud-options-apply.yml .github/scripts/bkw_hud_options_patch.py
+          git add src/engine/shared/config_variables_bestclient.h src/game/client/components/hud.cpp src/game/client/components/menus_settings.cpp
+          git commit -m "BKW: add configurable minimal HUD"
+          git push origin HEAD:agent/bkw-save-system
