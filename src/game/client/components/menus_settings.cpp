@@ -86,6 +86,8 @@ void CMenus::RenderSettings(CUIRect MainView)
 		static bool s_HoursAutoRequested = false;
 		static CButtonContainer s_HoursRefreshButton;
 		static int s_MinimalHudToggleId;
+		static int s_MinimalHudRaceTimeToggleId;
+		static int s_MinimalHudPbDeltaToggleId;
 		static int s_MinimalHudFpsToggleId;
 		static int s_MinimalHudPingToggleId;
 		static int s_MinimalHudTeamToggleId;
@@ -652,6 +654,14 @@ void CMenus::RenderSettings(CUIRect MainView)
 			Info.Margin(10.0f, &Info);
 			Ui()->DoLabel(&Info, "Укажите путь к картинке или видео. Поддержка формата зависит от media decoder сборки.\nПри ошибке BKW автоматически оставит обычный .map-фон.", 11.0f, TEXTALIGN_ML);
 
+			CUIRect RaceOptions;
+			PageView.HSplitTop(28.0f, &RaceOptions, &PageView);
+			CUIRect RaceTimeOpt, PbDeltaOpt;
+			RaceOptions.VSplitMid(&RaceTimeOpt, &PbDeltaOpt, 6.0f);
+			if(DoButton_CheckBox(&s_MinimalHudRaceTimeToggleId, "Race time", g_Config.m_BkwMinimalHudRaceTime, &RaceTimeOpt))
+				g_Config.m_BkwMinimalHudRaceTime ^= 1;
+			if(DoButton_CheckBox(&s_MinimalHudPbDeltaToggleId, "PB delta", g_Config.m_BkwMinimalHudPbDelta, &PbDeltaOpt))
+				g_Config.m_BkwMinimalHudPbDelta ^= 1;
 			PageView.HSplitTop(12.0f, nullptr, &PageView);
 			PageView.HSplitTop(20.0f, &PathLabel, &PageView);
 			Ui()->DoLabel(&PathLabel, "Файл фона (PNG/JPG/GIF/WebP/MP4/MOV/WebM и др.):", 12.0f, TEXTALIGN_ML);
