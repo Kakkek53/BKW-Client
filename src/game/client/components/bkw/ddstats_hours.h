@@ -110,6 +110,11 @@ public:
 		pHttp->Run(pGet);
 	}
 
+	void RequestIfStale(IHttp *pHttp, const char *pPlayer)
+	{
+		Request(pHttp, pPlayer, false);
+	}
+
 	void Poll()
 	{
 		if(!m_pRequest || !m_pRequest->Done())
