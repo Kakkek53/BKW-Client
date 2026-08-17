@@ -207,7 +207,7 @@ void CMenuMediaBackground::SetError(const char *pText)
 void CMenuMediaBackground::ClearVideoState()
 {
 #if defined(CONF_VIDEORECORDER)
-	if(m_pGraphics != nullptr)
+	if(m_pGraphics != nullptr && m_VideoTexture.IsValid())
 		m_pGraphics->UnloadTexture(&m_VideoTexture);
 	if(m_pPacket)
 		av_packet_free(&m_pPacket);
@@ -233,7 +233,7 @@ void CMenuMediaBackground::ClearVideoState()
 	m_NextFrameTime = std::chrono::nanoseconds::zero();
 	m_vVideoUploadBuffer.clear();
 #else
-	if(m_pGraphics != nullptr)
+	if(m_pGraphics != nullptr && m_VideoTexture.IsValid())
 		m_pGraphics->UnloadTexture(&m_VideoTexture);
 	m_pFormatCtx = nullptr;
 	m_pCodecCtx = nullptr;
@@ -545,6 +545,14 @@ bool CMenuMediaBackground::LoadVideo(const char *pPath, int StorageType)
 		ClearVideoState();
 		return false;
 	}
+	constexpr int BKW_MEDIA_MAX_DIMENSION = 4096;
+	constexpr int64_t BKW_MEDIA_MAX_PIXELS = 4096ll * 4096ll;
+	if(m_Width > BKW_MEDIA_MAX_DIMENSION || m_Height > BKW_MEDIA_MAX_DIMENSION || (int64_t)m_Width * (int64_t)m_Height > BKW_MEDIA_MAX_PIXELS)
+	{
+		SetError(Localize("Video resolution is too large for a menu background."));
+		ClearVideoState();
+		return false;
+	}
 
 	m_pFrame = av_frame_alloc();
 	m_pFrameRgba = av_frame_alloc();
@@ -591,6 +599,17 @@ void CMenuMediaBackground::ReloadFromConfig(int Enabled, const char *pPath)
 {
 	char aPath[IO_MAX_PATH_LENGTH];
 	str_copy(aPath, pPath, sizeof(aPath));
+
+	// On the first config sync the media background is usually disabled.
+	// Avoid touching graphics resources that have never been created. This is
+	// especially important for older OpenGL drivers.
+	if(!Enabled && !m_IsLoaded && !m_IsVideo && m_vFrames.empty() && !m_VideoTexture.IsValid())
+	{
+		m_LastConfigEnabled = Enabled;
+		str_copy(m_aLastConfigPath, aPath, sizeof(m_aLastConfigPath));
+		SetStatus(Localize("Disabled."));
+		return;
+	}
 
 	Unload();
 
