@@ -1,0 +1,43 @@
+name: BKW absolute media path fix
+on:
+  push:
+    paths:
+      - '.github/workflows/bkw-storage-absolute-fix.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/bkw-save-system
+      - name: Fix absolute path handling
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/game/client/components/menu_media_background.cpp')
+          s = p.read_text(encoding='utf-8')
+
+          old1 = '''\t\tchar aAbsolutePath[IO_MAX_PATH_LENGTH];\n\t\tm_pStorage->GetCompletePath(StorageType, pPath, aAbsolutePath, sizeof(aAbsolutePath));\n\n\t\tCImageInfo FallbackImage;'''
+          new1 = '''\t\tchar aAbsolutePath[IO_MAX_PATH_LENGTH];\n\t\tif(StorageType == IStorage::TYPE_ABSOLUTE)\n\t\t\tstr_copy(aAbsolutePath, pPath, sizeof(aAbsolutePath));\n\t\telse\n\t\t\tm_pStorage->GetCompletePath(StorageType, pPath, aAbsolutePath, sizeof(aAbsolutePath));\n\n\t\tCImageInfo FallbackImage;'''
+          if old1 not in s:
+              raise SystemExit('static-media absolute path anchor not found')
+          s = s.replace(old1, new1, 1)
+
+          old2 = '''\tchar aPath[IO_MAX_PATH_LENGTH];\n\tm_pStorage->GetCompletePath(StorageType, pPath, aPath, sizeof(aPath));\n\n\tif(avformat_open_input(&m_pFormatCtx, aPath, nullptr, nullptr) != 0)'''
+          new2 = '''\tchar aPath[IO_MAX_PATH_LENGTH];\n\tif(StorageType == IStorage::TYPE_ABSOLUTE)\n\t\tstr_copy(aPath, pPath, sizeof(aPath));\n\telse\n\t\tm_pStorage->GetCompletePath(StorageType, pPath, aPath, sizeof(aPath));\n\n\tif(avformat_open_input(&m_pFormatCtx, aPath, nullptr, nullptr) != 0)'''
+          if old2 not in s:
+              raise SystemExit('video absolute path anchor not found')
+          s = s.replace(old2, new2, 1)
+
+          p.write_text(s, encoding='utf-8')
+
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/bkw-storage-absolute-fix.yml
+          git add src/game/client/components/menu_media_background.cpp
+          git commit -m "BKW: handle absolute media paths without storage assert"
+          git push origin HEAD:agent/bkw-save-system
