@@ -2,6 +2,7 @@
 #define GAME_CLIENT_COMPONENTS_BKW_DDSTATS_HOURS_H
 
 #include <base/str.h>
+#include <base/time.h>
 
 #include <engine/http.h>
 #include <engine/external/json-parser/json.h>
@@ -19,6 +20,7 @@ class CDdStatsHours
 	std::string m_StartOfPlaytime;
 	int64_t m_TotalSecondsPlayed = 0;
 	int64_t m_AverageSecondsPlayed = 0;
+	int64_t m_LastSuccessfulUpdate = 0;
 	bool m_Loaded = false;
 	bool m_Error = false;
 	int m_HttpStatus = 0;
@@ -55,6 +57,7 @@ class CDdStatsHours
 
 public:
 	static constexpr size_t MAX_RESPONSE_SIZE = 16 * 1024 * 1024;
+	static constexpr int64_t CACHE_SECONDS = 10 * 60;
 
 	void Reset()
 	{
@@ -65,14 +68,25 @@ public:
 		m_StartOfPlaytime.clear();
 		m_TotalSecondsPlayed = 0;
 		m_AverageSecondsPlayed = 0;
+		m_LastSuccessfulUpdate = 0;
 		m_Loaded = false;
 		m_Error = false;
 		m_HttpStatus = 0;
 	}
 
-	void Request(IHttp *pHttp, const char *pPlayer)
+	bool CacheFreshFor(const char *pPlayer) const
+	{
+		if(!m_Loaded || !pPlayer || pPlayer[0] == '\0' || str_comp(m_Player.c_str(), pPlayer) != 0 || m_LastSuccessfulUpdate <= 0)
+			return false;
+		const int64_t Now = time_timestamp();
+		return Now >= m_LastSuccessfulUpdate && Now - m_LastSuccessfulUpdate < CACHE_SECONDS;
+	}
+
+	void Request(IHttp *pHttp, const char *pPlayer, bool Force = false)
 	{
 		if(!pHttp || !pPlayer || pPlayer[0] == '\0')
+			return;
+		if(!Force && CacheFreshFor(pPlayer))
 			return;
 		if(m_pRequest)
 			m_pRequest->Abort();
@@ -161,6 +175,7 @@ public:
 		json_value_free(pRoot);
 		m_Loaded = true;
 		m_Error = false;
+		m_LastSuccessfulUpdate = time_timestamp();
 		m_pRequest = nullptr;
 	}
 
@@ -172,6 +187,8 @@ public:
 	const char *StartOfPlaytime() const { return m_StartOfPlaytime.c_str(); }
 	int64_t TotalSecondsPlayed() const { return m_TotalSecondsPlayed; }
 	int64_t AverageSecondsPlayed() const { return m_AverageSecondsPlayed; }
+	int64_t LastSuccessfulUpdate() const { return m_LastSuccessfulUpdate; }
+	double TotalHours() const { return (double)m_TotalSecondsPlayed / 3600.0; }
 
 	static void FormatDuration(int64_t Seconds, char *pBuf, size_t BufSize, bool IncludeSeconds = false)
 	{
