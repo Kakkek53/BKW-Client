@@ -3,8 +3,11 @@
 #include <base/str.h>
 
 #include <engine/client.h>
+#include <engine/shared/config.h>
 
 #include <game/client/gameclient.h>
+
+#include "bkw/tf_menu_parser.inc"
 
 #include <algorithm>
 
@@ -88,6 +91,32 @@ void RenderCheckpoints(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClie
 	char aCheckpointStatus[160];
 	str_format(aCheckpointStatus, sizeof(aCheckpointStatus), "Practice: %s   •   Чекпоинтов: %d", PracticeActive ? "активен" : "не активен", pGameClient->m_FastActions.BkwCheckpointCount());
 	pUi->DoLabel(&Status, aCheckpointStatus, 11.0f, TEXTALIGN_ML);
+}
+
+void RenderTfMenuSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, CUIRect PageView)
+{
+	static int s_TfMenuToggleId;
+
+	PageView.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+	PageView.Margin(10.0f, &PageView);
+
+	CUIRect Header, Toggle, Status;
+	PageView.HSplitTop(24.0f, &Header, &PageView);
+	pUi->DoLabel(&Header, "TeeFusion Menu", 18.0f, TEXTALIGN_ML);
+	PageView.HSplitTop(4.0f, nullptr, &PageView);
+	PageView.HSplitTop(24.0f, &Toggle, &PageView);
+	if(pMenus->DoButton_CheckBox(&s_TfMenuToggleId, "Новый дизайн меню TF", g_Config.m_BcTfMenu, &Toggle))
+		g_Config.m_BcTfMenu ^= 1;
+
+	PageView.HSplitTop(5.0f, nullptr, &PageView);
+	PageView.HSplitTop(20.0f, &Status, &PageView);
+	char aUserName[64];
+	char aStatus[192];
+	if(BkwTfMenu::ParseUserName(pGameClient->m_Voting, aUserName, sizeof(aUserName)))
+		str_format(aStatus, sizeof(aStatus), "TF parser: Имя пользователя — %s", aUserName);
+	else
+		str_copy(aStatus, "TF parser: строка «Имя пользователя:» пока не найдена");
+	pUi->DoLabel(&Status, aStatus, 11.0f, TEXTALIGN_ML);
 }
 
 template<typename TLegacyRenderer>
@@ -203,18 +232,22 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 	}
 	else if(s_CurrentTab == TAB_PERSONALIZATION)
 	{
-		// HUD and background are one personalization page.
+		// TeeFusion toggle + HUD + background are one personalization page.
 		constexpr float Gap = 22.0f;
+		constexpr float TfMenuHeight = 104.0f;
 		constexpr float HudHeight = 800.0f;
 		constexpr float BackgroundHeight = 470.0f;
-		CUIRect HudSection, BackgroundSection;
+		CUIRect TfMenuSection, HudSection, BackgroundSection;
+		PageView.HSplitTop(TfMenuHeight, &TfMenuSection, &PageView);
+		PageView.HSplitTop(Gap, nullptr, &PageView);
 		PageView.HSplitTop(HudHeight, &HudSection, &PageView);
 		PageView.HSplitTop(Gap, nullptr, &PageView);
 		PageView.HSplitTop(BackgroundHeight, &BackgroundSection, &PageView);
+		RenderTfMenuSettings(pMenus, pUi, pGameClient, TfMenuSection);
 		RenderLegacySection(LEGACY_HUD, HudSection);
 		RenderLegacySection(LEGACY_BACKGROUND, BackgroundSection);
 
-		// Reuse the large legacy scroll budget so both sections remain reachable.
+		// Reuse the large legacy scroll budget so all personalization sections remain reachable.
 		LegacyTab = LEGACY_SAVES;
 	}
 	else
