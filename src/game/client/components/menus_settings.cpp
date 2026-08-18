@@ -138,10 +138,10 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 
 	constexpr float MinTabWidth = 128.0f;
 	constexpr float PagerWidth = 28.0f;
-	int VisibleCount = std::clamp((int)(TabBar.w / MinTabWidth), 1, TAB_COUNT);
+	int VisibleCount = std::clamp((int)(TabBar.w / MinTabWidth), 1, static_cast<int>(TAB_COUNT));
 	bool Scrollable = VisibleCount < TAB_COUNT;
 	if(Scrollable)
-		VisibleCount = std::clamp((int)((TabBar.w - PagerWidth * 2.0f) / MinTabWidth), 1, TAB_COUNT);
+		VisibleCount = std::clamp((int)((TabBar.w - PagerWidth * 2.0f) / MinTabWidth), 1, static_cast<int>(TAB_COUNT));
 
 	const int MaxFirst = std::max(0, TAB_COUNT - VisibleCount);
 	s_FirstVisibleTab = std::clamp(s_FirstVisibleTab, 0, MaxFirst);
