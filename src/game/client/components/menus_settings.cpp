@@ -1,11 +1,15 @@
 #include "menus.h"
 
 #include <base/str.h>
+#include <base/system.h>
 
 #include <engine/client.h>
+#include <engine/input.h>
+#include <engine/keys.h>
 #include <engine/shared/config.h>
 
 #include <game/client/gameclient.h>
+#include <game/client/ui_scrollregion.h>
 
 #include "bkw/tf_menu_parser.inc"
 
@@ -34,6 +38,32 @@ enum
 	LEGACY_SHOP,
 	LEGACY_EXIT,
 };
+
+void RenderTfParserTest(IInput *pInput, CUi *pUi, CGameClient *pGameClient, CUIRect Anchor)
+{
+	static char s_aMessage[192] = "";
+	static int64_t s_VisibleUntil = 0;
+
+	if(pInput->KeyPress(KEY_F6))
+	{
+		char aUserName[64];
+		if(BkwTfMenu::ParseUserName(pGameClient->m_Voting, aUserName, sizeof(aUserName)))
+			str_format(s_aMessage, sizeof(s_aMessage), "F6 TeeFusion parser: Имя пользователя — %s", aUserName);
+		else
+			str_copy(s_aMessage, "F6 TeeFusion parser: строка «Имя пользователя» не найдена в vote options");
+		s_VisibleUntil = time_get() + time_freq() * 7;
+	}
+
+	if(s_aMessage[0] == '\0' || time_get() >= s_VisibleUntil)
+		return;
+
+	CUIRect Banner;
+	Anchor.HSplitTop(38.0f, &Banner, nullptr);
+	Banner.VMargin(36.0f, &Banner);
+	Banner.Draw(ColorRGBA(0.04f, 0.05f, 0.07f, 0.94f), IGraphics::CORNER_ALL, 8.0f);
+	Banner.Margin(8.0f, &Banner);
+	pUi->DoLabel(&Banner, s_aMessage, 13.0f, TEXTALIGN_MC);
+}
 
 void RenderCheckpoints(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient, CUIRect PageView)
 {
@@ -105,32 +135,42 @@ void RenderTfMenuSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, CU
 	pUi->DoLabel(&Header, "TeeFusion Menu", 18.0f, TEXTALIGN_ML);
 	PageView.HSplitTop(4.0f, nullptr, &PageView);
 	PageView.HSplitTop(24.0f, &Toggle, &PageView);
-	if(pMenus->DoButton_CheckBox(&s_TfMenuToggleId, "Новый дизайн меню TF", g_Config.m_BcTfMenu, &Toggle))
-		g_Config.m_BcTfMenu ^= 1;
+	if(pMenus->DoButton_CheckBox(&s_TfMenuToggleId, "Новый дизайн меню TF", g_Config.m_BkwTfMenu, &Toggle))
+		g_Config.m_BkwTfMenu ^= 1;
 
 	PageView.HSplitTop(5.0f, nullptr, &PageView);
 	PageView.HSplitTop(20.0f, &Status, &PageView);
-	char aUserName[64];
 	char aStatus[192];
-	if(BkwTfMenu::ParseUserName(pGameClient->m_Voting, aUserName, sizeof(aUserName)))
-		str_format(aStatus, sizeof(aStatus), "TF parser: Имя пользователя — %s", aUserName);
+	if(!g_Config.m_BkwTfMenu)
+	{
+		str_copy(aStatus, "Парсер выключен. F6 — разовый тест чтения vote options.");
+	}
 	else
-		str_copy(aStatus, "TF parser: строка «Имя пользователя:» пока не найдена");
+	{
+		char aUserName[64];
+		if(BkwTfMenu::ParseUserName(pGameClient->m_Voting, aUserName, sizeof(aUserName)))
+			str_format(aStatus, sizeof(aStatus), "TF parser: Имя пользователя — %s", aUserName);
+		else
+			str_copy(aStatus, "TF parser: строка «Имя пользователя» пока не найдена");
+	}
 	pUi->DoLabel(&Status, aStatus, 11.0f, TEXTALIGN_ML);
 }
 
 template<typename TLegacyRenderer>
-void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient, CUIRect PageView, int &LegacyTab, TLegacyRenderer &LegacyRenderer)
+void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient, IInput *pInput, CUIRect PageView, int &LegacyTab, TLegacyRenderer &LegacyRenderer)
 {
 	static int s_CurrentTab = TAB_MAIN;
 	static int s_FirstVisibleTab = 0;
 	static CButtonContainer s_aTabButtons[TAB_COUNT];
 	static CButtonContainer s_PreviousButton;
 	static CButtonContainer s_NextButton;
+	static CScrollRegion s_MainScrollRegion;
+	static CScrollRegion s_PersonalizationScrollRegion;
 
-	s_CurrentTab = std::clamp(s_CurrentTab, 0, TAB_COUNT - 1);
+	s_CurrentTab = std::clamp(s_CurrentTab, 0, static_cast<int>(TAB_COUNT) - 1);
 
-	// Match the BestClient submenu proportions and segmented tab styling.
+	RenderTfParserTest(pInput, pUi, pGameClient, PageView);
+
 	PageView.HSplitTop(8.0f, nullptr, &PageView);
 	CUIRect TabBar;
 	PageView.HSplitTop(24.0f, &TabBar, &PageView);
@@ -143,7 +183,7 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 	if(Scrollable)
 		VisibleCount = std::clamp((int)((TabBar.w - PagerWidth * 2.0f) / MinTabWidth), 1, static_cast<int>(TAB_COUNT));
 
-	const int MaxFirst = std::max(0, TAB_COUNT - VisibleCount);
+	const int MaxFirst = std::max(0, static_cast<int>(TAB_COUNT) - VisibleCount);
 	s_FirstVisibleTab = std::clamp(s_FirstVisibleTab, 0, MaxFirst);
 
 	CUIRect VisibleTabs = TabBar;
@@ -184,8 +224,6 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 	}
 	PageView.HSplitTop(10.0f, nullptr, &PageView);
 
-	// The legacy renderer starts with its own 30 px tab bar plus 14 px gap.
-	// Shift it above the clip so only the actual section content remains visible.
 	auto RenderLegacySection = [&](int Tab, CUIRect Section) {
 		LegacyTab = Tab;
 		CUIRect LegacyView = Section;
@@ -198,31 +236,45 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 
 	if(s_CurrentTab == TAB_MAIN)
 	{
-		// Сохранение + чекпоинты + игрок + кланы + предупреждение о выходе.
 		constexpr float Gap = 22.0f;
 		constexpr float SavesHeight = 1050.0f;
 		constexpr float CheckpointsHeight = 245.0f;
-		constexpr float PlayerHeight = 205.0f;
-		constexpr float ClansHeight = 205.0f;
+		constexpr float PlayerHeight = 230.0f;
+		constexpr float ClansHeight = 230.0f;
 		constexpr float ExitHeight = 390.0f;
 
-		CUIRect Section;
-		PageView.HSplitTop(SavesHeight, &Section, &PageView);
-		RenderLegacySection(LEGACY_SAVES, Section);
-		PageView.HSplitTop(Gap, nullptr, &PageView);
-		PageView.HSplitTop(CheckpointsHeight, &Section, &PageView);
-		RenderCheckpoints(pMenus, pUi, pGameClient, pClient, Section);
-		PageView.HSplitTop(Gap, nullptr, &PageView);
-		PageView.HSplitTop(PlayerHeight, &Section, &PageView);
-		RenderLegacySection(LEGACY_PLAYER, Section);
-		PageView.HSplitTop(Gap, nullptr, &PageView);
-		PageView.HSplitTop(ClansHeight, &Section, &PageView);
-		RenderLegacySection(LEGACY_CLANS, Section);
-		PageView.HSplitTop(Gap, nullptr, &PageView);
-		PageView.HSplitTop(ExitHeight, &Section, &PageView);
-		RenderLegacySection(LEGACY_EXIT, Section);
+		CScrollRegionParams ScrollParams;
+		ScrollParams.m_ScrollUnit = 70.0f;
+		ScrollParams.m_ScrollbarThickness = 14.0f;
+		CUIRect Content = PageView;
+		s_MainScrollRegion.Begin(&Content, &ScrollParams);
 
-		// Keep the existing large BKW scroll range for this combined page.
+		CUIRect Section;
+		Content.HSplitTop(SavesHeight, &Section, &Content);
+		s_MainScrollRegion.AddRect(Section);
+		RenderLegacySection(LEGACY_SAVES, Section);
+		Content.HSplitTop(Gap, nullptr, &Content);
+
+		Content.HSplitTop(CheckpointsHeight, &Section, &Content);
+		s_MainScrollRegion.AddRect(Section);
+		RenderCheckpoints(pMenus, pUi, pGameClient, pClient, Section);
+		Content.HSplitTop(Gap, nullptr, &Content);
+
+		Content.HSplitTop(PlayerHeight, &Section, &Content);
+		s_MainScrollRegion.AddRect(Section);
+		RenderLegacySection(LEGACY_PLAYER, Section);
+		Content.HSplitTop(Gap, nullptr, &Content);
+
+		Content.HSplitTop(ClansHeight, &Section, &Content);
+		s_MainScrollRegion.AddRect(Section);
+		RenderLegacySection(LEGACY_CLANS, Section);
+		Content.HSplitTop(Gap, nullptr, &Content);
+
+		Content.HSplitTop(ExitHeight, &Section, &Content);
+		s_MainScrollRegion.AddRect(Section);
+		RenderLegacySection(LEGACY_EXIT, Section);
+		s_MainScrollRegion.End();
+
 		LegacyTab = LEGACY_SAVES;
 	}
 	else if(s_CurrentTab == TAB_HOURS)
@@ -232,23 +284,34 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 	}
 	else if(s_CurrentTab == TAB_PERSONALIZATION)
 	{
-		// TeeFusion toggle + HUD + background are one personalization page.
 		constexpr float Gap = 22.0f;
 		constexpr float TfMenuHeight = 104.0f;
 		constexpr float HudHeight = 800.0f;
 		constexpr float BackgroundHeight = 470.0f;
-		CUIRect TfMenuSection, HudSection, BackgroundSection;
-		PageView.HSplitTop(TfMenuHeight, &TfMenuSection, &PageView);
-		PageView.HSplitTop(Gap, nullptr, &PageView);
-		PageView.HSplitTop(HudHeight, &HudSection, &PageView);
-		PageView.HSplitTop(Gap, nullptr, &PageView);
-		PageView.HSplitTop(BackgroundHeight, &BackgroundSection, &PageView);
-		RenderTfMenuSettings(pMenus, pUi, pGameClient, TfMenuSection);
-		RenderLegacySection(LEGACY_HUD, HudSection);
-		RenderLegacySection(LEGACY_BACKGROUND, BackgroundSection);
 
-		// Reuse the large legacy scroll budget so all personalization sections remain reachable.
-		LegacyTab = LEGACY_SAVES;
+		CScrollRegionParams ScrollParams;
+		ScrollParams.m_ScrollUnit = 70.0f;
+		ScrollParams.m_ScrollbarThickness = 14.0f;
+		CUIRect Content = PageView;
+		s_PersonalizationScrollRegion.Begin(&Content, &ScrollParams);
+
+		CUIRect TfMenuSection, HudSection, BackgroundSection;
+		Content.HSplitTop(TfMenuHeight, &TfMenuSection, &Content);
+		s_PersonalizationScrollRegion.AddRect(TfMenuSection);
+		RenderTfMenuSettings(pMenus, pUi, pGameClient, TfMenuSection);
+		Content.HSplitTop(Gap, nullptr, &Content);
+
+		Content.HSplitTop(HudHeight, &HudSection, &Content);
+		s_PersonalizationScrollRegion.AddRect(HudSection);
+		RenderLegacySection(LEGACY_HUD, HudSection);
+		Content.HSplitTop(Gap, nullptr, &Content);
+
+		Content.HSplitTop(BackgroundHeight, &BackgroundSection, &Content);
+		s_PersonalizationScrollRegion.AddRect(BackgroundSection);
+		RenderLegacySection(LEGACY_BACKGROUND, BackgroundSection);
+		s_PersonalizationScrollRegion.End();
+
+		LegacyTab = LEGACY_HUD;
 	}
 	else
 	{
@@ -258,10 +321,6 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 }
 } // namespace BkwMenuProxy
 
-// Function-like macro: it does not affect the local `auto RenderBkwPage = ...`
-// declaration in the legacy source, only the two call sites below it. The
-// unexpanded RenderBkwPage token passed as the last argument is that local
-// legacy renderer and is intentionally used to keep all existing BKW logic.
-#define RenderBkwPage(BKW_VIEW) BkwMenuProxy::Render(this, Ui(), GameClient(), Client(), (BKW_VIEW), s_BkwTab, RenderBkwPage)
+#define RenderBkwPage(BKW_VIEW) BkwMenuProxy::Render(this, Ui(), GameClient(), Client(), Input(), (BKW_VIEW), s_BkwTab, RenderBkwPage)
 #include "menus_settings_legacy.inc"
 #undef RenderBkwPage
