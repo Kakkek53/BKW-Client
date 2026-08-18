@@ -9,6 +9,7 @@
 #include <engine/storage.h>
 
 #include <game/client/animstate.h>
+#include <game/client/components/bkw/tf_menu_parser.inc>
 #include <game/client/gameclient.h>
 #include <game/client/render.h>
 #include <game/client/ui.h>
@@ -444,10 +445,35 @@ bool CFastActions::OnCursorMove(float x, float y, IInput::ECursorType CursorType
 
 bool CFastActions::OnInput(const IInput::CEvent &Event)
 {
+	if(Event.m_Key == KEY_F6 && (Event.m_Flags & IInput::FLAG_PRESS) && !(Event.m_Flags & IInput::FLAG_REPEAT))
+	{
+		const CVoting &Voting = GameClient()->m_Voting;
+		Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "tf-vote", "===== TeeFusion vote options dump =====");
+
+		int Index = 0;
+		for(const CVoteOptionClient *pOption = Voting.FirstOption(); pOption; pOption = pOption->m_pNext, ++Index)
+		{
+			char aLine[VOTE_DESC_LENGTH + 32];
+			str_format(aLine, sizeof(aLine), "[%d] %s", Index, pOption->m_aDescription);
+			Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "tf-vote", aLine);
+		}
+
+		char aUserName[64];
+		char aSummary[256];
+		if(BkwTfMenu::ParseUserName(Voting, aUserName, sizeof(aUserName)))
+			str_format(aSummary, sizeof(aSummary), "TF parser: %d пунктов. Имя пользователя: %s", Voting.NumOptions(), aUserName);
+		else
+			str_format(aSummary, sizeof(aSummary), "TF parser: %d пунктов. Имя пользователя не найдено. Полный список в локальной консоли.", Voting.NumOptions());
+
+		Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "tf-vote", aSummary);
+		Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "tf-vote", Voting.IsReceivingOptions() ? "Сервер еще отправляет группу vote options." : "Группа vote options сейчас завершена.");
+		GameClient()->m_Chat.AddColoredLine(aSummary, ColorRGBA(0.45f, 0.85f, 1.0f, 1.0f));
+		Client()->Notify("TeeFusion vote parser", aSummary);
+		return true;
+	}
 
 	if(m_BkwCheckpointsEnabled && Client()->State() == IClient::STATE_ONLINE && !GameClient()->m_Menus.IsActive())
 	{
-
 		if(Event.m_Key == KEY_MOUSE_3 && (Event.m_Flags & IInput::FLAG_PRESS) && BkwPracticeModeActive())
 		{
 			m_BkwCheckpointHolding = false;
