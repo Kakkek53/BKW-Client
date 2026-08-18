@@ -1,5 +1,9 @@
 #include "menus.h"
 
+#include <engine/client.h>
+
+#include <game/client/gameclient.h>
+
 #include <algorithm>
 
 namespace BkwMenuProxy
@@ -26,8 +30,66 @@ enum
 	LEGACY_EXIT,
 };
 
+void RenderCheckpoints(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient, CUIRect PageView)
+{
+	static int s_CheckpointsToggleId;
+	static CButtonContainer s_CheckpointMouseLeftButton;
+	static CButtonContainer s_CheckpointMouseRightButton;
+
+	CUIRect Header;
+	PageView.HSplitTop(28.0f, &Header, &PageView);
+	pUi->DoLabel(&Header, "Чекпоинты", 22.0f, TEXTALIGN_ML);
+	PageView.HSplitTop(8.0f, nullptr, &PageView);
+
+	const bool CheckpointsEnabled = pGameClient->m_FastActions.BkwCheckpointsEnabled();
+	CUIRect CheckpointToggle;
+	PageView.HSplitTop(28.0f, &CheckpointToggle, &PageView);
+	if(pMenus->DoButton_CheckBox(&s_CheckpointsToggleId, "Чекпоинты", CheckpointsEnabled ? 1 : 0, &CheckpointToggle))
+		pGameClient->m_FastActions.SetBkwCheckpointsEnabled(!CheckpointsEnabled);
+
+	if(!pGameClient->m_FastActions.BkwCheckpointsEnabled())
+		return;
+
+	PageView.HSplitTop(8.0f, nullptr, &PageView);
+	CUIRect CheckpointCard;
+	PageView.HSplitTop(158.0f, &CheckpointCard, &PageView);
+	CheckpointCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+	CheckpointCard.Margin(10.0f, &CheckpointCard);
+
+	CUIRect Description, MouseLabel, MouseButtons, Help1, Help2, Status;
+	CheckpointCard.HSplitTop(30.0f, &Description, &CheckpointCard);
+	pUi->DoLabel(&Description, "Работает только когда сервер подтвердил режим /practice.", 12.0f, TEXTALIGN_ML);
+	CheckpointCard.HSplitTop(22.0f, &MouseLabel, &CheckpointCard);
+	pUi->DoLabel(&MouseLabel, "Кнопка создания / удаления:", 12.0f, TEXTALIGN_ML);
+	CheckpointCard.HSplitTop(28.0f, &MouseButtons, &CheckpointCard);
+	CUIRect LeftMouseButton, RightMouseButton;
+	MouseButtons.VSplitMid(&LeftMouseButton, &RightMouseButton, 6.0f);
+	const int MouseButton = pGameClient->m_FastActions.BkwCheckpointMouseButton();
+	if(pMenus->DoButton_Menu(&s_CheckpointMouseLeftButton, "ЛКМ", MouseButton == 0, &LeftMouseButton))
+		pGameClient->m_FastActions.SetBkwCheckpointMouseButton(0);
+	if(pMenus->DoButton_Menu(&s_CheckpointMouseRightButton, "ПКМ", MouseButton == 1, &RightMouseButton))
+		pGameClient->m_FastActions.SetBkwCheckpointMouseButton(1);
+
+	CheckpointCard.HSplitTop(22.0f, &Help1, &CheckpointCard);
+	pUi->DoLabel(&Help1, "Удержание 0.35 сек.: создать точку у tee. Повторить рядом с точкой — удалить.", 11.0f, TEXTALIGN_ML);
+	CheckpointCard.HSplitTop(22.0f, &Help2, &CheckpointCard);
+	pUi->DoLabel(&Help2, "Нажатие колёсика: /tpxy к последнему чекпоинту.", 11.0f, TEXTALIGN_ML);
+	CheckpointCard.HSplitTop(22.0f, &Status, &CheckpointCard);
+
+	bool PracticeActive = false;
+	const int LocalClientId = pGameClient->m_Snap.m_LocalClientId;
+	if(pClient->State() == IClient::STATE_ONLINE && LocalClientId >= 0 && LocalClientId < MAX_CLIENTS)
+	{
+		const auto &Character = pGameClient->m_Snap.m_aCharacters[LocalClientId];
+		PracticeActive = Character.m_Active && Character.m_HasExtendedData && (Character.m_ExtendedData.m_Flags & CHARACTERFLAG_PRACTICE_MODE) != 0;
+	}
+	char aCheckpointStatus[160];
+	str_format(aCheckpointStatus, sizeof(aCheckpointStatus), "Practice: %s   •   Чекпоинтов: %d", PracticeActive ? "активен" : "не активен", pGameClient->m_FastActions.BkwCheckpointCount());
+	pUi->DoLabel(&Status, aCheckpointStatus, 11.0f, TEXTALIGN_ML);
+}
+
 template<typename TLegacyRenderer>
-void Render(CMenus *pMenus, CUi *pUi, CUIRect PageView, int &LegacyTab, TLegacyRenderer &LegacyRenderer)
+void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient, CUIRect PageView, int &LegacyTab, TLegacyRenderer &LegacyRenderer)
 {
 	static int s_CurrentTab = TAB_MAIN;
 	static int s_FirstVisibleTab = 0;
@@ -107,19 +169,18 @@ void Render(CMenus *pMenus, CUi *pUi, CUIRect PageView, int &LegacyTab, TLegacyR
 	{
 		// Сохранение + чекпоинты + игрок + кланы + предупреждение о выходе.
 		constexpr float Gap = 22.0f;
+		constexpr float SavesHeight = 1050.0f;
 		constexpr float CheckpointsHeight = 245.0f;
 		constexpr float PlayerHeight = 205.0f;
 		constexpr float ClansHeight = 205.0f;
 		constexpr float ExitHeight = 390.0f;
-		const float FixedHeight = CheckpointsHeight + PlayerHeight + ClansHeight + ExitHeight + Gap * 4.0f;
-		const float SavesHeight = std::max(900.0f, PageView.h - FixedHeight);
 
 		CUIRect Section;
 		PageView.HSplitTop(SavesHeight, &Section, &PageView);
 		RenderLegacySection(LEGACY_SAVES, Section);
 		PageView.HSplitTop(Gap, nullptr, &PageView);
 		PageView.HSplitTop(CheckpointsHeight, &Section, &PageView);
-		RenderLegacySection(LEGACY_CHECKPOINTS, Section);
+		RenderCheckpoints(pMenus, pUi, pGameClient, pClient, Section);
 		PageView.HSplitTop(Gap, nullptr, &PageView);
 		PageView.HSplitTop(PlayerHeight, &Section, &PageView);
 		RenderLegacySection(LEGACY_PLAYER, Section);
@@ -142,8 +203,8 @@ void Render(CMenus *pMenus, CUi *pUi, CUIRect PageView, int &LegacyTab, TLegacyR
 	{
 		// HUD and background are one personalization page.
 		constexpr float Gap = 22.0f;
+		constexpr float HudHeight = 800.0f;
 		constexpr float BackgroundHeight = 470.0f;
-		const float HudHeight = std::max(760.0f, PageView.h - BackgroundHeight - Gap);
 		CUIRect HudSection, BackgroundSection;
 		PageView.HSplitTop(HudHeight, &HudSection, &PageView);
 		PageView.HSplitTop(Gap, nullptr, &PageView);
@@ -166,6 +227,6 @@ void Render(CMenus *pMenus, CUi *pUi, CUIRect PageView, int &LegacyTab, TLegacyR
 // declaration in the legacy source, only the two call sites below it. The
 // unexpanded RenderBkwPage token passed as the last argument is that local
 // legacy renderer and is intentionally used to keep all existing BKW logic.
-#define RenderBkwPage(BKW_VIEW) BkwMenuProxy::Render(this, Ui(), (BKW_VIEW), s_BkwTab, RenderBkwPage)
+#define RenderBkwPage(BKW_VIEW) BkwMenuProxy::Render(this, Ui(), GameClient(), Client(), (BKW_VIEW), s_BkwTab, RenderBkwPage)
 #include "menus_settings_legacy.inc"
 #undef RenderBkwPage
