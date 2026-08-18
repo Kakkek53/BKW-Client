@@ -1,0 +1,39 @@
+name: BKW Menu Restructure
+
+on:
+  push:
+    branches:
+      - agent/hud-accent-text-colors
+    paths:
+      - .github/workflows/bkw-menu-restructure.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/hud-accent-text-colors
+          fetch-depth: 0
+      - name: Apply BKW menu patch
+        run: python3 .github/bkw_menu_restructure.py
+      - name: Validate patch
+        run: |
+          git diff --check
+          grep -q '"Основное", "Часы", "Персонализация", "Магазин"' src/game/client/components/menus_settings.cpp
+          grep -q 'Нажатие колёсика: /tpxy' src/game/client/components/menus_settings.cpp
+          ! grep -q 'BKW_TAB_SAVES\|BKW_TAB_CHECKPOINTS\|BKW_TAB_PLAYER\|BKW_TAB_CLANS\|BKW_TAB_HUD\|BKW_TAB_BACKGROUND\|BKW_TAB_EXIT' src/game/client/components/menus_settings.cpp
+      - name: Commit patch
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config user.name "What962"
+          git config user.email "artcheverda@gmail.com"
+          git add src/game/client/components/menus_settings.cpp
+          git commit -m "BKW: reorganize settings submenu"
+          git push origin HEAD:agent/hud-accent-text-colors
