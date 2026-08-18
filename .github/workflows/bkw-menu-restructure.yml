@@ -5,7 +5,7 @@ on:
     branches:
       - agent/hud-accent-text-colors
     paths:
-      - .github/workflows/bkw-menu-restructure.yml
+      - .github/bkw_menu_restructure.py
 
 permissions:
   contents: write
