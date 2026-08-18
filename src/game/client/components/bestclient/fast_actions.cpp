@@ -4,6 +4,7 @@
 #include <base/math.h>
 #include <base/system.h>
 
+#include <engine/client/client.h>
 #include <engine/graphics.h>
 #include <engine/shared/config.h>
 #include <engine/storage.h>
@@ -105,6 +106,27 @@ void DumpTfVoteOptions(const CVoting &Voting, IConsole *pConsole, CChat *pChat, 
 	pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "tf-vote", Voting.IsReceivingOptions() ? "Сервер еще отправляет группу vote options." : "Группа vote options сейчас завершена.");
 	pChat->AddColoredLine(aSummary, ColorRGBA(0.45f, 0.85f, 1.0f, 1.0f));
 	pClient->Notify("TeeFusion vote parser", aSummary);
+}
+
+bool PulseTfMenuPlayerFlag(CGameClient *pGameClient, IClient *pClient, IConsole *pConsole)
+{
+	if(pClient->State() != IClient::STATE_ONLINE)
+		return false;
+
+	const bool WasMenuActive = pGameClient->m_Menus.IsActive();
+	if(!WasMenuActive)
+		pGameClient->m_Menus.SetActive(true);
+
+	// CControls::SnapInput maps an active menu to PLAYERFLAG_IN_MENU. Force one
+	// input packet while this temporary state is active, then restore the local UI
+	// state before the frame reaches CMenus::OnRender, so nothing flashes onscreen.
+	static_cast<CClient *>(pClient)->SendInput();
+
+	if(!WasMenuActive)
+		pGameClient->m_Menus.SetActive(false);
+
+	pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "tf-vote", "Отправлен скрытый PLAYERFLAG_IN_MENU для запроса TeeFusion vote options.");
+	return true;
 }
 
 } // namespace
@@ -490,8 +512,12 @@ bool CFastActions::OnInput(const IInput::CEvent &Event)
 		}
 		else
 		{
-			char aWaiting[192];
-			str_format(aWaiting, sizeof(aWaiting), "TF parser: сейчас %d пунктов, жду получения vote options от сервера...", Voting.NumOptions());
+			const bool PulsedMenuFlag = PulseTfMenuPlayerFlag(GameClient(), Client(), Console());
+			char aWaiting[256];
+			str_format(aWaiting, sizeof(aWaiting), PulsedMenuFlag ?
+				"TF parser: сейчас %d пунктов. Отправил скрытый IN_MENU input, жду vote options..." :
+				"TF parser: сейчас %d пунктов, жду получения vote options от сервера...",
+				Voting.NumOptions());
 			Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "tf-vote", aWaiting);
 			GameClient()->m_Chat.AddColoredLine(aWaiting, ColorRGBA(0.45f, 0.85f, 1.0f, 1.0f));
 		}
