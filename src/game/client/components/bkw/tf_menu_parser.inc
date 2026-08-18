@@ -17,7 +17,10 @@ inline bool ParseUserName(const CVoting &Voting, char *pBuffer, size_t BufferSiz
 
 	for(const CVoteOptionClient *pOption = Voting.FirstOption(); pOption; pOption = pOption->m_pNext)
 	{
-		const char *pLabel = str_utf8_find_nocase(pOption->m_aDescription, "Имя пользователя");
+		// TeeFusion mixes Cyrillic and Latin lookalikes in labels, e.g.
+		// "Имя пoльзoвaтeля". Match only the stable prefix instead of the
+		// full word "пользователя" so those homoglyphs do not matter.
+		const char *pLabel = str_utf8_find_nocase(pOption->m_aDescription, "Имя");
 		if(!pLabel)
 			pLabel = str_utf8_find_nocase(pOption->m_aDescription, "Username");
 		if(!pLabel)
