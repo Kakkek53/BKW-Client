@@ -29,6 +29,10 @@ constexpr const char *BKW_CHECKPOINT_SETTINGS_FILE = "bkw-checkpoints.cfg";
 constexpr float BKW_CHECKPOINT_HOLD_SECONDS = 0.35f;
 constexpr float BKW_CHECKPOINT_REMOVE_DISTANCE = 42.0f;
 constexpr int BKW_CHECKPOINT_MAX = 32;
+constexpr int BKW_TF_VOTE_DUMP_TIMEOUT_SECONDS = 8;
+
+bool s_BkwTfVoteDumpPending = false;
+int64_t s_BkwTfVoteDumpStartedAt = 0;
 
 void EnsureFixedBindSlots(std::vector<CFastActions::CBind> &vBinds)
 {
@@ -76,6 +80,31 @@ int KeyToSlotIndex(int Key)
 	case KEY_KP_6: return 5;
 	default: return -1;
 	}
+}
+
+void DumpTfVoteOptions(const CVoting &Voting, IConsole *pConsole, CChat *pChat, IClient *pClient)
+{
+	pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "tf-vote", "===== TeeFusion vote options dump =====");
+
+	int Index = 0;
+	for(const CVoteOptionClient *pOption = Voting.FirstOption(); pOption; pOption = pOption->m_pNext, ++Index)
+	{
+		char aLine[VOTE_DESC_LENGTH + 32];
+		str_format(aLine, sizeof(aLine), "[%d] %s", Index, pOption->m_aDescription);
+		pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "tf-vote", aLine);
+	}
+
+	char aUserName[64];
+	char aSummary[256];
+	if(BkwTfMenu::ParseUserName(Voting, aUserName, sizeof(aUserName)))
+		str_format(aSummary, sizeof(aSummary), "TF parser: %d пунктов. Имя пользователя: %s", Voting.NumOptions(), aUserName);
+	else
+		str_format(aSummary, sizeof(aSummary), "TF parser: %d пунктов. Имя пользователя не найдено. Полный список в локальной консоли.", Voting.NumOptions());
+
+	pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "tf-vote", aSummary);
+	pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "tf-vote", Voting.IsReceivingOptions() ? "Сервер еще отправляет группу vote options." : "Группа vote options сейчас завершена.");
+	pChat->AddColoredLine(aSummary, ColorRGBA(0.45f, 0.85f, 1.0f, 1.0f));
+	pClient->Notify("TeeFusion vote parser", aSummary);
 }
 
 } // namespace
@@ -427,7 +456,10 @@ void CFastActions::OnStateChange(int NewState, int OldState)
 {
 	(void)OldState;
 	if(NewState == IClient::STATE_OFFLINE || NewState == IClient::STATE_CONNECTING || NewState == IClient::STATE_LOADING)
+	{
 		BkwResetCheckpoints();
+		s_BkwTfVoteDumpPending = false;
+	}
 }
 
 void CFastActions::OnRelease()
@@ -447,28 +479,22 @@ bool CFastActions::OnInput(const IInput::CEvent &Event)
 {
 	if(Event.m_Key == KEY_F6 && (Event.m_Flags & IInput::FLAG_PRESS) && !(Event.m_Flags & IInput::FLAG_REPEAT))
 	{
+		s_BkwTfVoteDumpPending = true;
+		s_BkwTfVoteDumpStartedAt = time_get();
+
 		const CVoting &Voting = GameClient()->m_Voting;
-		Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "tf-vote", "===== TeeFusion vote options dump =====");
-
-		int Index = 0;
-		for(const CVoteOptionClient *pOption = Voting.FirstOption(); pOption; pOption = pOption->m_pNext, ++Index)
+		if(Voting.NumOptions() > 0 && !Voting.IsReceivingOptions())
 		{
-			char aLine[VOTE_DESC_LENGTH + 32];
-			str_format(aLine, sizeof(aLine), "[%d] %s", Index, pOption->m_aDescription);
-			Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "tf-vote", aLine);
+			DumpTfVoteOptions(Voting, Console(), &GameClient()->m_Chat, Client());
+			s_BkwTfVoteDumpPending = false;
 		}
-
-		char aUserName[64];
-		char aSummary[256];
-		if(BkwTfMenu::ParseUserName(Voting, aUserName, sizeof(aUserName)))
-			str_format(aSummary, sizeof(aSummary), "TF parser: %d пунктов. Имя пользователя: %s", Voting.NumOptions(), aUserName);
 		else
-			str_format(aSummary, sizeof(aSummary), "TF parser: %d пунктов. Имя пользователя не найдено. Полный список в локальной консоли.", Voting.NumOptions());
-
-		Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "tf-vote", aSummary);
-		Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "tf-vote", Voting.IsReceivingOptions() ? "Сервер еще отправляет группу vote options." : "Группа vote options сейчас завершена.");
-		GameClient()->m_Chat.AddColoredLine(aSummary, ColorRGBA(0.45f, 0.85f, 1.0f, 1.0f));
-		Client()->Notify("TeeFusion vote parser", aSummary);
+		{
+			char aWaiting[192];
+			str_format(aWaiting, sizeof(aWaiting), "TF parser: сейчас %d пунктов, жду получения vote options от сервера...", Voting.NumOptions());
+			Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "tf-vote", aWaiting);
+			GameClient()->m_Chat.AddColoredLine(aWaiting, ColorRGBA(0.45f, 0.85f, 1.0f, 1.0f));
+		}
 		return true;
 	}
 
@@ -531,6 +557,25 @@ bool CFastActions::OnInput(const IInput::CEvent &Event)
 
 void CFastActions::OnRender()
 {
+	if(s_BkwTfVoteDumpPending)
+	{
+		const CVoting &Voting = GameClient()->m_Voting;
+		if(Voting.NumOptions() > 0 && !Voting.IsReceivingOptions())
+		{
+			DumpTfVoteOptions(Voting, Console(), &GameClient()->m_Chat, Client());
+			s_BkwTfVoteDumpPending = false;
+		}
+		else if(time_get() - s_BkwTfVoteDumpStartedAt >= time_freq() * BKW_TF_VOTE_DUMP_TIMEOUT_SECONDS)
+		{
+			char aTimeout[224];
+			str_format(aTimeout, sizeof(aTimeout), "TF parser: за %d сек. сервер не прислал vote options (сейчас %d).", BKW_TF_VOTE_DUMP_TIMEOUT_SECONDS, Voting.NumOptions());
+			Console()->Print(IConsole::OUTPUT_LEVEL_STANDARD, "tf-vote", aTimeout);
+			GameClient()->m_Chat.AddColoredLine(aTimeout, ColorRGBA(1.0f, 0.65f, 0.35f, 1.0f));
+			Client()->Notify("TeeFusion vote parser", aTimeout);
+			s_BkwTfVoteDumpPending = false;
+		}
+	}
+
 	BkwRenderCheckpoints();
 
 	if(!g_Config.m_BcFastActions)
