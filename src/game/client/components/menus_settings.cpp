@@ -39,30 +39,38 @@ enum
 	LEGACY_EXIT,
 };
 
-void RenderTfParserTest(IInput *pInput, CUi *pUi, CGameClient *pGameClient, CUIRect Anchor)
+static char s_aTfParserTestMessage[192] = "";
+static int64_t s_TfParserTestVisibleUntil = 0;
+
+bool TfParserTestVisible()
 {
-	static char s_aMessage[192] = "";
-	static int64_t s_VisibleUntil = 0;
+	return s_aTfParserTestMessage[0] != '\0' && time_get() < s_TfParserTestVisibleUntil;
+}
 
-	if(pInput->KeyPress(KEY_F6))
-	{
-		char aUserName[64];
-		if(BkwTfMenu::ParseUserName(pGameClient->m_Voting, aUserName, sizeof(aUserName)))
-			str_format(s_aMessage, sizeof(s_aMessage), "F6 TeeFusion parser: Имя пользователя — %s", aUserName);
-		else
-			str_copy(s_aMessage, "F6 TeeFusion parser: строка «Имя пользователя» не найдена в vote options");
-		s_VisibleUntil = time_get() + time_freq() * 7;
-	}
+void UpdateTfParserTest(IInput *pInput, CGameClient *pGameClient)
+{
+	if(!pInput->KeyPress(KEY_F6))
+		return;
 
-	if(s_aMessage[0] == '\0' || time_get() >= s_VisibleUntil)
+	char aUserName[64];
+	if(BkwTfMenu::ParseUserName(pGameClient->m_Voting, aUserName, sizeof(aUserName)))
+		str_format(s_aTfParserTestMessage, sizeof(s_aTfParserTestMessage), "F6 TeeFusion parser: Имя пользователя — %s", aUserName);
+	else
+		str_copy(s_aTfParserTestMessage, "F6 TeeFusion parser: строка «Имя пользователя» не найдена в vote options");
+	s_TfParserTestVisibleUntil = time_get() + time_freq() * 7;
+}
+
+void RenderTfParserTestBanner(CUi *pUi, CUIRect Anchor)
+{
+	if(!TfParserTestVisible())
 		return;
 
 	CUIRect Banner;
-	Anchor.HSplitTop(38.0f, &Banner, nullptr);
+	Anchor.HSplitTop(40.0f, &Banner, nullptr);
 	Banner.VMargin(36.0f, &Banner);
-	Banner.Draw(ColorRGBA(0.04f, 0.05f, 0.07f, 0.94f), IGraphics::CORNER_ALL, 8.0f);
+	Banner.Draw(ColorRGBA(0.04f, 0.05f, 0.07f, 0.96f), IGraphics::CORNER_ALL, 8.0f);
 	Banner.Margin(8.0f, &Banner);
-	pUi->DoLabel(&Banner, s_aMessage, 13.0f, TEXTALIGN_MC);
+	pUi->DoLabel(&Banner, s_aTfParserTestMessage, 13.0f, TEXTALIGN_MC);
 }
 
 void RenderCheckpoints(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient, CUIRect PageView)
@@ -141,7 +149,11 @@ void RenderTfMenuSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, CU
 	PageView.HSplitTop(5.0f, nullptr, &PageView);
 	PageView.HSplitTop(20.0f, &Status, &PageView);
 	char aStatus[192];
-	if(!g_Config.m_BkwTfMenu)
+	if(TfParserTestVisible())
+	{
+		str_copy(aStatus, s_aTfParserTestMessage);
+	}
+	else if(!g_Config.m_BkwTfMenu)
 	{
 		str_copy(aStatus, "Парсер выключен. F6 — разовый тест чтения vote options.");
 	}
@@ -168,8 +180,8 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 	static CScrollRegion s_PersonalizationScrollRegion;
 
 	s_CurrentTab = std::clamp(s_CurrentTab, 0, static_cast<int>(TAB_COUNT) - 1);
-
-	RenderTfParserTest(pInput, pUi, pGameClient, PageView);
+	UpdateTfParserTest(pInput, pGameClient);
+	const CUIRect OverlayAnchor = PageView;
 
 	PageView.HSplitTop(8.0f, nullptr, &PageView);
 	CUIRect TabBar;
@@ -318,6 +330,8 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 		RenderLegacySection(LEGACY_SHOP, PageView);
 		LegacyTab = LEGACY_SHOP;
 	}
+
+	RenderTfParserTestBanner(pUi, OverlayAnchor);
 }
 } // namespace BkwMenuProxy
 
