@@ -15,22 +15,27 @@ inline bool ParseUserName(const CVoting &Voting, char *pBuffer, size_t BufferSiz
 		return false;
 	pBuffer[0] = '\0';
 
-	static constexpr const char *pLabel = "Имя пользователя:";
 	for(const CVoteOptionClient *pOption = Voting.FirstOption(); pOption; pOption = pOption->m_pNext)
 	{
-		const char *pValue = str_find(pOption->m_aDescription, pLabel);
-		if(!pValue)
+		const char *pLabel = str_utf8_find_nocase(pOption->m_aDescription, "Имя пользователя");
+		if(!pLabel)
+			pLabel = str_utf8_find_nocase(pOption->m_aDescription, "Username");
+		if(!pLabel)
 			continue;
 
-		pValue += str_length(pLabel);
-		while(*pValue == ' ' || *pValue == '\t')
+		const char *pValue = str_find(pLabel, ":");
+		if(!pValue)
+			continue;
+		++pValue;
+
+		while(*pValue == ' ' || *pValue == '\t' || *pValue == '-' || *pValue == '|')
 			++pValue;
 		if(*pValue == '\0')
 			continue;
 
 		str_copy(pBuffer, pValue, BufferSize);
 		int Length = str_length(pBuffer);
-		while(Length > 0 && (pBuffer[Length - 1] == ' ' || pBuffer[Length - 1] == '\t' || pBuffer[Length - 1] == '\r' || pBuffer[Length - 1] == '\n'))
+		while(Length > 0 && (pBuffer[Length - 1] == ' ' || pBuffer[Length - 1] == '\t' || pBuffer[Length - 1] == '\r' || pBuffer[Length - 1] == '\n' || pBuffer[Length - 1] == '|'))
 			pBuffer[--Length] = '\0';
 
 		if(pBuffer[0] != '\0')
