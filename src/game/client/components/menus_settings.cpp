@@ -1,5 +1,7 @@
 #include "menus.h"
 
+#include <base/str.h>
+
 #include <engine/client.h>
 
 #include <game/client/gameclient.h>
