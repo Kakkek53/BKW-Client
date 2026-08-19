@@ -297,7 +297,6 @@ protected:
 		const char *pConfirmButtonLabel, const char *pCancelButtonLabel,
 		FPopupButtonCallback pfnConfirmButtonCallback = &CMenus::DefaultButtonCallback, int ConfirmNextPopup = POPUP_NONE,
 		FPopupButtonCallback pfnCancelButtonCallback = &CMenus::DefaultButtonCallback, int CancelNextPopup = POPUP_NONE);
-
 	// some settings
 	static float ms_ButtonHeight;
 	static float ms_ListheaderHeight;
@@ -897,7 +896,6 @@ public:
 	std::vector<CGhostItem> m_vGhosts;
 
 	std::chrono::nanoseconds m_GhostPopulateStartTime{0};
-
 	void GhostlistPopulate();
 	CGhostItem *GetOwnGhost();
 	void UpdateOwnGhost(CGhostItem Item);
@@ -941,6 +939,7 @@ public:
 	};
 
 	void SetMenuPage(int NewPage);
+	void SetGamePage(int NewPage) { m_GamePage = NewPage; }
 	void RefreshBrowserTab(bool Force);
 	void ForceRefreshLanPage();
 	void SetShowStart(bool ShowStart);
@@ -1054,7 +1053,7 @@ private:
 		int m_aDonorAssetIndex[ASSETS_EDITOR_TYPE_COUNT] = {0};
 		bool m_ShowGrid = true;
 		bool m_ApplySameSize = false;
-		int m_ApplySameSizeScope = 0;
+		bool m_ApplySameSizeScope = 0;
 		bool m_DragActive = false;
 		int m_ActiveDraggedSlotIndex = -1;
 		char m_aDraggedSourceAsset[64] = {0};
