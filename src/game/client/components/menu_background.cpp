@@ -315,6 +315,9 @@ void CMenuBackground::OnRender()
 		(s_BkwTfMenuConnectedToDdnet && g_Config.m_BkwDdnetVoteMenu);
 	if(s_BkwTfMenuOverlayActive && CustomVoteMenuEnabled && Client()->State() == IClient::STATE_ONLINE)
 	{
+		// The shared close/reset logic needs the active UI for both custom menus.
+		s_pBkwTfMenuLastUi = Ui();
+
 		if(s_BkwTfMenuConnectedToDdnet)
 		{
 			RenderBkwDdnetVoteOverlay(Ui(), GameClient(), GameClient()->m_Voting, false);
