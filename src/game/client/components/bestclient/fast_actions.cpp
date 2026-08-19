@@ -129,6 +129,8 @@ bool PulseTfMenuPlayerFlag(CGameClient *pGameClient, IClient *pClient, IConsole 
 	return true;
 }
 
+#include <game/client/components/bkw/tf_menu_overlay.inc>
+
 } // namespace
 
 CFastActions::CFastActions()
@@ -467,11 +469,15 @@ void CFastActions::OnReset()
 	m_DisplayBind = -1;
 	m_AnimationTime = 0.0f;
 	BkwResetCheckpoints();
+	BkwTfMenuOverlayReset();
+	s_BkwTfMenuOverlaySuppressReopen = false;
 }
 
 void CFastActions::OnMapLoad()
 {
 	BkwResetCheckpoints();
+	BkwTfMenuOverlayReset();
+	s_BkwTfMenuOverlaySuppressReopen = false;
 }
 
 void CFastActions::OnStateChange(int NewState, int OldState)
@@ -481,6 +487,8 @@ void CFastActions::OnStateChange(int NewState, int OldState)
 	{
 		BkwResetCheckpoints();
 		s_BkwTfVoteDumpPending = false;
+		BkwTfMenuOverlayReset();
+		s_BkwTfMenuOverlaySuppressReopen = false;
 	}
 }
 
@@ -491,14 +499,30 @@ void CFastActions::OnRelease()
 
 bool CFastActions::OnCursorMove(float x, float y, IInput::ECursorType CursorType)
 {
-	(void)x;
-	(void)y;
-	(void)CursorType;
+	if(s_BkwTfMenuOverlayActive)
+	{
+		Ui()->ConvertMouseMove(&x, &y, CursorType);
+		Ui()->OnCursorMove(x, y);
+		return true;
+	}
 	return false;
 }
 
 bool CFastActions::OnInput(const IInput::CEvent &Event)
 {
+	if(s_BkwTfMenuOverlayActive)
+	{
+		Ui()->OnInput(Event);
+		if(Event.m_Key == KEY_ESCAPE && (Event.m_Flags & IInput::FLAG_PRESS) && !(Event.m_Flags & IInput::FLAG_REPEAT))
+		{
+			BkwTfMenuOverlayReset();
+			s_BkwTfMenuOverlaySuppressReopen = true;
+			Ui()->SetActiveItem(nullptr);
+			return true;
+		}
+		return true;
+	}
+
 	if(Event.m_Key == KEY_F6 && (Event.m_Flags & IInput::FLAG_PRESS) && !(Event.m_Flags & IInput::FLAG_REPEAT))
 	{
 		s_BkwTfVoteDumpPending = true;
@@ -583,6 +607,42 @@ bool CFastActions::OnInput(const IInput::CEvent &Event)
 
 void CFastActions::OnRender()
 {
+	if(GameClient()->m_Menus.IsActive() && GameClient()->m_Menus.GamePage() != CMenus::PAGE_CALLVOTE)
+		s_BkwTfMenuOverlaySuppressReopen = false;
+
+	if(g_Config.m_BkwTfMenu &&
+		!s_BkwTfMenuOverlayActive &&
+		!s_BkwTfMenuOverlaySuppressReopen &&
+		Client()->State() == IClient::STATE_ONLINE &&
+		GameClient()->m_Menus.IsActive() &&
+		GameClient()->m_Menus.GamePage() == CMenus::PAGE_CALLVOTE)
+	{
+		s_BkwTfMenuOverlayActive = true;
+		s_BkwTfMenuOverlayPulseSent = false;
+		s_BkwTfMenuSelectedTab = 0;
+		GameClient()->m_Menus.SetActive(false);
+		Ui()->SetActiveItem(nullptr);
+	}
+
+	if(s_BkwTfMenuOverlayActive)
+	{
+		if(!g_Config.m_BkwTfMenu || Client()->State() != IClient::STATE_ONLINE)
+		{
+			BkwTfMenuOverlayReset();
+		}
+		else
+		{
+			const CVoting &Voting = GameClient()->m_Voting;
+			if(Voting.NumOptions() <= 0 && !s_BkwTfMenuOverlayPulseSent)
+			{
+				PulseTfMenuPlayerFlag(GameClient(), Client(), Console());
+				s_BkwTfMenuOverlayPulseSent = true;
+			}
+			RenderBkwTfMenuOverlay(Ui(), Voting);
+			return;
+		}
+	}
+
 	if(s_BkwTfVoteDumpPending)
 	{
 		const CVoting &Voting = GameClient()->m_Voting;
@@ -717,7 +777,6 @@ void CFastActions::ExecuteBind(int Bind)
 			pDst = aBuf + str_length(aBuf);
 			str_escape(&pDst, pCommand, pEnd);
 			str_append(aBuf, "\"");
-			Console()->ExecuteLine(aBuf, IConsole::CLIENT_ID_UNSPECIFIED);
 		}
 		else
 		{
