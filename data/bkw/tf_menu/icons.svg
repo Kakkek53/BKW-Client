@@ -44,6 +44,12 @@
   <symbol id="check" viewBox="0 0 24 24">
     <path d="M 5 12 L 10 17 L 20 7"/>
   </symbol>
+  <symbol id="toggle-off" viewBox="0 0 24 24">
+    <path d="M 5 4 L 19 4 L 21 6 L 21 18 L 19 20 L 5 20 L 3 18 L 3 6 L 5 4 Z"/>
+  </symbol>
+  <symbol id="close" viewBox="0 0 24 24">
+    <path d="M 5 5 L 19 19 M 19 5 L 5 19"/>
+  </symbol>
   <symbol id="info" viewBox="0 0 24 24">
     <path d="M 12 2 L 17 4 L 21 9 L 21 15 L 17 20 L 12 22 L 7 20 L 3 15 L 3 9 L 7 4 L 12 2 Z M 12 10 L 12 17 M 12 7 L 12 7"/>
   </symbol>
