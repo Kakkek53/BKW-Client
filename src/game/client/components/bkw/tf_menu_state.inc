@@ -10,6 +10,7 @@ namespace BkwTfMenuState
 inline bool OverlayActive = false;
 inline bool SuppressReopen = false;
 inline bool PulseSent = false;
+inline bool ConnectedToTeeFusion = false;
 inline int SelectedTab = 0;
 inline int PendingTab = -1;
 inline int ScrollRow = 0;
@@ -22,6 +23,7 @@ inline CUi *pLastUi = nullptr;
 #define s_BkwTfMenuOverlayActive BkwTfMenuState::OverlayActive
 #define s_BkwTfMenuOverlaySuppressReopen BkwTfMenuState::SuppressReopen
 #define s_BkwTfMenuOverlayPulseSent BkwTfMenuState::PulseSent
+#define s_BkwTfMenuConnectedToTeeFusion BkwTfMenuState::ConnectedToTeeFusion
 #define s_BkwTfMenuSelectedTab BkwTfMenuState::SelectedTab
 #define s_BkwTfMenuPendingTab BkwTfMenuState::PendingTab
 #define s_BkwTfMenuScrollRow BkwTfMenuState::ScrollRow
