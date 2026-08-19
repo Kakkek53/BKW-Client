@@ -22,7 +22,6 @@ enum
 	TAB_MAIN = 0,
 	TAB_HOURS,
 	TAB_PERSONALIZATION,
-	TAB_VISUALS,
 	TAB_SHOP,
 	TAB_COUNT,
 };
@@ -156,7 +155,7 @@ void RenderTfMenuSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, CU
 	}
 	else if(!g_Config.m_BkwTfMenu)
 	{
-		str_copy(aStatus, "Парсер выключен. F6 — разовый тест чтения vote options.");
+		str_copy(aStatus, "Выключено. F6 — разовый тест чтения TeeFusion vote options.");
 	}
 	else
 	{
@@ -164,9 +163,27 @@ void RenderTfMenuSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, CU
 		if(BkwTfMenu::ParseUserName(pGameClient->m_Voting, aUserName, sizeof(aUserName)))
 			str_format(aStatus, sizeof(aStatus), "TF parser: Имя пользователя — %s", aUserName);
 		else
-			str_copy(aStatus, "TF parser: строка «Имя пользователя» пока не найдена");
+			str_copy(aStatus, "Новое меню применяется только на серверах TeeFusion.");
 	}
 	pUi->DoLabel(&Status, aStatus, 11.0f, TEXTALIGN_ML);
+}
+
+void RenderDdnetVoteMenuSettings(CMenus *pMenus, CUi *pUi, CUIRect PageView)
+{
+	static int s_DdnetVoteMenuToggleId;
+	PageView.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
+	PageView.Margin(10.0f, &PageView);
+
+	CUIRect Header, Toggle, Status;
+	PageView.HSplitTop(24.0f, &Header, &PageView);
+	pUi->DoLabel(&Header, "DDNet Race Menu", 18.0f, TEXTALIGN_ML);
+	PageView.HSplitTop(4.0f, nullptr, &PageView);
+	PageView.HSplitTop(24.0f, &Toggle, &PageView);
+	if(pMenus->DoButton_CheckBox(&s_DdnetVoteMenuToggleId, "Новое меню голосования DDNet", g_Config.m_BkwDdnetVoteMenu, &Toggle))
+		g_Config.m_BkwDdnetVoteMenu ^= 1;
+	PageView.HSplitTop(5.0f, nullptr, &PageView);
+	PageView.HSplitTop(20.0f, &Status, &PageView);
+	pUi->DoLabel(&Status, "Карты берутся из DDNet API; кик и наблюдатели используют обычное голосование сервера.", 10.5f, TEXTALIGN_ML, {.m_MaxWidth = Status.w});
 }
 
 void RenderCameraDriftSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient, CUIRect PageView)
@@ -175,11 +192,6 @@ void RenderCameraDriftSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClien
 	static CButtonContainer s_CameraDriftResetButton;
 	static CButtonContainer s_CameraDriftForwardButton;
 	static CButtonContainer s_CameraDriftBackwardButton;
-
-	CUIRect Header;
-	PageView.HSplitTop(28.0f, &Header, &PageView);
-	pUi->DoLabel(&Header, "Визуалы", 22.0f, TEXTALIGN_ML);
-	PageView.HSplitTop(10.0f, nullptr, &PageView);
 
 	const bool Online = pClient->State() == IClient::STATE_ONLINE;
 	const bool IsFngServer = Online && pGameClient->m_GameInfo.m_PredictFNG;
@@ -263,7 +275,7 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 	PageView.HSplitTop(8.0f, nullptr, &PageView);
 	CUIRect TabBar;
 	PageView.HSplitTop(24.0f, &TabBar, &PageView);
-	const char *apTabs[TAB_COUNT] = {"Основное", "Часы", "Персонализация", "Визуалы", "Магазин"};
+	const char *apTabs[TAB_COUNT] = {"Основное", "Часы", "Персонализация", "Магазин"};
 
 	constexpr float MinTabWidth = 128.0f;
 	constexpr float PagerWidth = 28.0f;
@@ -375,6 +387,8 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 	{
 		constexpr float Gap = 22.0f;
 		constexpr float TfMenuHeight = 104.0f;
+		constexpr float DdnetMenuHeight = 104.0f;
+		constexpr float CameraDriftHeight = 320.0f;
 		constexpr float HudHeight = 800.0f;
 		constexpr float BackgroundHeight = 470.0f;
 
@@ -384,10 +398,20 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 		CUIRect Content = PageView;
 		s_PersonalizationScrollRegion.Begin(&Content, &ScrollParams);
 
-		CUIRect TfMenuSection, HudSection, BackgroundSection;
+		CUIRect TfMenuSection, DdnetMenuSection, CameraDriftSection, HudSection, BackgroundSection;
 		Content.HSplitTop(TfMenuHeight, &TfMenuSection, &Content);
 		s_PersonalizationScrollRegion.AddRect(TfMenuSection);
 		RenderTfMenuSettings(pMenus, pUi, pGameClient, TfMenuSection);
+		Content.HSplitTop(Gap, nullptr, &Content);
+
+		Content.HSplitTop(DdnetMenuHeight, &DdnetMenuSection, &Content);
+		s_PersonalizationScrollRegion.AddRect(DdnetMenuSection);
+		RenderDdnetVoteMenuSettings(pMenus, pUi, DdnetMenuSection);
+		Content.HSplitTop(Gap, nullptr, &Content);
+
+		Content.HSplitTop(CameraDriftHeight, &CameraDriftSection, &Content);
+		s_PersonalizationScrollRegion.AddRect(CameraDriftSection);
+		RenderCameraDriftSettings(pMenus, pUi, pGameClient, pClient, CameraDriftSection);
 		Content.HSplitTop(Gap, nullptr, &Content);
 
 		Content.HSplitTop(HudHeight, &HudSection, &Content);
@@ -401,10 +425,6 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 		s_PersonalizationScrollRegion.End();
 
 		LegacyTab = LEGACY_HUD;
-	}
-	else if(s_CurrentTab == TAB_VISUALS)
-	{
-		RenderCameraDriftSettings(pMenus, pUi, pGameClient, pClient, PageView);
 	}
 	else
 	{
