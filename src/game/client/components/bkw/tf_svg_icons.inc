@@ -14,7 +14,6 @@
 #include <array>
 #include <cctype>
 #include <cstdlib>
-#include <iterator>
 #include <string>
 #include <vector>
 
@@ -91,6 +90,41 @@ inline const char *IconId(EIcon Icon)
 	case EIcon::COUNT: break;
 	}
 	return "info";
+}
+
+// Exact path data from data/bkw/tf_menu/icons.svg. The external SVG stays the
+// editable source/override, while these built-in paths guarantee that packaged
+// or development clients never fall back to placeholder squares when the data
+// search path is unavailable.
+inline const char *BuiltInPath(EIcon Icon)
+{
+	switch(Icon)
+	{
+	case EIcon::HOME: return "M 3 11 L 12 3 L 21 11 L 21 21 L 15 21 L 15 14 L 9 14 L 9 21 L 3 21 L 3 11 Z";
+	case EIcon::BACK: return "M 20 12 L 5 12 M 11 6 L 5 12 L 11 18";
+	case EIcon::USER: return "M 9 4 L 12 2 L 15 4 L 16 8 L 14 11 L 10 11 L 8 8 L 9 4 Z M 5 21 L 6 16 L 10 13 L 14 13 L 18 16 L 19 21";
+	case EIcon::SHOP: return "M 5 8 L 19 8 L 18 21 L 6 21 L 5 8 Z M 8 9 L 8 6 L 10 3 L 14 3 L 16 6 L 16 9";
+	case EIcon::GIFT: return "M 3 9 L 21 9 L 21 21 L 3 21 L 3 9 Z M 12 9 L 12 21 M 2 6 L 22 6 L 22 10 L 2 10 L 2 6 Z M 12 6 L 9 6 L 7 4 L 8 2 L 10 2 L 12 6 Z M 12 6 L 15 6 L 17 4 L 16 2 L 14 2 L 12 6 Z";
+	case EIcon::SETTINGS: return "M 12 3 L 14 4 L 15 6 L 18 6 L 20 9 L 18 11 L 18 13 L 20 15 L 18 18 L 15 18 L 14 20 L 12 21 L 10 20 L 9 18 L 6 18 L 4 15 L 6 13 L 6 11 L 4 9 L 6 6 L 9 6 L 10 4 L 12 3 Z M 9 12 L 10 9 L 14 9 L 15 12 L 14 15 L 10 15 L 9 12 Z";
+	case EIcon::TROPHY: return "M 7 3 L 17 3 L 16 10 L 14 13 L 10 13 L 8 10 L 7 3 Z M 7 5 L 3 5 L 4 10 L 8 11 M 17 5 L 21 5 L 20 10 L 16 11 M 12 13 L 12 18 M 8 21 L 16 21 M 9 18 L 15 18";
+	case EIcon::CHART: return "M 4 3 L 4 21 L 21 21 M 7 16 L 11 12 L 14 14 L 20 7";
+	case EIcon::LEVEL: return "M 5 17 L 12 10 L 19 17 M 5 11 L 12 4 L 19 11 M 12 10 L 12 21";
+	case EIcon::INVENTORY: return "M 4 7 L 12 3 L 20 7 L 20 18 L 12 22 L 4 18 L 4 7 Z M 4 7 L 12 11 L 20 7 M 12 11 L 12 22 M 8 5 L 16 9";
+	case EIcon::CLAN: return "M 9 5 L 12 3 L 15 5 L 15 9 L 13 11 L 11 11 L 9 9 L 9 5 Z M 5 20 L 6 15 L 10 12 L 14 12 L 18 15 L 19 20 M 4 8 L 6 7 L 8 8 M 16 8 L 18 7 L 20 8 M 2 18 L 3 14 L 6 12 M 22 18 L 21 14 L 18 12";
+	case EIcon::CROWN: return "M 3 7 L 7 12 L 12 5 L 17 12 L 21 7 L 19 19 L 5 19 L 3 7 Z M 6 22 L 18 22";
+	case EIcon::MAIL: return "M 3 5 L 21 5 L 21 19 L 3 19 L 3 5 Z M 3 6 L 12 13 L 21 6";
+	case EIcon::GAME: return "M 6 8 L 18 8 L 21 12 L 20 18 L 17 19 L 14 15 L 10 15 L 7 19 L 4 18 L 3 12 L 6 8 Z M 7 11 L 7 15 M 5 13 L 9 13 M 16 12 L 16 12 M 18 14 L 18 14";
+	case EIcon::CHECK: return "M 5 12 L 10 17 L 20 7";
+	case EIcon::TOGGLE_OFF: return "M 5 4 L 19 4 L 21 6 L 21 18 L 19 20 L 5 20 L 3 18 L 3 6 L 5 4 Z";
+	case EIcon::CLOSE: return "M 5 5 L 19 19 M 19 5 L 5 19";
+	case EIcon::INFO: return "M 12 2 L 17 4 L 21 9 L 21 15 L 17 20 L 12 22 L 7 20 L 3 15 L 3 9 L 7 4 L 12 2 Z M 12 10 L 12 17 M 12 7 L 12 7";
+	case EIcon::WARNING: return "M 12 3 L 22 21 L 2 21 L 12 3 Z M 12 9 L 12 15 M 12 18 L 12 18";
+	case EIcon::COINS: return "M 4 6 L 7 4 L 13 4 L 16 6 L 13 8 L 7 8 L 4 6 Z M 4 6 L 4 11 L 7 13 L 13 13 L 16 11 L 16 6 M 8 15 L 11 13 L 17 13 L 20 15 L 17 17 L 11 17 L 8 15 Z M 8 15 L 8 19 L 11 21 L 17 21 L 20 19 L 20 15";
+	case EIcon::CHEVRON_RIGHT: return "M 9 5 L 16 12 L 9 19";
+	case EIcon::REFRESH: return "M 19 8 L 19 3 L 14 3 M 19 3 L 16 6 L 13 7 L 9 7 L 6 9 L 4 12 M 5 16 L 5 21 L 10 21 M 5 21 L 8 18 L 11 17 L 15 17 L 18 15 L 20 12";
+	case EIcon::COUNT: break;
+	}
+	return "M 5 5 L 19 19 M 19 5 L 5 19";
 }
 
 inline void SkipSeparators(const char *&pCursor)
@@ -246,65 +280,55 @@ inline bool EnsureLoaded(CUi *pUi)
 {
 	if(s_LoadAttempted)
 		return s_Loaded;
+	if(!pUi)
+		return false;
+
 	s_LoadAttempted = true;
+	std::string Svg;
 
-	if(!pUi || !pUi->Client())
-		return false;
-	CClient *pClient = static_cast<CClient *>(pUi->Client());
-	IStorage *pStorage = pClient->Storage();
-	if(!pStorage)
-		return false;
+	if(pUi->Client())
+	{
+		CClient *pClient = static_cast<CClient *>(pUi->Client());
+		if(IStorage *pStorage = pClient->Storage())
+		{
+			if(char *pData = pStorage->ReadFileStr("bkw/tf_menu/icons.svg", IStorage::TYPE_ALL))
+			{
+				Svg = pData;
+				std::free(pData);
+			}
+		}
+	}
 
-	char *pData = pStorage->ReadFileStr("bkw/tf_menu/icons.svg", IStorage::TYPE_ALL);
-	if(!pData)
-		return false;
-
-	const std::string Svg(pData);
-	std::free(pData);
-
+	bool AnyLoaded = false;
 	for(size_t i = 0; i < static_cast<size_t>(EIcon::COUNT); ++i)
 	{
+		const EIcon Icon = static_cast<EIcon>(i);
 		SIconGeometry &Geometry = s_aGeometry[i];
 		Geometry.m_vSegments.clear();
-		ExtractIconGeometry(Svg, IconId(static_cast<EIcon>(i)), Geometry);
-	}
-	s_Loaded = true;
-	return true;
-}
 
-inline void RenderFallback(CUi *pUi, const CUIRect &Rect, ColorRGBA Color)
-{
-	IGraphics *pGraphics = pUi->Graphics();
-	const float Pad = minimum(Rect.w, Rect.h) * 0.22f;
-	const CUIRect R{Rect.x + Pad, Rect.y + Pad, Rect.w - Pad * 2.0f, Rect.h - Pad * 2.0f};
-	const IGraphics::CLineItem aLines[] = {
-		{R.x, R.y, R.x + R.w, R.y},
-		{R.x + R.w, R.y, R.x + R.w, R.y + R.h},
-		{R.x + R.w, R.y + R.h, R.x, R.y + R.h},
-		{R.x, R.y + R.h, R.x, R.y},
-	};
-	pGraphics->TextureClear();
-	pGraphics->LinesBegin();
-	pGraphics->SetColor(Color.r, Color.g, Color.b, Color.a);
-	pGraphics->LinesDraw(aLines, std::size(aLines));
-	pGraphics->LinesEnd();
+		if(!Svg.empty())
+			ExtractIconGeometry(Svg, IconId(Icon), Geometry);
+
+		// The built-in SVG path is authoritative fallback. This fixes the old
+		// white-square placeholder when the external data file cannot be found.
+		if(Geometry.m_vSegments.empty())
+			ParsePath(BuiltInPath(Icon), Geometry.m_vSegments);
+
+		AnyLoaded = AnyLoaded || !Geometry.m_vSegments.empty();
+	}
+
+	s_Loaded = AnyLoaded;
+	return s_Loaded;
 }
 
 inline void Render(CUi *pUi, EIcon Icon, const CUIRect &Rect, ColorRGBA Color = ColorRGBA(1.0f, 1.0f, 1.0f, 0.92f))
 {
 	if(!pUi || !EnsureLoaded(pUi))
-	{
-		if(pUi)
-			RenderFallback(pUi, Rect, Color);
 		return;
-	}
 
 	const SIconGeometry &Geometry = s_aGeometry[static_cast<size_t>(Icon)];
 	if(Geometry.m_vSegments.empty())
-	{
-		RenderFallback(pUi, Rect, Color);
 		return;
-	}
 
 	const float Size = minimum(Rect.w, Rect.h);
 	const float Scale = Size / 24.0f;
@@ -313,7 +337,7 @@ inline void Render(CUi *pUi, EIcon Icon, const CUIRect &Rect, ColorRGBA Color = 
 	std::vector<IGraphics::CLineItem> vLines;
 	vLines.reserve(Geometry.m_vSegments.size() * 3);
 
-	const float StrokeOffset = maximum(0.18f, pUi->PixelSize() * 0.35f);
+	const float StrokeOffset = maximum(0.16f, pUi->PixelSize() * 0.30f);
 	for(const SSegment &Segment : Geometry.m_vSegments)
 	{
 		const float X0 = OriginX + Segment.m_From.x * Scale;
