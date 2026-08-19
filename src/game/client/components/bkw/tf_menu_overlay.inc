@@ -58,11 +58,11 @@ inline void BkwTfMenuOverlayReset(bool ReturnToGame = true)
 	s_BkwTfMenuActionStartedAt = 0;
 
 	// Leaving TF Menu must not leave the normal menu parked on PAGE_CALLVOTE.
-	// Set the ingame page back to Game while keeping the menu itself closed.
+	// Set the actual ingame page back to Game while keeping the menu itself closed.
 	if(ReturnToGame && s_pBkwTfMenuLastUi)
 	{
 		if(CGameClient *pGameClient = BkwTfGameClient(s_pBkwTfMenuLastUi))
-			pGameClient->m_Menus.SetMenuPage(CMenus::PAGE_GAME);
+			pGameClient->m_Menus.SetGamePage(CMenus::PAGE_GAME);
 	}
 
 	// CFastActions forwards input to CUi before handling Escape. Consume the
@@ -436,7 +436,7 @@ inline void RenderBkwTfMenuOverlay(CUi *pUi, const CVoting &VotingConst, bool In
 			s_BkwTfMenuOverlaySuppressReopen = true;
 			if(pGameClient)
 			{
-				pGameClient->m_Menus.SetMenuPage(CMenus::PAGE_CALLVOTE);
+				pGameClient->m_Menus.SetGamePage(CMenus::PAGE_CALLVOTE);
 				pGameClient->m_Menus.SetActive(true);
 			}
 			pUi->SetActiveItem(nullptr);
