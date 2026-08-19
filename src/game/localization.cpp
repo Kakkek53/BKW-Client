@@ -225,11 +225,6 @@ bool CLocalizationDatabase::Load(const char *pFilename, IStorage *pStorage, ICon
 				log_error("localization", "unexpected end of file after context line '%s' on line %d", aContext, Line);
 				break;
 			}
-			if(pLine[0] == '#')
-			{
-				log_error("localization", "unexpected comment after context line '%s' on line %d", aContext, Line);
-				continue;
-			}
 			Line++;
 		}
 		else
