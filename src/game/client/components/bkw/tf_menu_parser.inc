@@ -3,6 +3,7 @@
 
 #include <base/str.h>
 
+#include <game/client/components/bkw/tf_menu_state.h>
 #include <game/client/components/voting.h>
 
 #include <cstddef>
