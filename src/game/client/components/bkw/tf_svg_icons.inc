@@ -37,6 +37,8 @@ enum class EIcon
 	MAIL,
 	GAME,
 	CHECK,
+	TOGGLE_OFF,
+	CLOSE,
 	INFO,
 	WARNING,
 	COINS,
@@ -79,6 +81,8 @@ inline const char *IconId(EIcon Icon)
 	case EIcon::MAIL: return "mail";
 	case EIcon::GAME: return "game";
 	case EIcon::CHECK: return "check";
+	case EIcon::TOGGLE_OFF: return "toggle-off";
+	case EIcon::CLOSE: return "close";
 	case EIcon::INFO: return "info";
 	case EIcon::WARNING: return "warning";
 	case EIcon::COINS: return "coins";
@@ -110,7 +114,7 @@ inline bool ParseNumber(const char *&pCursor, float &Value)
 
 inline void AddSegment(std::vector<SSegment> &vSegments, vec2 From, vec2 To)
 {
-	if(From == To)
+	if(From.x == To.x && From.y == To.y)
 		return;
 	vSegments.push_back({From, To});
 }
