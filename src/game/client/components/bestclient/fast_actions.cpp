@@ -777,6 +777,7 @@ void CFastActions::ExecuteBind(int Bind)
 			pDst = aBuf + str_length(aBuf);
 			str_escape(&pDst, pCommand, pEnd);
 			str_append(aBuf, "\"");
+			Console()->ExecuteLine(aBuf, IConsole::CLIENT_ID_UNSPECIFIED);
 		}
 		else
 		{
