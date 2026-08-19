@@ -297,6 +297,7 @@ protected:
 		const char *pConfirmButtonLabel, const char *pCancelButtonLabel,
 		FPopupButtonCallback pfnConfirmButtonCallback = &CMenus::DefaultButtonCallback, int ConfirmNextPopup = POPUP_NONE,
 		FPopupButtonCallback pfnCancelButtonCallback = &CMenus::DefaultButtonCallback, int CancelNextPopup = POPUP_NONE);
+
 	// some settings
 	static float ms_ButtonHeight;
 	static float ms_ListheaderHeight;
@@ -867,6 +868,7 @@ public:
 	// Ghost
 	struct CGhostItem
 	{
+	public:
 		char m_aFilename[IO_MAX_PATH_LENGTH];
 		char m_aPlayer[MAX_NAME_LENGTH];
 
@@ -896,6 +898,7 @@ public:
 	std::vector<CGhostItem> m_vGhosts;
 
 	std::chrono::nanoseconds m_GhostPopulateStartTime{0};
+
 	void GhostlistPopulate();
 	CGhostItem *GetOwnGhost();
 	void UpdateOwnGhost(CGhostItem Item);
@@ -1053,7 +1056,7 @@ private:
 		int m_aDonorAssetIndex[ASSETS_EDITOR_TYPE_COUNT] = {0};
 		bool m_ShowGrid = true;
 		bool m_ApplySameSize = false;
-		bool m_ApplySameSizeScope = 0;
+		int m_ApplySameSizeScope = 0;
 		bool m_DragActive = false;
 		int m_ActiveDraggedSlotIndex = -1;
 		char m_aDraggedSourceAsset[64] = {0};
