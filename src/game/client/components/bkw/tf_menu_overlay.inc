@@ -118,13 +118,14 @@ void RenderBkwTfMenuOverlay(CUi *pUi, const CVoting &Voting)
 
 	CUIRect NavInner;
 	Nav.Margin(5.0f, &NavInner);
-	const float TabH = maximum(14.0f, minimum(17.0f, NavInner.h / 13.0f));
+	const float TabSpacing = 1.0f;
+	const float TabH = maximum(13.0f, minimum(17.0f, (NavInner.h - TabSpacing * 12.0f) / 13.0f));
 	for(int Tab = 0; Tab < 13; ++Tab)
 	{
 		CUIRect Row;
 		NavInner.HSplitTop(TabH, &Row, &NavInner);
 		if(Tab != 12)
-			NavInner.HSplitTop(1.0f, nullptr, &NavInner);
+			NavInner.HSplitTop(TabSpacing, nullptr, &NavInner);
 
 		const bool Active = s_BkwTfMenuSelectedTab == Tab;
 		const bool Hovered = pUi->MouseInside(&Row);
@@ -166,13 +167,14 @@ void RenderBkwTfMenuOverlay(CUi *pUi, const CVoting &Voting)
 			"Имя пользователя", "Discord", "Пин-код", "Язык",
 			"Рейтинг", "Уровень", "Опыт", "Валюты"};
 
-		const float RowH = minimum(21.0f, ContentInner.h / 8.0f);
+		const float InfoSpacing = 2.0f;
+		const float RowH = minimum(21.0f, maximum(14.0f, (ContentInner.h - InfoSpacing * 7.0f) / 8.0f));
 		for(int Info = 0; Info < 8; ++Info)
 		{
 			CUIRect Row;
 			ContentInner.HSplitTop(RowH, &Row, &ContentInner);
 			if(Info != 7)
-				ContentInner.HSplitTop(2.0f, nullptr, &ContentInner);
+				ContentInner.HSplitTop(InfoSpacing, nullptr, &ContentInner);
 			Row.Draw(ColorRGBA(1.0f, 1.0f, 1.0f, Info % 2 == 0 ? 0.055f : 0.035f), IGraphics::CORNER_ALL, 5.0f);
 			Row.VMargin(7.0f, &Row);
 
