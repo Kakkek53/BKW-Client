@@ -10,6 +10,7 @@
 #include <engine/shared/config.h>
 
 #include <game/client/components/bkw/tf_menu_overlay.inc>
+#include <game/client/components/bkw/ddnet_vote_overlay.inc>
 #include <game/client/components/camera.h>
 #include <game/client/components/mapimages.h>
 #include <game/client/components/maplayers.h>
@@ -306,12 +307,36 @@ void CMenuBackground::OnMapLoad()
 
 void CMenuBackground::OnRender()
 {
-	// TF Menu has an early interactive pass in CFastActions. Redraw it here,
-	// after chat, finish/info messages, CMenus, tooltips and the game console,
-	// so the custom menu visually stays above the normal ingame UI.
-	if(s_BkwTfMenuOverlayActive && g_Config.m_BkwTfMenu && Client()->State() == IClient::STATE_ONLINE)
+	// Custom vote menus have an early interactive pass in CFastActions. Redraw
+	// them here, after chat, finish/info messages, CMenus, tooltips and the game
+	// console, so the overlay visually remains above normal ingame UI.
+	const bool CustomVoteMenuEnabled =
+		(s_BkwTfMenuConnectedToTeeFusion && g_Config.m_BkwTfMenu) ||
+		(s_BkwTfMenuConnectedToDdnet && g_Config.m_BkwDdnetVoteMenu);
+	if(s_BkwTfMenuOverlayActive && CustomVoteMenuEnabled && Client()->State() == IClient::STATE_ONLINE)
 	{
-		RenderBkwTfMenuOverlay(Ui(), GameClient()->m_Voting, false);
+		if(s_BkwTfMenuConnectedToDdnet)
+		{
+			RenderBkwDdnetVoteOverlay(Ui(), GameClient(), GameClient()->m_Voting, false);
+		}
+		else
+		{
+			RenderBkwTfMenuOverlay(Ui(), GameClient()->m_Voting, false);
+
+			// The original TF frame is intentionally subtle. Add a stronger 3 px
+			// perimeter in the final visual pass without changing the menu layout.
+			const CUIRect Screen = *Ui()->Screen();
+			const float CardW = minimum(Screen.w - 18.0f, 820.0f);
+			const float CardH = minimum(Screen.h - 14.0f, 480.0f);
+			const float CardX = Screen.x + (Screen.w - CardW) * 0.5f;
+			const float CardY = Screen.y + (Screen.h - CardH) * 0.5f;
+			const float Border = 3.0f;
+			const ColorRGBA BorderColor(0.68f, 0.70f, 0.74f, 0.72f);
+			Graphics()->DrawRect(CardX, CardY, CardW, Border, BorderColor, IGraphics::CORNER_T, 16.0f);
+			Graphics()->DrawRect(CardX, CardY + CardH - Border, CardW, Border, BorderColor, IGraphics::CORNER_B, 16.0f);
+			Graphics()->DrawRect(CardX, CardY + Border, Border, CardH - Border * 2.0f, BorderColor, IGraphics::CORNER_NONE, 0.0f);
+			Graphics()->DrawRect(CardX + CardW - Border, CardY + Border, Border, CardH - Border * 2.0f, BorderColor, IGraphics::CORNER_NONE, 0.0f);
+		}
 		RenderTools()->RenderCursor(Ui()->MousePos(), 24.0f);
 	}
 }
