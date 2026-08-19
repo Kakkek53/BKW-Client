@@ -130,6 +130,7 @@ bool PulseTfMenuPlayerFlag(CGameClient *pGameClient, IClient *pClient, IConsole 
 }
 
 #include <game/client/components/bkw/tf_menu_overlay.inc>
+#include <game/client/components/bkw/ddnet_vote_overlay.inc>
 
 } // namespace
 
@@ -470,6 +471,7 @@ void CFastActions::OnReset()
 	m_AnimationTime = 0.0f;
 	BkwResetCheckpoints();
 	BkwTfMenuOverlayReset();
+	BkwDdnetResetView();
 	s_BkwTfMenuOverlaySuppressReopen = false;
 }
 
@@ -477,6 +479,7 @@ void CFastActions::OnMapLoad()
 {
 	BkwResetCheckpoints();
 	BkwTfMenuOverlayReset();
+	BkwDdnetResetView();
 	s_BkwTfMenuOverlaySuppressReopen = false;
 }
 
@@ -488,7 +491,10 @@ void CFastActions::OnStateChange(int NewState, int OldState)
 		BkwResetCheckpoints();
 		s_BkwTfVoteDumpPending = false;
 		BkwTfMenuOverlayReset();
+		BkwDdnetResetView();
 		s_BkwTfMenuOverlaySuppressReopen = false;
+		s_BkwTfMenuConnectedToTeeFusion = false;
+		s_BkwTfMenuConnectedToDdnet = false;
 	}
 }
 
@@ -516,6 +522,7 @@ bool CFastActions::OnInput(const IInput::CEvent &Event)
 		if(Event.m_Key == KEY_ESCAPE && (Event.m_Flags & IInput::FLAG_PRESS) && !(Event.m_Flags & IInput::FLAG_REPEAT))
 		{
 			BkwTfMenuOverlayReset();
+			BkwDdnetResetView();
 			s_BkwTfMenuOverlaySuppressReopen = true;
 			Ui()->SetActiveItem(nullptr);
 			return true;
@@ -607,38 +614,60 @@ bool CFastActions::OnInput(const IInput::CEvent &Event)
 
 void CFastActions::OnRender()
 {
+	const bool Online = Client()->State() == IClient::STATE_ONLINE;
+	if(Online)
+	{
+		const CServerInfo &ServerInfo = Client()->ServerInfo();
+		s_BkwTfMenuConnectedToTeeFusion = str_comp(ServerInfo.m_aCommunityId, "teefusion") == 0;
+		s_BkwTfMenuConnectedToDdnet = str_comp(ServerInfo.m_aCommunityId, "ddnet") == 0;
+	}
+	else
+	{
+		s_BkwTfMenuConnectedToTeeFusion = false;
+		s_BkwTfMenuConnectedToDdnet = false;
+	}
+	BkwDdnetVoteState::pHttp = Http();
+	const bool CustomVoteMenuEnabled =
+		(s_BkwTfMenuConnectedToTeeFusion && g_Config.m_BkwTfMenu) ||
+		(s_BkwTfMenuConnectedToDdnet && g_Config.m_BkwDdnetVoteMenu);
+
 	if(GameClient()->m_Menus.IsActive() && GameClient()->m_Menus.GamePage() != CMenus::PAGE_CALLVOTE)
 		s_BkwTfMenuOverlaySuppressReopen = false;
 
-	if(g_Config.m_BkwTfMenu &&
+	if(CustomVoteMenuEnabled &&
 		!s_BkwTfMenuOverlayActive &&
 		!s_BkwTfMenuOverlaySuppressReopen &&
-		Client()->State() == IClient::STATE_ONLINE &&
+		Online &&
 		GameClient()->m_Menus.IsActive() &&
 		GameClient()->m_Menus.GamePage() == CMenus::PAGE_CALLVOTE)
 	{
 		s_BkwTfMenuOverlayActive = true;
 		s_BkwTfMenuOverlayPulseSent = false;
 		s_BkwTfMenuSelectedTab = 0;
+		BkwDdnetResetView();
 		GameClient()->m_Menus.SetActive(false);
 		Ui()->SetActiveItem(nullptr);
 	}
 
 	if(s_BkwTfMenuOverlayActive)
 	{
-		if(!g_Config.m_BkwTfMenu || Client()->State() != IClient::STATE_ONLINE)
+		if(!CustomVoteMenuEnabled || !Online)
 		{
 			BkwTfMenuOverlayReset();
+			BkwDdnetResetView();
 		}
 		else
 		{
 			const CVoting &Voting = GameClient()->m_Voting;
-			if(Voting.NumOptions() <= 0 && !s_BkwTfMenuOverlayPulseSent)
+			if(s_BkwTfMenuConnectedToTeeFusion && Voting.NumOptions() <= 0 && !s_BkwTfMenuOverlayPulseSent)
 			{
 				PulseTfMenuPlayerFlag(GameClient(), Client(), Console());
 				s_BkwTfMenuOverlayPulseSent = true;
 			}
-			RenderBkwTfMenuOverlay(Ui(), Voting);
+			if(s_BkwTfMenuConnectedToDdnet)
+				RenderBkwDdnetVoteOverlay(Ui(), GameClient(), Voting, true);
+			else
+				RenderBkwTfMenuOverlay(Ui(), Voting);
 			return;
 		}
 	}
