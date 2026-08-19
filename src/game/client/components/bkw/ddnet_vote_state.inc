@@ -53,6 +53,7 @@ struct SStats
 	std::vector<SRank> m_vRanks;
 };
 
+inline IHttp *pHttp = nullptr;
 inline bool CatalogRequested = false;
 inline bool CatalogReady = false;
 inline bool CatalogFailed = false;
