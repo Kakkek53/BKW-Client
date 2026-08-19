@@ -9,6 +9,7 @@
 #include <engine/map.h>
 #include <engine/shared/config.h>
 
+#include <game/client/components/bkw/tf_menu_overlay.inc>
 #include <game/client/components/camera.h>
 #include <game/client/components/mapimages.h>
 #include <game/client/components/maplayers.h>
@@ -305,6 +306,14 @@ void CMenuBackground::OnMapLoad()
 
 void CMenuBackground::OnRender()
 {
+	// TF Menu has an early interactive pass in CFastActions. Redraw it here,
+	// after chat, finish/info messages, CMenus, tooltips and the game console,
+	// so the custom menu visually stays above the normal ingame UI.
+	if(s_BkwTfMenuOverlayActive && g_Config.m_BkwTfMenu && Client()->State() == IClient::STATE_ONLINE)
+	{
+		RenderBkwTfMenuOverlay(Ui(), GameClient()->m_Voting, false);
+		RenderTools()->RenderCursor(Ui()->MousePos(), 24.0f);
+	}
 }
 
 bool CMenuBackground::Render()
