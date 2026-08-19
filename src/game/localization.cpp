@@ -9,11 +9,17 @@
 #include <base/str.h>
 
 #include <engine/console.h>
+#include <engine/shared/config.h>
 #include <engine/shared/linereader.h>
 #include <engine/storage.h>
 
+#include <game/client/components/bkw/tf_menu_state.inc>
+
 const char *Localize(const char *pStr, const char *pContext)
 {
+	if(g_Config.m_BkwTfMenu && s_BkwTfMenuConnectedToTeeFusion && str_comp(pStr, "Call vote") == 0)
+		return "TF Menu";
+
 	const char *pNewStr = g_Localization.FindString(str_quickhash(pStr), str_quickhash(pContext));
 	return pNewStr ? pNewStr : pStr;
 }
@@ -41,7 +47,7 @@ void CLocalizationDatabase::LoadIndexfile(IStorage *pStorage, IConsole *pConsole
 
 	while(const char *pLine = LineReader.Get())
 	{
-		if(!str_length(pLine) || pLine[0] == '#') // skip empty lines and comments
+		if(!str_length(pLine) || pLine[0] == '#') // skip empty lines
 			continue;
 
 		char aEnglishName[128];
@@ -137,25 +143,21 @@ void CLocalizationDatabase::SelectDefaultLanguage(IConsole *pConsole, char *pFil
 			{
 				if(LanguageCode == aLocaleStr)
 				{
-					// Exact match found, use it immediately
 					str_copy(pFilename, Language.m_Filename.c_str(), Length);
 					return;
 				}
 				else if(LanguageCode.starts_with(aLocaleStr))
 				{
-					// Locale is prefix of language code, e.g. locale is "en" and current language is "en-US"
 					pPrefixMatch = &Language;
 				}
 			}
 		}
-		// Use prefix match if no exact match was found
 		if(pPrefixMatch)
 		{
 			str_copy(pFilename, pPrefixMatch->m_Filename.c_str(), Length);
 			return;
 		}
 
-		// Remove last segment of locale string and try again with more generic locale, e.g. "en-US" -> "en"
 		int i = str_length(aLocaleStr) - 1;
 		for(; i >= 0; --i)
 		{
@@ -166,7 +168,6 @@ void CLocalizationDatabase::SelectDefaultLanguage(IConsole *pConsole, char *pFil
 			}
 		}
 
-		// Stop if no more locale segments are left
 		if(i <= 0)
 			break;
 	}
@@ -174,7 +175,6 @@ void CLocalizationDatabase::SelectDefaultLanguage(IConsole *pConsole, char *pFil
 
 bool CLocalizationDatabase::Load(const char *pFilename, IStorage *pStorage, IConsole *pConsole, bool Clear)
 {
-	// empty string means unload
 	if(pFilename[0] == 0)
 	{
 		m_vStrings.clear();
@@ -201,10 +201,10 @@ bool CLocalizationDatabase::Load(const char *pFilename, IStorage *pStorage, ICon
 		if(!str_length(pLine))
 			continue;
 
-		if(pLine[0] == '#') // skip comments
+		if(pLine[0] == '#')
 			continue;
 
-		if(pLine[0] == '[') // context
+		if(pLine[0] == '[')
 		{
 			size_t Len = str_length(pLine);
 			if(Len < 1 || pLine[Len - 1] != ']')
@@ -270,7 +270,6 @@ const char *CLocalizationDatabase::FindString(unsigned Hash, unsigned ContextHas
 	const unsigned DefaultHash = str_quickhash("");
 	if(ContextHash != DefaultHash)
 	{
-		// Do another lookup with the default context hash
 		String.m_ContextHash = DefaultHash;
 		auto Range2 = std::equal_range(m_vStrings.begin(), m_vStrings.end(), String);
 		if(std::distance(Range2.first, Range2.second) == 1)
