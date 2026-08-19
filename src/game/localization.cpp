@@ -9,11 +9,17 @@
 #include <base/str.h>
 
 #include <engine/console.h>
+#include <engine/shared/config.h>
 #include <engine/shared/linereader.h>
 #include <engine/storage.h>
 
 const char *Localize(const char *pStr, const char *pContext)
 {
+	// BKW TeeFusion menu replaces the regular in-game "Call vote" page while
+	// preserving the original label everywhere when the feature is disabled.
+	if(g_Config.m_BkwTfMenu && str_comp(pStr, "Call vote") == 0)
+		return "TF Menu";
+
 	const char *pNewStr = g_Localization.FindString(str_quickhash(pStr), str_quickhash(pContext));
 	return pNewStr ? pNewStr : pStr;
 }
@@ -218,6 +224,11 @@ bool CLocalizationDatabase::Load(const char *pFilename, IStorage *pStorage, ICon
 			{
 				log_error("localization", "unexpected end of file after context line '%s' on line %d", aContext, Line);
 				break;
+			}
+			if(pLine[0] == '#')
+			{
+				log_error("localization", "unexpected comment after context line '%s' on line %d", aContext, Line);
+				continue;
 			}
 			Line++;
 		}
