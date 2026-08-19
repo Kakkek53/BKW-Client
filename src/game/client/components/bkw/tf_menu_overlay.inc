@@ -5,6 +5,7 @@
 #include <base/system.h>
 
 #include <engine/client/client.h>
+#include <engine/serverbrowser.h>
 
 #include <game/client/components/bkw/tf_menu_parser.inc>
 #include <game/client/components/voting.h>
@@ -15,7 +16,36 @@
 #include <cstdint>
 #include <vector>
 
-inline void BkwTfMenuOverlayReset()
+inline CGameClient *BkwTfGameClient(CUi *pUi)
+{
+	if(!pUi || !pUi->Client())
+		return nullptr;
+	CClient *pConcreteClient = static_cast<CClient *>(pUi->Client());
+	return static_cast<CGameClient *>(pConcreteClient->GameClient());
+}
+
+inline bool BkwTfIsConnectedTeeFusion(CUi *pUi)
+{
+	CGameClient *pGameClient = BkwTfGameClient(pUi);
+	IClient *pClient = pUi ? pUi->Client() : nullptr;
+	if(!pGameClient || !pClient || pClient->State() != IClient::STATE_ONLINE)
+		return false;
+
+	// Prefer the current server info when it already carries the community tag.
+	if(str_comp(pClient->ServerInfo().m_aCommunityId, "teefusion") == 0)
+		return true;
+
+	// Otherwise resolve the actually connected address against the server list
+	// loaded by the client's active master. This deliberately does not assume
+	// ddnet.org, BestClient's master, a server name, or a hardcoded TeeFusion IP.
+	IServerBrowser *pServerBrowser = pGameClient->ServerBrowser();
+	if(!pServerBrowser)
+		return false;
+	IServerBrowser::CServerEntry *pEntry = pServerBrowser->Find(pClient->ServerAddress());
+	return pEntry && str_comp(pEntry->m_Info.m_aCommunityId, "teefusion") == 0;
+}
+
+inline void BkwTfMenuOverlayReset(bool ReturnToGame = true)
 {
 	const bool WasActive = s_BkwTfMenuOverlayActive;
 	s_BkwTfMenuOverlayActive = false;
@@ -26,6 +56,14 @@ inline void BkwTfMenuOverlayReset()
 	s_BkwTfMenuWaitingForUpdate = false;
 	s_BkwTfMenuVoteSignatureBeforeAction = 0;
 	s_BkwTfMenuActionStartedAt = 0;
+
+	// Leaving TF Menu must not leave the normal menu parked on PAGE_CALLVOTE.
+	// Set the ingame page back to Game while keeping the menu itself closed.
+	if(ReturnToGame && s_pBkwTfMenuLastUi)
+	{
+		if(CGameClient *pGameClient = BkwTfGameClient(s_pBkwTfMenuLastUi))
+			pGameClient->m_Menus.SetMenuPage(CMenus::PAGE_GAME);
+	}
 
 	// CFastActions forwards input to CUi before handling Escape. Consume the
 	// hotkey here while the TF overlay is closing so CMenus::OnRender cannot see
@@ -194,9 +232,6 @@ inline void BkwTfBeginVoteAction(CVoting &Voting, int OptionIndex)
 	if(s_BkwTfMenuWaitingForUpdate || OptionIndex < 0 || OptionIndex >= Voting.NumOptions())
 		return;
 
-	// TeeFusion exposes/refreshes its vote UI when the player reports IN_MENU.
-	// Pulse the same flag that made the F6 parser work immediately before the
-	// real CallvoteOption, so submenu navigation behaves like the native menu.
 	BkwTfPulseMenuInput();
 	s_BkwTfMenuVoteSignatureBeforeAction = BkwTfVoteSignature(Voting);
 	s_BkwTfMenuActionStartedAt = time_get();
@@ -227,11 +262,10 @@ inline void BkwTfUpdateVoteTransition(CVoting &Voting)
 		s_BkwTfMenuPendingTab = -1;
 		s_BkwTfMenuSelectedTab = TargetTab;
 		if(TargetTab > 0)
-			BkwTfBeginVoteAction(Voting, 10 + TargetTab); // root [11]=Rules, [12]=Duels, [13]=Mail
+			BkwTfBeginVoteAction(Voting, 10 + TargetTab);
 		return;
 	}
 
-	// Reaching the root through an ordinary Back button means we are on Main.
 	if(s_BkwTfMenuSelectedTab != 0)
 		s_BkwTfMenuSelectedTab = 0;
 }
@@ -251,8 +285,6 @@ inline void BkwTfRequestTab(CVoting &Voting, int TargetTab)
 		return;
 	}
 
-	// Every supplied TeeFusion submenu exposes [0] as "В главное меню".
-	// Use it as a bridge, then open the requested root option once the root list arrives.
 	s_BkwTfMenuPendingTab = TargetTab;
 	s_BkwTfMenuSelectedTab = TargetTab;
 	BkwTfBeginVoteAction(Voting, 0);
@@ -391,15 +423,40 @@ inline void BkwTfRenderServerPage(CUi *pUi, CVoting &Voting, CUIRect Content, in
 inline void RenderBkwTfMenuOverlay(CUi *pUi, const CVoting &VotingConst, bool Interactive = true)
 {
 	s_pBkwTfMenuLastUi = pUi;
+	s_BkwTfMenuConnectedToTeeFusion = BkwTfIsConnectedTeeFusion(pUi);
+
+	// If this is not a TeeFusion server according to the active master list,
+	// immediately hand control back to DDNet's native Call vote page.
+	if(!s_BkwTfMenuConnectedToTeeFusion)
+	{
+		if(Interactive && s_BkwTfMenuOverlayActive)
+		{
+			CGameClient *pGameClient = BkwTfGameClient(pUi);
+			BkwTfMenuOverlayReset(false);
+			s_BkwTfMenuOverlaySuppressReopen = true;
+			if(pGameClient)
+			{
+				pGameClient->m_Menus.SetMenuPage(CMenus::PAGE_CALLVOTE);
+				pGameClient->m_Menus.SetActive(true);
+			}
+			pUi->SetActiveItem(nullptr);
+		}
+		return;
+	}
+
 	CVoting &Voting = const_cast<CVoting &>(VotingConst);
 	if(Interactive)
+	{
+		// The normal menu is hidden while TF Menu is open, so drive the shared UI
+		// state here. OnCursorMove only updates the pending window-space mouse
+		// position; Update converts it into Ui()->MousePos and advances button edges.
+		pUi->SetEnabled(true);
+		pUi->Update();
 		BkwTfUpdateVoteTransition(Voting);
+	}
 
 	pUi->MapScreen();
 	CUIRect Screen = *pUi->Screen();
-	// The early interactive pass is underneath chat/info, the late visual pass is
-	// above them. Split the dimming so the final combined game darkness stays near
-	// the original ~70%, while late UI elements are still visibly pushed behind TF Menu.
 	Screen.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, Interactive ? 0.30f : 0.55f), IGraphics::CORNER_NONE, 0.0f);
 
 	const float CardW = minimum(Screen.w - 22.0f, 650.0f);
