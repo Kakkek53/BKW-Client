@@ -413,6 +413,31 @@ inline void BkwTfRenderPageItems(CUi *pUi, CVoting &Voting, const BkwTfMenu::SPa
 	}
 }
 
+inline void BkwTfNormalizeParsedPage(BkwTfMenu::SPage &Page)
+{
+	bool HasClanRootAction = false;
+	int RewardLinks = 0;
+	for(const BkwTfMenu::SItem &Item : Page.m_vItems)
+	{
+		const std::string &Match = Item.m_Detail.empty() ? Item.m_Text : Item.m_Detail;
+		if(BkwTfMenu::StartsWith(Match, "/clan_members") || BkwTfMenu::StartsWith(Match, "/clan_leave") || Item.m_Text == "Manage Clan")
+			HasClanRootAction = true;
+		if(Item.m_Kind == BkwTfMenu::EItemKind::ACTION && BkwTfMenu::Contains(Item.m_Text, "Нaгpaды зa"))
+			++RewardLinks;
+	}
+
+	if(Page.m_Title == "Взносы клана" && HasClanRootAction)
+	{
+		Page.m_Title = "Клан";
+		Page.m_Icon = BkwTfMenu::EIconHint::CLAN;
+	}
+	if(Page.m_Title == "Награды за вход" && RewardLinks >= 3)
+	{
+		Page.m_Title = "Награды";
+		Page.m_Icon = BkwTfMenu::EIconHint::GIFT;
+	}
+}
+
 inline void RenderBkwTfMenuOverlay(CUi *pUi, const CVoting &VotingConst, bool Interactive = true)
 {
 	s_pBkwTfMenuLastUi = pUi;
@@ -458,7 +483,10 @@ inline void RenderBkwTfMenuOverlay(CUi *pUi, const CVoting &VotingConst, bool In
 	BkwTfMenu::SPage Page;
 	const bool HasCompleteVoteList = Voting.NumOptions() > 0 && !Voting.IsReceivingOptions();
 	if(HasCompleteVoteList)
+	{
 		Page = BkwTfMenu::ParsePage(Voting);
+		BkwTfNormalizeParsedPage(Page);
+	}
 
 	CUIRect Header, Body;
 	Card.HSplitTop(46.0f, &Header, &Body);
