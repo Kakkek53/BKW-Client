@@ -19,6 +19,58 @@ namespace
 {
 static CBcGradient *s_pActiveGradient = nullptr;
 static CGameClient *s_pGameClient = nullptr;
+static vec2 s_CameraDriftTargetOffset = vec2(0.0f, 0.0f);
+static vec2 s_CameraDriftCurrentOffset = vec2(0.0f, 0.0f);
+
+static void UpdateGameplayCameraDrift(CGameClient *pGameClient)
+{
+	if(pGameClient == nullptr)
+		return;
+
+	IClient *pClient = pGameClient->Client();
+	if(pClient == nullptr || pClient->State() != IClient::STATE_ONLINE)
+	{
+		s_CameraDriftTargetOffset = vec2(0.0f, 0.0f);
+		s_CameraDriftCurrentOffset = vec2(0.0f, 0.0f);
+		return;
+	}
+
+	// BestClient 1.6.1 behavior: gameplay drift is unavailable on FNG/0xf
+	// and while spectating. Demo playback keeps using CCamera's existing
+	// demo-only implementation, so the effect is never applied twice.
+	const bool IsFngServer = pGameClient->m_GameInfo.m_PredictFNG;
+	const bool Is0xFServer = str_comp_nocase(pGameClient->m_GameInfo.m_aGameType, "0xf") == 0;
+	const bool IsBlockedCameraServer = IsFngServer || Is0xFServer;
+	if(!g_Config.m_BcCameraDrift || IsBlockedCameraServer || pGameClient->m_Snap.m_SpecInfo.m_Active)
+		return;
+
+	// Use predicted horizontal velocity exactly like BestClient 1.6.1, so the
+	// drift follows local simulation instead of delayed server snapshots.
+	const vec2 PlayerVel = vec2(pGameClient->m_PredictedChar.m_Vel.x, 0.0f);
+	vec2 DriftDirection = normalize(PlayerVel);
+	if(g_Config.m_BcCameraDriftReverse)
+		DriftDirection *= -1.0f;
+
+	const float VelocityFactor = length(PlayerVel);
+	const float DriftMultiplier = 1.0f + VelocityFactor / 10.0f;
+	const float DriftAmount = VelocityFactor * (g_Config.m_BcCameraDriftAmount / 50.0f) * DriftMultiplier;
+	s_CameraDriftTargetOffset = DriftDirection * DriftAmount;
+
+	if(g_Config.m_BcCameraDriftSmoothness > 0)
+	{
+		const float SmoothFactor = (1.0f - g_Config.m_BcCameraDriftSmoothness / 100.0f) * 10.0f;
+		s_CameraDriftCurrentOffset += (s_CameraDriftTargetOffset - s_CameraDriftCurrentOffset) * minimum(pClient->RenderFrameTime() * SmoothFactor, 1.0f);
+	}
+	else
+	{
+		s_CameraDriftCurrentOffset = s_CameraDriftTargetOffset;
+	}
+
+	// CBcGradient is rendered immediately after CCamera and before the map.
+	// Applying the offset here restores the old visual camera behavior without
+	// replacing the current demo-camera / Dynamic FOV implementation.
+	pGameClient->m_Camera.m_Center += s_CameraDriftCurrentOffset;
+}
 
 static ColorRGBA ConfigColor(unsigned ConfigValue)
 {
@@ -272,6 +324,8 @@ void CBcGradient::RefreshCachedText()
 
 void CBcGradient::OnRender()
 {
+	UpdateGameplayCameraDrift(GameClient());
+
 	const int Everything = g_Config.m_BcNameplateGradientEverything;
 	const int Nick = g_Config.m_BcNameplateGradient;
 	const int Clan = g_Config.m_BcNameplateGradientClan;
