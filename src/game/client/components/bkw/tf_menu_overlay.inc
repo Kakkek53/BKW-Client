@@ -4,8 +4,11 @@
 #include <base/str.h>
 #include <base/system.h>
 
+#include <engine/client/client.h>
+
 #include <game/client/components/bkw/tf_menu_parser.inc>
 #include <game/client/components/voting.h>
+#include <game/client/gameclient.h>
 #include <game/client/ui.h>
 
 #include <algorithm>
@@ -58,6 +61,27 @@ inline uint64_t BkwTfVoteSignature(const CVoting &Voting)
 	}
 	Hash ^= static_cast<uint64_t>(Voting.NumOptions());
 	return Hash;
+}
+
+inline void BkwTfPulseMenuInput()
+{
+	if(!s_pBkwTfMenuLastUi)
+		return;
+	IClient *pClient = s_pBkwTfMenuLastUi->Client();
+	if(!pClient || pClient->State() != IClient::STATE_ONLINE)
+		return;
+
+	CClient *pConcreteClient = static_cast<CClient *>(pClient);
+	CGameClient *pGameClient = static_cast<CGameClient *>(pConcreteClient->GameClient());
+	if(!pGameClient)
+		return;
+
+	const bool WasMenuActive = pGameClient->m_Menus.IsActive();
+	if(!WasMenuActive)
+		pGameClient->m_Menus.SetActive(true);
+	pConcreteClient->SendInput();
+	if(!WasMenuActive)
+		pGameClient->m_Menus.SetActive(false);
 }
 
 inline bool BkwTfIsMainRoot(const CVoting &Voting)
@@ -170,6 +194,10 @@ inline void BkwTfBeginVoteAction(CVoting &Voting, int OptionIndex)
 	if(s_BkwTfMenuWaitingForUpdate || OptionIndex < 0 || OptionIndex >= Voting.NumOptions())
 		return;
 
+	// TeeFusion exposes/refreshes its vote UI when the player reports IN_MENU.
+	// Pulse the same flag that made the F6 parser work immediately before the
+	// real CallvoteOption, so submenu navigation behaves like the native menu.
+	BkwTfPulseMenuInput();
 	s_BkwTfMenuVoteSignatureBeforeAction = BkwTfVoteSignature(Voting);
 	s_BkwTfMenuActionStartedAt = time_get();
 	s_BkwTfMenuWaitingForUpdate = true;
@@ -369,9 +397,11 @@ inline void RenderBkwTfMenuOverlay(CUi *pUi, const CVoting &VotingConst, bool In
 
 	pUi->MapScreen();
 	CUIRect Screen = *pUi->Screen();
-	Screen.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 0.72f), IGraphics::CORNER_NONE, 0.0f);
+	// The early interactive pass is underneath chat/info, the late visual pass is
+	// above them. Split the dimming so the final combined game darkness stays near
+	// the original ~70%, while late UI elements are still visibly pushed behind TF Menu.
+	Screen.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, Interactive ? 0.30f : 0.55f), IGraphics::CORNER_NONE, 0.0f);
 
-	// Slightly larger than the first prototype while still fitting the 300px DDNet UI canvas.
 	const float CardW = minimum(Screen.w - 22.0f, 650.0f);
 	const float CardH = minimum(Screen.h - 16.0f, 284.0f);
 	CUIRect Card{Screen.x + (Screen.w - CardW) * 0.5f, Screen.y + (Screen.h - CardH) * 0.5f, CardW, CardH};
