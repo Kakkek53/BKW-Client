@@ -12,17 +12,6 @@
 #include <cstdint>
 #include <vector>
 
-inline bool s_BkwTfMenuOverlayActive = false;
-inline bool s_BkwTfMenuOverlaySuppressReopen = false;
-inline bool s_BkwTfMenuOverlayPulseSent = false;
-inline int s_BkwTfMenuSelectedTab = 0;
-inline int s_BkwTfMenuPendingTab = -1;
-inline int s_BkwTfMenuScrollRow = 0;
-inline bool s_BkwTfMenuWaitingForUpdate = false;
-inline uint64_t s_BkwTfMenuVoteSignatureBeforeAction = 0;
-inline int64_t s_BkwTfMenuActionStartedAt = 0;
-inline CUi *s_pBkwTfMenuLastUi = nullptr;
-
 inline void BkwTfMenuOverlayReset()
 {
 	const bool WasActive = s_BkwTfMenuOverlayActive;
