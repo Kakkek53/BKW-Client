@@ -15,6 +15,16 @@ inline bool UseDdnetMenu(EServerCommunity Community)
 	return Community == EServerCommunity::DDNET;
 }
 
+inline bool UseCustomVoteMenu(EServerCommunity Community, bool Enabled)
+{
+	return Enabled && (UseTfMenu(Community) || UseDdnetMenu(Community));
+}
+
+inline bool IsPersonalizationAvailable(EServerCommunity Community)
+{
+	return UseTfMenu(Community);
+}
+
 inline const char *VoteMenuTitle(EServerCommunity Community)
 {
 	if(UseTfMenu(Community))
