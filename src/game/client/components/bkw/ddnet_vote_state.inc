@@ -28,6 +28,14 @@ struct SThumbnail
 	bool m_Failed = false;
 };
 
+struct SRank
+{
+	int m_Rank = 0;
+	std::string m_Player;
+	std::string m_Country;
+	double m_Time = 0.0;
+};
+
 struct SStats
 {
 	bool m_Ready = false;
@@ -39,6 +47,7 @@ struct SStats
 	double m_AverageTime = 0.0;
 	int m_Finishes = 0;
 	int m_Finishers = 0;
+	std::vector<SRank> m_vRanks;
 };
 
 inline bool CatalogRequested = false;
@@ -50,7 +59,14 @@ inline std::vector<SThumbnail> vThumbnails;
 
 inline bool DetailOpen = false;
 inline int SelectedMap = -1;
+inline std::string StatsRequestedMap;
+inline std::shared_ptr<IHttpRequest> pStatsRequest;
 inline SStats Stats;
+
+inline int SelectedTab = 0;
+inline int ScrollRow = 0;
+inline bool CustomMenuEnabled = true;
+inline CLineInputBuffered<128> SearchInput;
 }
 
 #endif
