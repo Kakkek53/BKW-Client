@@ -43,13 +43,16 @@ struct SStats
 	std::string m_Name;
 	std::string m_Type;
 	std::string m_Mapper;
+	int m_Points = 0;
 	int m_Difficulty = 0;
 	double m_AverageTime = 0.0;
 	int m_Finishes = 0;
 	int m_Finishers = 0;
+	int m_BiggestTeam = 0;
 	std::vector<SRank> m_vRanks;
 };
 
+inline IHttp *pHttp = nullptr;
 inline bool CatalogRequested = false;
 inline bool CatalogReady = false;
 inline bool CatalogFailed = false;
