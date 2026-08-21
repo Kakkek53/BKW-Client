@@ -335,9 +335,11 @@ inline void Render(CUi *pUi, EIcon Icon, const CUIRect &Rect, ColorRGBA Color = 
 	const float OriginX = Rect.x + (Rect.w - 24.0f * Scale) * 0.5f;
 	const float OriginY = Rect.y + (Rect.h - 24.0f * Scale) * 0.5f;
 	std::vector<IGraphics::CLineItem> vLines;
-	vLines.reserve(Geometry.m_vSegments.size() * 3);
+	vLines.reserve(Geometry.m_vSegments.size() * 5);
 
-	const float StrokeOffset = maximum(0.16f, pUi->PixelSize() * 0.30f);
+	// Five centered passes make TF Menu glyphs a little bolder without changing
+	// their proportions or the layout around them.
+	const float StrokeOffset = maximum(0.18f, pUi->PixelSize() * 0.34f);
 	for(const SSegment &Segment : Geometry.m_vSegments)
 	{
 		const float X0 = OriginX + Segment.m_From.x * Scale;
@@ -346,7 +348,9 @@ inline void Render(CUi *pUi, EIcon Icon, const CUIRect &Rect, ColorRGBA Color = 
 		const float Y1 = OriginY + Segment.m_To.y * Scale;
 		vLines.emplace_back(X0, Y0, X1, Y1);
 		vLines.emplace_back(X0 + StrokeOffset, Y0, X1 + StrokeOffset, Y1);
+		vLines.emplace_back(X0 - StrokeOffset, Y0, X1 - StrokeOffset, Y1);
 		vLines.emplace_back(X0, Y0 + StrokeOffset, X1, Y1 + StrokeOffset);
+		vLines.emplace_back(X0, Y0 - StrokeOffset, X1, Y1 - StrokeOffset);
 	}
 
 	IGraphics *pGraphics = pUi->Graphics();
