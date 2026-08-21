@@ -6,8 +6,10 @@
 #include <base/vmath.h>
 
 #include <engine/console.h>
+#include <engine/shared/json.h>
 
 #include <game/client/component.h>
+#include <game/client/components/bkw/ddnet_vote_state.inc>
 
 #include <cstdint>
 #include <vector>
