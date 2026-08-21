@@ -8,6 +8,7 @@
 #include <engine/shared/json.h>
 
 #include <game/client/components/bkw/ddnet_vote_state.inc>
+#include <game/client/components/bkw/tf_svg_icons.inc>
 #include <game/client/components/voting.h>
 #include <game/client/gameclient.h>
 #include <game/client/ui.h>
@@ -107,12 +108,14 @@ inline void BkwDdnetUpdateCatalog()
 		const json_value *pEntry = pRoot->u.array.values[i];
 		if(!pEntry || pEntry->type != json_object)
 			continue;
+
 		BkwDdnetVoteState::SMap Map;
 		if(!BkwDdnetJsonString(pEntry, "name", Map.m_Name) || Map.m_Name.empty())
 			continue;
 		BkwDdnetJsonString(pEntry, "thumbnail", Map.m_Thumbnail);
 		BkwDdnetJsonString(pEntry, "type", Map.m_Type);
 		BkwDdnetJsonString(pEntry, "mapper", Map.m_Mapper);
+		BkwDdnetJsonString(pEntry, "release", Map.m_Release);
 		Map.m_Points = BkwDdnetJsonInt(pEntry, "points");
 		Map.m_Difficulty = std::clamp(BkwDdnetJsonInt(pEntry, "difficulty"), 0, 5);
 		vMaps.push_back(std::move(Map));
@@ -166,13 +169,13 @@ inline void BkwDdnetUpdateThumbnail(CUi *pUi, int MapIndex)
 	Thumb.m_pRequest.reset();
 }
 
-inline void BkwDdnetRenderTexture(CUi *pUi, IGraphics::CTextureHandle Texture, const CUIRect &Rect)
+inline void BkwDdnetRenderTexture(CUi *pUi, IGraphics::CTextureHandle Texture, const CUIRect &Rect, float Alpha = 1.0f)
 {
 	if(!Texture.IsValid())
 		return;
 	pUi->Graphics()->TextureSet(Texture);
 	pUi->Graphics()->QuadsBegin();
-	pUi->Graphics()->SetColor(1.0f, 1.0f, 1.0f, 1.0f);
+	pUi->Graphics()->SetColor(1.0f, 1.0f, 1.0f, Alpha);
 	IGraphics::CQuadItem Quad(Rect.x, Rect.y, Rect.w, Rect.h);
 	pUi->Graphics()->QuadsDrawTL(&Quad, 1);
 	pUi->Graphics()->QuadsEnd();
@@ -192,10 +195,9 @@ inline void BkwDdnetSendMapVote(CGameClient *pGameClient, const std::string &Nam
 	if(!pGameClient || Name.empty())
 		return;
 	char aCommand[256];
-	if(str_find(Name.c_str(), " "))
-		str_format(aCommand, sizeof(aCommand), "/map \"%s\"", Name.c_str());
-	else
-		str_format(aCommand, sizeof(aCommand), "/map %s", Name.c_str());
+	// DDNet accepts quoted map names for both single-word and multi-word maps.
+	// Always quote so the command has one predictable form: /map "name".
+	str_format(aCommand, sizeof(aCommand), "/map \"%s\"", Name.c_str());
 	pGameClient->m_Chat.SendChat(0, aCommand);
 }
 
@@ -274,14 +276,24 @@ inline void BkwDdnetUpdateStats()
 	BkwDdnetVoteState::pStatsRequest.reset();
 }
 
-inline bool BkwDdnetSmallButton(CUi *pUi, CButtonContainer *pButton, const char *pText, CUIRect Rect, bool Interactive, bool Accent = false, bool Negative = false)
+inline bool BkwDdnetSmallButton(CUi *pUi, CButtonContainer *pButton, const char *pText, CUIRect Rect, bool Interactive, bool Accent = false, bool Negative = false, BkwTfSvg::EIcon Icon = BkwTfSvg::EIcon::COUNT)
 {
 	const bool Hovered = Interactive && pUi->MouseInside(&Rect);
 	ColorRGBA Color = Accent ? ColorRGBA(0.20f, 0.45f, 0.82f, Hovered ? 0.88f : 0.68f) : ColorRGBA(1.0f, 1.0f, 1.0f, Hovered ? 0.16f : 0.08f);
 	if(Negative)
 		Color = ColorRGBA(0.62f, 0.14f, 0.12f, Hovered ? 0.70f : 0.48f);
 	Rect.Draw(Color, IGraphics::CORNER_ALL, 6.0f);
-	pUi->DoLabel(&Rect, pText, 9.3f, TEXTALIGN_MC, {.m_MaxWidth = Rect.w - 4.0f});
+
+	CUIRect Label = Rect;
+	if(Icon != BkwTfSvg::EIcon::COUNT)
+	{
+		CUIRect IconRect;
+		Label.VSplitLeft(23.0f, &IconRect, &Label);
+		IconRect.Margin(5.0f, &IconRect);
+		BkwTfSvg::Render(pUi, Icon, IconRect, ColorRGBA(1.0f, 1.0f, 1.0f, 0.90f));
+		Label.VSplitLeft(1.0f, nullptr, &Label);
+	}
+	pUi->DoLabel(&Label, pText, 9.3f, TEXTALIGN_MC, {.m_MaxWidth = Label.w - 4.0f});
 	return Interactive && pUi->DoButtonLogic(pButton, 0, &Rect, BUTTONFLAG_LEFT);
 }
 
@@ -343,7 +355,7 @@ inline void BkwDdnetRenderMapCards(CUi *pUi, CGameClient *pGameClient, CUIRect B
 	const float CardW = (Body.w - Gap * (Columns - 1)) / Columns;
 	const float CardH = (Body.h - Gap) / VisibleRows;
 	static CButtonContainer s_aVoteButtons[Columns * VisibleRows];
-	static CButtonContainer s_aStatsButtons[Columns * VisibleRows];
+	static CButtonContainer s_aDetailsButtons[Columns * VisibleRows];
 
 	int Slot = 0;
 	for(int Row = 0; Row < VisibleRows; ++Row)
@@ -359,10 +371,11 @@ inline void BkwDdnetRenderMapCards(CUi *pUi, CGameClient *pGameClient, CUIRect B
 				BkwDdnetUpdateThumbnail(pUi, MapIndex);
 
 			CUIRect Card{Body.x + Col * (CardW + Gap), Body.y + Row * (CardH + Gap), CardW, CardH};
-			Card.Draw(ColorRGBA(1.0f, 1.0f, 1.0f, 0.045f), IGraphics::CORNER_ALL, 9.0f);
+			Card.Draw(ColorRGBA(1.0f, 1.0f, 1.0f, 0.050f), IGraphics::CORNER_ALL, 9.0f);
 			Card.Margin(6.0f, &Card);
+
 			CUIRect Image, Info, Buttons;
-			Card.HSplitTop(Card.h * 0.45f, &Image, &Card);
+			Card.HSplitTop(Card.h * 0.40f, &Image, &Card);
 			Card.HSplitBottom(27.0f, &Info, &Buttons);
 			Image.Draw(ColorRGBA(0.02f, 0.022f, 0.027f, 0.95f), IGraphics::CORNER_ALL, 6.0f);
 			if(MapIndex < (int)BkwDdnetVoteState::vThumbnails.size() && BkwDdnetVoteState::vThumbnails[MapIndex].m_Texture.IsValid())
@@ -371,24 +384,31 @@ inline void BkwDdnetRenderMapCards(CUi *pUi, CGameClient *pGameClient, CUIRect B
 				pUi->DoLabel(&Image, "DDNet", 12.0f, TEXTALIGN_MC);
 
 			Info.HSplitTop(4.0f, nullptr, &Info);
-			CUIRect Name, Meta, Mapper;
-			Info.HSplitTop(19.0f, &Name, &Info);
-			Info.HSplitTop(16.0f, &Meta, &Info);
-			Info.HSplitTop(16.0f, &Mapper, &Info);
-			pUi->DoLabel(&Name, Map.m_Name.c_str(), 11.0f, TEXTALIGN_ML, {.m_MaxWidth = Name.w});
+			CUIRect Name, Meta, Mapper, Release;
+			Info.HSplitTop(18.0f, &Name, &Info);
+			Info.HSplitTop(15.0f, &Meta, &Info);
+			Info.HSplitTop(15.0f, &Mapper, &Info);
+			Info.HSplitTop(15.0f, &Release, &Info);
+			pUi->DoLabel(&Name, Map.m_Name.c_str(), 10.8f, TEXTALIGN_ML, {.m_MaxWidth = Name.w});
+
 			char aMeta[128];
 			str_format(aMeta, sizeof(aMeta), "%s   %s", Map.m_Type.c_str(), BkwDdnetStars(Map.m_Difficulty).c_str());
-			pUi->DoLabel(&Meta, aMeta, 8.8f, TEXTALIGN_ML, {.m_MaxWidth = Meta.w});
+			pUi->DoLabel(&Meta, aMeta, 8.6f, TEXTALIGN_ML, {.m_MaxWidth = Meta.w});
+
 			char aMapper[192];
 			str_format(aMapper, sizeof(aMapper), "Автор: %s", Map.m_Mapper.c_str());
-			pUi->DoLabel(&Mapper, aMapper, 8.4f, TEXTALIGN_ML, {.m_MaxWidth = Mapper.w});
+			pUi->DoLabel(&Mapper, aMapper, 8.2f, TEXTALIGN_ML, {.m_MaxWidth = Mapper.w});
 
-			CUIRect Vote, Stats;
-			Buttons.VSplitMid(&Vote, &Stats, 5.0f);
-			if(BkwDdnetSmallButton(pUi, &s_aVoteButtons[Slot], "Проголосовать", Vote, Interactive, true))
-				BkwDdnetSendMapVote(pGameClient, Map.m_Name);
-			if(BkwDdnetSmallButton(pUi, &s_aStatsButtons[Slot], "Статистика", Stats, Interactive))
+			char aRelease[160];
+			str_format(aRelease, sizeof(aRelease), "Релиз: %s", Map.m_Release.empty() ? "—" : Map.m_Release.c_str());
+			pUi->DoLabel(&Release, aRelease, 8.0f, TEXTALIGN_ML, {.m_MaxWidth = Release.w});
+
+			CUIRect Details, Vote;
+			Buttons.VSplitMid(&Details, &Vote, 5.0f);
+			if(BkwDdnetSmallButton(pUi, &s_aDetailsButtons[Slot], "Подробнее", Details, Interactive, false, false, BkwTfSvg::EIcon::INFO))
 				BkwDdnetStartStats(MapIndex);
+			if(BkwDdnetSmallButton(pUi, &s_aVoteButtons[Slot], "Голосовать", Vote, Interactive, true, false, BkwTfSvg::EIcon::CHECK))
+				BkwDdnetSendMapVote(pGameClient, Map.m_Name);
 		}
 	}
 }
@@ -400,8 +420,8 @@ inline void BkwDdnetRenderStats(CUi *pUi, CGameClient *pGameClient, CUIRect Body
 	CUIRect BackRow;
 	Body.HSplitTop(30.0f, &BackRow, &Body);
 	CUIRect Back, Spacer;
-	BackRow.VSplitLeft(110.0f, &Back, &Spacer);
-	if(BkwDdnetSmallButton(pUi, &s_BackButton, "← К картам", Back, Interactive))
+	BackRow.VSplitLeft(125.0f, &Back, &Spacer);
+	if(BkwDdnetSmallButton(pUi, &s_BackButton, "К картам", Back, Interactive, false, false, BkwTfSvg::EIcon::BACK))
 	{
 		BkwDdnetVoteState::DetailOpen = false;
 		BkwDdnetVoteState::SelectedMap = -1;
@@ -423,33 +443,40 @@ inline void BkwDdnetRenderStats(CUi *pUi, CGameClient *pGameClient, CUIRect Body
 	Body.VSplitLeft(Body.w * 0.46f, &Left, &Right);
 	Left.VSplitRight(8.0f, &Left, nullptr);
 	Right.VSplitLeft(8.0f, nullptr, &Right);
-	Left.Draw(ColorRGBA(1.0f, 1.0f, 1.0f, 0.040f), IGraphics::CORNER_ALL, 9.0f);
-	Right.Draw(ColorRGBA(1.0f, 1.0f, 1.0f, 0.040f), IGraphics::CORNER_ALL, 9.0f);
+	Left.Draw(ColorRGBA(0.02f, 0.024f, 0.03f, 0.78f), IGraphics::CORNER_ALL, 9.0f);
+	Right.Draw(ColorRGBA(0.02f, 0.024f, 0.03f, 0.78f), IGraphics::CORNER_ALL, 9.0f);
 	Left.Margin(8.0f, &Left);
 	Right.Margin(10.0f, &Right);
 
 	CUIRect Image, Vote;
 	Left.HSplitTop(Left.h - 38.0f, &Image, &Vote);
-	Image.Draw(ColorRGBA(0.02f, 0.022f, 0.027f, 0.95f), IGraphics::CORNER_ALL, 7.0f);
+	Image.Draw(ColorRGBA(0.02f, 0.022f, 0.027f, 0.86f), IGraphics::CORNER_ALL, 7.0f);
 	if(MapIndex < (int)BkwDdnetVoteState::vThumbnails.size() && BkwDdnetVoteState::vThumbnails[MapIndex].m_Texture.IsValid())
 		BkwDdnetRenderTexture(pUi, BkwDdnetVoteState::vThumbnails[MapIndex].m_Texture, Image);
 	else
 		pUi->DoLabel(&Image, "DDNet", 16.0f, TEXTALIGN_MC);
 	Vote.HSplitTop(8.0f, nullptr, &Vote);
-	if(BkwDdnetSmallButton(pUi, &s_VoteButton, "Проголосовать за карту", Vote, Interactive, true))
+	if(BkwDdnetSmallButton(pUi, &s_VoteButton, "Голосовать", Vote, Interactive, true, false, BkwTfSvg::EIcon::CHECK))
 		BkwDdnetSendMapVote(pGameClient, Map.m_Name);
 
-	CUIRect Name, Meta, Mapper;
+	CUIRect Name, Meta, Mapper, Release;
 	Right.HSplitTop(25.0f, &Name, &Right);
 	Right.HSplitTop(20.0f, &Meta, &Right);
 	Right.HSplitTop(20.0f, &Mapper, &Right);
+	Right.HSplitTop(20.0f, &Release, &Right);
 	pUi->DoLabel(&Name, Map.m_Name.c_str(), 15.0f, TEXTALIGN_ML, {.m_MaxWidth = Name.w});
+
 	char aMeta[160];
 	str_format(aMeta, sizeof(aMeta), "%s   %s   •   %d очк.", Map.m_Type.c_str(), BkwDdnetStars(Map.m_Difficulty).c_str(), Map.m_Points);
 	pUi->DoLabel(&Meta, aMeta, 9.6f, TEXTALIGN_ML, {.m_MaxWidth = Meta.w});
+
 	char aMapper[192];
 	str_format(aMapper, sizeof(aMapper), "Автор: %s", Map.m_Mapper.c_str());
 	pUi->DoLabel(&Mapper, aMapper, 9.4f, TEXTALIGN_ML, {.m_MaxWidth = Mapper.w});
+
+	char aRelease[160];
+	str_format(aRelease, sizeof(aRelease), "Релиз: %s", Map.m_Release.empty() ? "—" : Map.m_Release.c_str());
+	pUi->DoLabel(&Release, aRelease, 9.2f, TEXTALIGN_ML, {.m_MaxWidth = Release.w});
 	Right.HSplitTop(8.0f, nullptr, &Right);
 
 	const auto &Stats = BkwDdnetVoteState::Stats;
@@ -520,10 +547,10 @@ inline void BkwDdnetRenderPlayers(CUi *pUi, CGameClient *pGameClient, CVoting &V
 		Row.Draw(ColorRGBA(1.0f, 1.0f, 1.0f, 0.045f), IGraphics::CORNER_ALL, 7.0f);
 		Row.Margin(5.0f, &Row);
 		CUIRect Name, Action;
-		Row.VSplitRight(120.0f, &Name, &Action);
+		Row.VSplitRight(140.0f, &Name, &Action);
 		pUi->DoLabel(&Name, pGameClient->m_aClients[ClientId].m_aName, 10.5f, TEXTALIGN_ML, {.m_MaxWidth = Name.w - 5.0f});
 		CButtonContainer *pButton = Spectate ? &s_aSpecButtons[ClientId] : &s_aKickButtons[ClientId];
-		if(BkwDdnetSmallButton(pUi, pButton, Spectate ? "В наблюдатели" : "Кик", Action, Interactive, false, !Spectate))
+		if(BkwDdnetSmallButton(pUi, pButton, Spectate ? "В наблюдатели" : "Кик с сервера", Action, Interactive, false, !Spectate, Spectate ? BkwTfSvg::EIcon::USER : BkwTfSvg::EIcon::WARNING))
 		{
 			if(Spectate)
 				Voting.CallvoteSpectate(ClientId, "");
@@ -549,23 +576,45 @@ inline void RenderBkwDdnetVoteOverlay(CUi *pUi, CGameClient *pGameClient, const 
 
 	pUi->MapScreen();
 	CUIRect Screen = *pUi->Screen();
-	Screen.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, Interactive ? 0.34f : 0.58f), IGraphics::CORNER_NONE, 0.0f);
+
+	// The details page uses the selected map preview as the scene background.
+	// A strong dark overlay keeps text readable while retaining the map artwork.
+	if(BkwDdnetVoteState::DetailOpen && BkwDdnetVoteState::SelectedMap >= 0 && BkwDdnetVoteState::SelectedMap < (int)BkwDdnetVoteState::vThumbnails.size())
+	{
+		const int MapIndex = BkwDdnetVoteState::SelectedMap;
+		if(Interactive)
+			BkwDdnetUpdateThumbnail(pUi, MapIndex);
+		const auto &Thumb = BkwDdnetVoteState::vThumbnails[MapIndex];
+		if(Thumb.m_Texture.IsValid())
+			BkwDdnetRenderTexture(pUi, Thumb.m_Texture, Screen, 0.58f);
+		Screen.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 0.72f), IGraphics::CORNER_NONE, 0.0f);
+	}
+	else
+	{
+		Screen.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, Interactive ? 0.34f : 0.58f), IGraphics::CORNER_NONE, 0.0f);
+	}
+
 	const float CardW = minimum(Screen.w - 18.0f, 820.0f);
 	const float CardH = minimum(Screen.h - 14.0f, 480.0f);
 	CUIRect Card{Screen.x + (Screen.w - CardW) * 0.5f, Screen.y + (Screen.h - CardH) * 0.5f, CardW, CardH};
 	Card.Draw(ColorRGBA(0.66f, 0.68f, 0.72f, 0.62f), IGraphics::CORNER_ALL, 18.0f);
 	Card.Margin(3.2f, &Card);
-	Card.Draw(ColorRGBA(0.024f, 0.026f, 0.031f, 0.995f), IGraphics::CORNER_ALL, 16.0f);
+	Card.Draw(ColorRGBA(0.024f, 0.026f, 0.031f, BkwDdnetVoteState::DetailOpen ? 0.91f : 0.995f), IGraphics::CORNER_ALL, 16.0f);
 	Card.Margin(13.0f, &Card);
 
 	CUIRect Header, Body;
 	Card.HSplitTop(48.0f, &Header, &Body);
 	CUIRect Title, Tabs;
-	Header.VSplitLeft(205.0f, &Title, &Tabs);
-	pUi->DoLabel(&Title, "DDNet Race Menu", 17.0f, TEXTALIGN_ML);
+	Header.VSplitLeft(215.0f, &Title, &Tabs);
+	CUIRect TitleIcon, TitleText;
+	Title.VSplitLeft(32.0f, &TitleIcon, &TitleText);
+	TitleIcon.Margin(6.0f, &TitleIcon);
+	BkwTfSvg::Render(pUi, BkwTfSvg::EIcon::GAME, TitleIcon, ColorRGBA(0.58f, 0.78f, 1.0f, 0.96f));
+	pUi->DoLabel(&TitleText, "DDNet Голосование", 16.0f, TEXTALIGN_ML);
 
 	static CButtonContainer s_aTabButtons[3];
-	const char *apTabs[3] = {"Карты", "Кик", "В наблюдатели"};
+	const char *apTabs[3] = {"Карты", "Кик", "Наблюдатели"};
+	const BkwTfSvg::EIcon aTabIcons[3] = {BkwTfSvg::EIcon::GAME, BkwTfSvg::EIcon::WARNING, BkwTfSvg::EIcon::USER};
 	for(int Tab = 0; Tab < 3; ++Tab)
 	{
 		CUIRect Button;
@@ -573,7 +622,13 @@ inline void RenderBkwDdnetVoteOverlay(CUi *pUi, CGameClient *pGameClient, const 
 		const bool Active = BkwDdnetVoteState::SelectedTab == Tab;
 		const bool Hovered = Interactive && pUi->MouseInside(&Button);
 		Button.Draw(ColorRGBA(1.0f, 1.0f, 1.0f, Active ? 0.16f : (Hovered ? 0.10f : 0.045f)), IGraphics::CORNER_ALL, 7.0f);
-		pUi->DoLabel(&Button, apTabs[Tab], 10.3f, TEXTALIGN_MC);
+
+		CUIRect IconRect, LabelRect;
+		Button.VSplitLeft(25.0f, &IconRect, &LabelRect);
+		IconRect.Margin(6.0f, &IconRect);
+		BkwTfSvg::Render(pUi, aTabIcons[Tab], IconRect, ColorRGBA(1.0f, 1.0f, 1.0f, Active ? 1.0f : 0.82f));
+		LabelRect.VSplitLeft(1.0f, nullptr, &LabelRect);
+		pUi->DoLabel(&LabelRect, apTabs[Tab], 10.0f, TEXTALIGN_MC, {.m_MaxWidth = LabelRect.w - 2.0f});
 		if(Interactive && pUi->DoButtonLogic(&s_aTabButtons[Tab], 0, &Button, BUTTONFLAG_LEFT))
 		{
 			BkwDdnetVoteState::SelectedTab = Tab;
@@ -597,7 +652,9 @@ inline void RenderBkwDdnetVoteOverlay(CUi *pUi, CGameClient *pGameClient, const 
 			BkwDdnetRenderMapCards(pUi, pGameClient, Body, Interactive);
 	}
 	else
+	{
 		BkwDdnetRenderPlayers(pUi, pGameClient, Voting, Body, Interactive, BkwDdnetVoteState::SelectedTab == 2);
+	}
 }
 
 #endif
