@@ -1,8 +1,6 @@
 #ifndef GAME_CLIENT_COMPONENTS_BKW_TF_MENU_STATE_INC
 #define GAME_CLIENT_COMPONENTS_BKW_TF_MENU_STATE_INC
 
-#include <game/client/components/bkw/ddnet_vote_state.inc>
-
 #include <cstdint>
 
 class CUi;
