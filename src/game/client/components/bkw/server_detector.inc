@@ -10,8 +10,10 @@
 #include <engine/shared/json.h>
 
 #include <cctype>
+#include <iterator>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace BkwServerDetector
