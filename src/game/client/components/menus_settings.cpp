@@ -168,6 +168,65 @@ void RenderTfMenuSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, CU
 	pUi->DoLabel(&Status, aStatus, 11.0f, TEXTALIGN_ML);
 }
 
+void RenderTfDuelHudSettings(CMenus *pMenus, CUi *pUi, CUIRect PageView)
+{
+	static int s_TfDuelHudToggleId;
+	static int s_TfDuelHideBroadcastToggleId;
+	static CButtonContainer s_aTfDuelStyleButtons[4];
+	static CButtonContainer s_TfDuelResetButton;
+
+	PageView.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.46f), IGraphics::CORNER_ALL, 8.0f);
+	PageView.Margin(10.0f, &PageView);
+
+	CUIRect TitleRow, Title, Reset;
+	PageView.HSplitTop(26.0f, &TitleRow, &PageView);
+	TitleRow.VSplitRight(92.0f, &Title, &Reset);
+	pUi->DoLabel(&Title, "TeeFusion Duel HUD", 18.0f, TEXTALIGN_ML);
+	if(pMenus->DoButton_Menu(&s_TfDuelResetButton, "Сбросить", 0, &Reset))
+	{
+		g_Config.m_BkwTfDuelHud = 1;
+		g_Config.m_BkwTfDuelHudStyle = 0;
+		g_Config.m_BkwTfDuelHideBroadcast = 1;
+	}
+
+	PageView.HSplitTop(5.0f, nullptr, &PageView);
+	CUIRect Toggle;
+	PageView.HSplitTop(24.0f, &Toggle, &PageView);
+	if(pMenus->DoButton_CheckBox(&s_TfDuelHudToggleId, "Свой счёт дуэли TeeFusion", g_Config.m_BkwTfDuelHud, &Toggle))
+		g_Config.m_BkwTfDuelHud ^= 1;
+
+	PageView.HSplitTop(3.0f, nullptr, &PageView);
+	CUIRect HideBroadcast;
+	PageView.HSplitTop(24.0f, &HideBroadcast, &PageView);
+	if(pMenus->DoButton_CheckBox(&s_TfDuelHideBroadcastToggleId, "Скрывать стандартный broadcast счёта", g_Config.m_BkwTfDuelHideBroadcast, &HideBroadcast))
+		g_Config.m_BkwTfDuelHideBroadcast ^= 1;
+
+	PageView.HSplitTop(7.0f, nullptr, &PageView);
+	CUIRect StyleLabel;
+	PageView.HSplitTop(18.0f, &StyleLabel, &PageView);
+	pUi->DoLabel(&StyleLabel, "Стиль табло", 12.0f, TEXTALIGN_ML);
+
+	PageView.HSplitTop(4.0f, nullptr, &PageView);
+	CUIRect StyleButtons;
+	PageView.HSplitTop(30.0f, &StyleButtons, &PageView);
+	const char *apStyleNames[4] = {"Liquid Glass", "Minimal", "Neon", "Classic"};
+	for(int Style = 0; Style < 4; ++Style)
+	{
+		CUIRect Button;
+		const float ButtonWidth = StyleButtons.w / (float)(4 - Style);
+		StyleButtons.VSplitLeft(ButtonWidth, &Button, &StyleButtons);
+		if(Style < 3)
+			Button.VMargin(2.0f, &Button);
+		if(pMenus->DoButton_Menu(&s_aTfDuelStyleButtons[Style], apStyleNames[Style], g_Config.m_BkwTfDuelHudStyle == Style, &Button))
+			g_Config.m_BkwTfDuelHudStyle = Style;
+	}
+
+	PageView.HSplitTop(7.0f, nullptr, &PageView);
+	CUIRect Hint;
+	PageView.HSplitTop(32.0f, &Hint, &PageView);
+	pUi->DoLabel(&Hint, "Работает только на TeeFusion: счёт автоматически собирается из серверных broadcast.", 10.5f, TEXTALIGN_ML, {.m_MaxWidth = Hint.w});
+}
+
 void RenderDdnetVoteMenuSettings(CMenus *pMenus, CUi *pUi, CUIRect PageView)
 {
 	static int s_DdnetVoteMenuToggleId;
@@ -387,6 +446,7 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 	{
 		constexpr float Gap = 22.0f;
 		constexpr float TfMenuHeight = 104.0f;
+		constexpr float TfDuelHudHeight = 205.0f;
 		constexpr float DdnetMenuHeight = 104.0f;
 		constexpr float CameraDriftHeight = 320.0f;
 		constexpr float HudHeight = 800.0f;
@@ -398,10 +458,15 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 		CUIRect Content = PageView;
 		s_PersonalizationScrollRegion.Begin(&Content, &ScrollParams);
 
-		CUIRect TfMenuSection, DdnetMenuSection, CameraDriftSection, HudSection, BackgroundSection;
+		CUIRect TfMenuSection, TfDuelHudSection, DdnetMenuSection, CameraDriftSection, HudSection, BackgroundSection;
 		Content.HSplitTop(TfMenuHeight, &TfMenuSection, &Content);
 		s_PersonalizationScrollRegion.AddRect(TfMenuSection);
 		RenderTfMenuSettings(pMenus, pUi, pGameClient, TfMenuSection);
+		Content.HSplitTop(Gap, nullptr, &Content);
+
+		Content.HSplitTop(TfDuelHudHeight, &TfDuelHudSection, &Content);
+		s_PersonalizationScrollRegion.AddRect(TfDuelHudSection);
+		RenderTfDuelHudSettings(pMenus, pUi, TfDuelHudSection);
 		Content.HSplitTop(Gap, nullptr, &Content);
 
 		Content.HSplitTop(DdnetMenuHeight, &DdnetMenuSection, &Content);
