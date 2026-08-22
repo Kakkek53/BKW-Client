@@ -9,11 +9,10 @@
 
 		std::string Name;
 		int Score = 0;
-		// Score lines are independent broadcasts. If server metadata already
-		// identifies TeeFusion, they may be accepted even before the next title.
-		// If metadata is missing, the title above establishes the runtime hint and
-		// the following score broadcasts are accepted immediately.
-		if(KnownTeeFusion && BkwParseTeeFusionDuelScore(Line, Name, Score))
+		// TeeFusion sends score lines as independent broadcasts and they may arrive
+		// before the next duel title. The server itself has already been verified
+		// against the master list before this parser runs.
+		if(BkwParseTeeFusionDuelScore(Line, Name, Score))
 		{
 			UpdateTeeFusionDuelPlayer(Name.c_str(), Score);
 			AnyHandled = true;
