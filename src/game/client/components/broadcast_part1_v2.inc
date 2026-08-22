@@ -139,7 +139,7 @@ void CBroadcast::ResetTeeFusionDuel()
 bool CBroadcast::IsTeeFusionServer() const
 {
 	return Client()->State() == IClient::STATE_ONLINE &&
-		BkwServerDetector::IsTeeFusion(ServerBrowser(), Client()->ServerAddress());
+		BkwServerDetector::IsTeeFusion(Http(), Client()->ServerAddress());
 }
 
 void CBroadcast::UpdateTeeFusionDuelPlayer(const char *pName, int Score)
