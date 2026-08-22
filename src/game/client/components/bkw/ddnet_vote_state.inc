@@ -53,6 +53,16 @@ struct SStats
 	std::vector<SRank> m_vRanks;
 };
 
+enum EMapSort
+{
+	SORT_NAME = 0,
+	SORT_RELEASE_NEWEST,
+	SORT_RELEASE_OLDEST,
+	SORT_DIFFICULTY,
+	SORT_POINTS,
+	NUM_SORTS,
+};
+
 inline IHttp *pHttp = nullptr;
 inline bool CatalogRequested = false;
 inline bool CatalogReady = false;
@@ -72,6 +82,16 @@ inline int ScrollRow = 0;
 inline bool CustomMenuEnabled = true;
 inline CLineInputBuffered<128> SearchInput;
 inline CLineInputBuffered<VOTE_REASON_LENGTH> ReasonInput;
+
+// Catalog browsing state. TypeFilter == 0 means all types, otherwise it is an
+// index into the compact type list rendered by the overlay. DifficultyFilter
+// follows the same convention: 0 = all, 1..5 = exact difficulty.
+inline int TypeFilter = 0;
+inline int DifficultyFilter = 0;
+inline int SortMode = SORT_NAME;
+inline bool FavoritesOnly = false;
+inline bool FavoritesLoaded = false;
+inline std::vector<std::string> vFavoriteMaps;
 }
 
 #endif
