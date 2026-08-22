@@ -4,6 +4,7 @@
 #include <engine/graphics.h>
 #include <engine/http.h>
 #include <game/client/lineinput.h>
+#include <game/voting.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -70,6 +71,7 @@ inline int SelectedTab = 0;
 inline int ScrollRow = 0;
 inline bool CustomMenuEnabled = true;
 inline CLineInputBuffered<128> SearchInput;
+inline CLineInputBuffered<VOTE_REASON_LENGTH> ReasonInput;
 }
 
 #endif
