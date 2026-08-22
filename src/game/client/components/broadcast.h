@@ -9,13 +9,34 @@
 
 class CBroadcast : public CComponent
 {
+	struct STeeFusionDuelPlayer
+	{
+		char m_aName[64] = "";
+		int m_Score = 0;
+		float m_LastUpdate = 0.0f;
+		float m_ScoreChangedAt = 0.0f;
+		int m_LastSeenCycle = -1;
+	};
+
 	// broadcasts
 	char m_aBroadcastText[1024];
 	int m_BroadcastTick;
 	float m_BroadcastRenderOffset;
 	STextContainerIndex m_TextContainerIndex;
 
+	// TeeFusion duel HUD
+	bool m_TeeFusionDuelActive = false;
+	float m_TeeFusionDuelLastUpdate = 0.0f;
+	int m_TeeFusionDuelCycle = 0;
+	int m_TeeFusionDuelPlayerCount = 0;
+	STeeFusionDuelPlayer m_aTeeFusionDuelPlayers[2];
+
 	void RenderServerBroadcast();
+	void RenderTeeFusionDuelHud();
+	void ResetTeeFusionDuel();
+	bool IsTeeFusionServer() const;
+	bool HandleTeeFusionDuelBroadcast(const char *pText);
+	void UpdateTeeFusionDuelPlayer(const char *pName, int Score);
 
 public:
 	int Sizeof() const override { return sizeof(*this); }
