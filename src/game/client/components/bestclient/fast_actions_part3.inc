@@ -18,7 +18,7 @@ void CFastActions::OnRender()
 	if(Online)
 	{
 		const CServerInfo &ServerInfo = Client()->ServerInfo();
-		const BkwServerDetector::ECommunity Community = BkwServerDetector::Detect(ServerInfo);
+		const BkwServerDetector::ECommunity Community = BkwServerDetector::Detect(ServerBrowser(), Client()->ServerAddress(), ServerInfo);
 		s_BkwTfMenuConnectedToTeeFusion = Community == BkwServerDetector::ECommunity::TEEFUSION;
 		s_BkwTfMenuConnectedToDdnet = Community == BkwServerDetector::ECommunity::DDNET;
 	}
