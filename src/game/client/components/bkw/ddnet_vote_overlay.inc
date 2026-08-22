@@ -60,6 +60,9 @@ inline void BkwDdnetResetView()
 	BkwDdnetVoteState::SearchInput.Clear();
 	if(BkwDdnetVoteState::SearchInput.IsActive())
 		BkwDdnetVoteState::SearchInput.Deactivate();
+	BkwDdnetVoteState::ReasonInput.Clear();
+	if(BkwDdnetVoteState::ReasonInput.IsActive())
+		BkwDdnetVoteState::ReasonInput.Deactivate();
 	BkwDdnetVoteState::pStatsRequest.reset();
 	BkwDdnetVoteState::StatsRequestedMap.clear();
 	BkwDdnetVoteState::Stats = BkwDdnetVoteState::SStats();
@@ -175,9 +178,44 @@ inline void BkwDdnetRenderTexture(CUi *pUi, IGraphics::CTextureHandle Texture, c
 		return;
 	pUi->Graphics()->TextureSet(Texture);
 	pUi->Graphics()->QuadsBegin();
+	pUi->Graphics()->QuadsSetSubset(0.0f, 0.0f, 1.0f, 1.0f);
 	pUi->Graphics()->SetColor(1.0f, 1.0f, 1.0f, Alpha);
 	IGraphics::CQuadItem Quad(Rect.x, Rect.y, Rect.w, Rect.h);
 	pUi->Graphics()->QuadsDrawTL(&Quad, 1);
+	pUi->Graphics()->QuadsEnd();
+	pUi->Graphics()->TextureClear();
+}
+
+inline void BkwDdnetRenderTextureCover(CUi *pUi, IGraphics::CTextureHandle Texture, const CUIRect &Rect, float SourceAspect, float Alpha = 1.0f)
+{
+	if(!Texture.IsValid() || Rect.w <= 0.0f || Rect.h <= 0.0f || SourceAspect <= 0.0f)
+		return;
+
+	float U0 = 0.0f;
+	float V0 = 0.0f;
+	float U1 = 1.0f;
+	float V1 = 1.0f;
+	const float RectAspect = Rect.w / Rect.h;
+	if(RectAspect > SourceAspect)
+	{
+		const float VisibleHeight = SourceAspect / RectAspect;
+		V0 = (1.0f - VisibleHeight) * 0.5f;
+		V1 = 1.0f - V0;
+	}
+	else if(RectAspect < SourceAspect)
+	{
+		const float VisibleWidth = RectAspect / SourceAspect;
+		U0 = (1.0f - VisibleWidth) * 0.5f;
+		U1 = 1.0f - U0;
+	}
+
+	pUi->Graphics()->TextureSet(Texture);
+	pUi->Graphics()->QuadsBegin();
+	pUi->Graphics()->QuadsSetSubset(U0, V0, U1, V1);
+	pUi->Graphics()->SetColor(1.0f, 1.0f, 1.0f, Alpha);
+	IGraphics::CQuadItem Quad(Rect.x, Rect.y, Rect.w, Rect.h);
+	pUi->Graphics()->QuadsDrawTL(&Quad, 1);
+	pUi->Graphics()->QuadsSetSubset(0.0f, 0.0f, 1.0f, 1.0f);
 	pUi->Graphics()->QuadsEnd();
 	pUi->Graphics()->TextureClear();
 }
@@ -379,7 +417,7 @@ inline void BkwDdnetRenderMapCards(CUi *pUi, CGameClient *pGameClient, CUIRect B
 			Card.HSplitBottom(27.0f, &Info, &Buttons);
 			Image.Draw(ColorRGBA(0.02f, 0.022f, 0.027f, 0.95f), IGraphics::CORNER_ALL, 6.0f);
 			if(MapIndex < (int)BkwDdnetVoteState::vThumbnails.size() && BkwDdnetVoteState::vThumbnails[MapIndex].m_Texture.IsValid())
-				BkwDdnetRenderTexture(pUi, BkwDdnetVoteState::vThumbnails[MapIndex].m_Texture, Image);
+				BkwDdnetRenderTextureCover(pUi, BkwDdnetVoteState::vThumbnails[MapIndex].m_Texture, Image, 360.0f / 225.0f);
 			else
 				pUi->DoLabel(&Image, "DDNet", 12.0f, TEXTALIGN_MC);
 
@@ -512,6 +550,20 @@ inline void BkwDdnetRenderStats(CUi *pUi, CGameClient *pGameClient, CUIRect Body
 
 inline void BkwDdnetRenderPlayers(CUi *pUi, CGameClient *pGameClient, CVoting &Voting, CUIRect Body, bool Interactive, bool Spectate)
 {
+	CUIRect ReasonRow;
+	Body.HSplitTop(34.0f, &ReasonRow, &Body);
+	CUIRect ReasonLabel, ReasonEdit;
+	ReasonRow.VSplitLeft(70.0f, &ReasonLabel, &ReasonEdit);
+	pUi->DoLabel(&ReasonLabel, "Причина:", 10.5f, TEXTALIGN_ML);
+	ReasonEdit.Draw(ColorRGBA(1.0f, 1.0f, 1.0f, 0.055f), IGraphics::CORNER_ALL, 7.0f);
+	ReasonEdit.Margin(5.0f, &ReasonEdit);
+	BkwDdnetVoteState::ReasonInput.SetEmptyText("Укажите причину…");
+	if(Interactive)
+		pUi->DoEditBox(&BkwDdnetVoteState::ReasonInput, &ReasonEdit, 10.5f);
+	else
+		pUi->DoLabel(&ReasonEdit, BkwDdnetVoteState::ReasonInput.IsEmpty() ? "Укажите причину…" : BkwDdnetVoteState::ReasonInput.GetString(), 10.5f, TEXTALIGN_ML, {.m_MaxWidth = ReasonEdit.w});
+	Body.HSplitTop(8.0f, nullptr, &Body);
+
 	std::vector<int> vClients;
 	for(int ClientId = 0; ClientId < MAX_CLIENTS; ++ClientId)
 	{
@@ -552,10 +604,12 @@ inline void BkwDdnetRenderPlayers(CUi *pUi, CGameClient *pGameClient, CVoting &V
 		CButtonContainer *pButton = Spectate ? &s_aSpecButtons[ClientId] : &s_aKickButtons[ClientId];
 		if(BkwDdnetSmallButton(pUi, pButton, Spectate ? "В наблюдатели" : "Кик с сервера", Action, Interactive, false, !Spectate, Spectate ? BkwTfSvg::EIcon::USER : BkwTfSvg::EIcon::WARNING))
 		{
+			const char *pReason = BkwDdnetVoteState::ReasonInput.GetString();
 			if(Spectate)
-				Voting.CallvoteSpectate(ClientId, "");
+				Voting.CallvoteSpectate(ClientId, pReason);
 			else
-				Voting.CallvoteKick(ClientId, "");
+				Voting.CallvoteKick(ClientId, pReason);
+			BkwDdnetVoteState::ReasonInput.Clear();
 		}
 	}
 }
