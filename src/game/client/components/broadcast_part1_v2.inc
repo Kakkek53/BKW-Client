@@ -138,7 +138,8 @@ void CBroadcast::ResetTeeFusionDuel()
 
 bool CBroadcast::IsTeeFusionServer() const
 {
-	return Client()->State() == IClient::STATE_ONLINE && BkwServerDetector::IsTeeFusion(Client()->ServerInfo());
+	return Client()->State() == IClient::STATE_ONLINE &&
+		BkwServerDetector::IsTeeFusion(ServerBrowser(), Client()->ServerAddress());
 }
 
 void CBroadcast::UpdateTeeFusionDuelPlayer(const char *pName, int Score)
@@ -193,10 +194,9 @@ void CBroadcast::UpdateTeeFusionDuelPlayer(const char *pName, int Score)
 
 bool CBroadcast::HandleTeeFusionDuelBroadcast(const char *pText)
 {
-	if(Client()->State() != IClient::STATE_ONLINE || !pText || pText[0] == '\0')
+	if(!IsTeeFusionServer() || !pText || pText[0] == '\0')
 		return false;
 
-	bool KnownTeeFusion = IsTeeFusionServer();
 	const float Now = Client()->GlobalTime();
 	if(m_TeeFusionDuelActive && Now - m_TeeFusionDuelLastUpdate > BKW_TF_DUEL_TIMEOUT_SECONDS)
 		ResetTeeFusionDuel();
@@ -213,5 +213,3 @@ bool CBroadcast::HandleTeeFusionDuelBroadcast(const char *pText)
 
 		if(BkwIsTeeFusionDuelTitle(Line))
 		{
-			BkwServerDetector::MarkTeeFusionRuntime(Client()->ServerInfo());
-			KnownTeeFusion = true;
