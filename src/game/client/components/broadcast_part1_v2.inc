@@ -76,8 +76,6 @@ bool BkwParseTeeFusionDuelScore(const std::string &Text, std::string &Name, int 
 	if(!pEnd || *pEnd != '\0')
 		return false;
 
-	// TeeFusion duel scores are non-negative. Restricting the range also prevents
-	// unrelated "text - number" broadcasts from looking like plausible duel data.
 	if(ParsedScore < 0 || ParsedScore > 9999)
 		return false;
 
@@ -121,7 +119,7 @@ void BkwDuelDrawLiquidGlass(CUIRect Card, float Alpha, float Rounding)
 		BkwDuelAlpha(ColorRGBA(0.13f, 0.17f, 0.25f, 0.72f), Alpha),
 		BkwDuelAlpha(ColorRGBA(0.045f, 0.060f, 0.10f, 0.78f), Alpha),
 		BkwDuelAlpha(ColorRGBA(0.065f, 0.080f, 0.13f, 0.74f), Alpha),
-		IGraphics::CORNER_ALL, maximum(0.0f, Rounding - 1.0f));
+		IGraphics::CORNER_ALL, std::max(0.0f, Rounding - 1.0f));
 }
 
 CUIRect BkwDuelCardRect(const CUIRect &Screen, float Width, float Height, int Position)
@@ -300,8 +298,24 @@ bool CBroadcast::HandleTeeFusionDuelBroadcast(const char *pText)
 		if(BkwParseTeeFusionDuelScore(Line, Name, Score))
 		{
 			BufferTeeFusionDuelCandidate(Name.c_str(), Score, Now);
-			const bool ConfirmedContext = m_TeeFusionDuelActive ||
-				Now - m_TeeFusionDuelLastTitleAt <= BKW_TF_DUEL_CANDIDATE_WINDOW_SECONDS;
+
+			bool MatchesCurrentPlayer = false;
+			for(int i = 0; i < m_TeeFusionDuelPlayerCount; ++i)
+			{
+				if(str_comp(m_aTeeFusionDuelPlayers[i].m_aName, Name.c_str()) == 0)
+				{
+					MatchesCurrentPlayer = true;
+					break;
+				}
+			}
+
+			// While a duel is already active, only its known two names are allowed
+			// to update immediately. A third "name - number" line is buffered and
+			// must be confirmed by the next explicit duel title before replacing
+			// either participant.
+			const bool ConfirmedContext =
+				(m_TeeFusionDuelActive && MatchesCurrentPlayer) ||
+				(!m_TeeFusionDuelActive && Now - m_TeeFusionDuelLastTitleAt <= BKW_TF_DUEL_CANDIDATE_WINDOW_SECONDS);
 			if(ConfirmedContext)
 			{
 				UpdateTeeFusionDuelPlayer(Name.c_str(), Score);
@@ -309,8 +323,6 @@ bool CBroadcast::HandleTeeFusionDuelBroadcast(const char *pText)
 			}
 			else
 			{
-				// Keep the candidate, but do not hide or consume an unconfirmed
-				// "name - number" broadcast. The next duel title can confirm it.
 				AnyUnknown = true;
 			}
 		}
@@ -320,7 +332,5 @@ bool CBroadcast::HandleTeeFusionDuelBroadcast(const char *pText)
 		}
 	}
 
-	// Suppress the original broadcast only when the entire message has been
-	// confirmed as TeeFusion duel data. Mixed or merely candidate messages stay.
 	return AnyHandled && !AnyUnknown;
 }
