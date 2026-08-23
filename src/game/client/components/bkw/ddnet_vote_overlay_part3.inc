@@ -216,14 +216,21 @@ inline void BkwDdnetRenderStats(CUi *pUi, CGameClient *pGameClient, CUIRect Body
 	Left.Margin(8.0f, &Left);
 	Right.Margin(10.0f, &Right);
 
-	CUIRect Image, Vote;
-	Left.HSplitTop(Left.h - 38.0f, &Image, &Vote);
+	// DDNet thumbnails are 360x225. Give the detail image an actual 16:10-ish
+	// rectangle instead of stretching it to the full height of the left column.
+	const float ImageAspect = 360.0f / 225.0f;
+	const float ImageHeight = minimum(Left.w / ImageAspect, maximum(80.0f, Left.h - 46.0f));
+	CUIRect Image;
+	Left.HSplitTop(ImageHeight, &Image, &Left);
 	Image.Draw(ColorRGBA(0.02f, 0.022f, 0.027f, 0.86f), IGraphics::CORNER_ALL, 7.0f);
 	if(MapIndex < (int)BkwDdnetVoteState::vThumbnails.size() && BkwDdnetVoteState::vThumbnails[MapIndex].m_Texture.IsValid())
-		BkwDdnetRenderTexture(pUi, BkwDdnetVoteState::vThumbnails[MapIndex].m_Texture, Image);
+		BkwDdnetRenderTextureCover(pUi, BkwDdnetVoteState::vThumbnails[MapIndex].m_Texture, Image, ImageAspect);
 	else
 		pUi->DoLabel(&Image, "DDNet", 16.0f, TEXTALIGN_MC);
-	Vote.HSplitTop(8.0f, nullptr, &Vote);
+
+	Left.HSplitTop(8.0f, nullptr, &Left);
+	CUIRect Vote;
+	Left.HSplitTop(30.0f, &Vote, &Left);
 	if(BkwDdnetSmallButton(pUi, &s_VoteButton, "Голосовать", Vote, Interactive, true, false, BkwTfSvg::EIcon::CHECK))
 		BkwDdnetSendMapVote(pGameClient, Map.m_Name);
 
@@ -277,4 +284,3 @@ inline void BkwDdnetRenderStats(CUi *pUi, CGameClient *pGameClient, CUIRect Body
 		pUi->DoLabel(&Line, aLine, 9.1f, TEXTALIGN_ML, {.m_MaxWidth = Line.w});
 	}
 }
-
