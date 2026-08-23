@@ -9,14 +9,46 @@ inline int64_t s_LastAntiPingUpdate = 0;
 inline int64_t s_LastEmoteAt = 0;
 inline int s_EmoteIndex = 0;
 inline bool s_WasSpinActive = false;
+
 inline bool s_BkwVisualOverride = false;
 inline int s_SavedTfMenuStyle = 0;
 inline int s_SavedDdnetMenuStyle = 0;
 inline int s_SavedDuelStyle = 0;
 
+inline bool s_WholeOptimizerOverride = false;
+inline int s_SavedBcOptimizer = 0;
+inline int s_SavedDisableParticles = 0;
+inline int s_SavedFpsFog = 0;
+inline int s_SavedFpsFogCullMapTiles = 0;
+inline int s_SavedSubTickAiming = 0;
+
+inline bool s_AntiPingOverride = false;
+inline int s_SavedAntiPing = 0;
+inline int s_SavedAntiPingLimit = 0;
+inline int s_SavedAntiPingPercent = 100;
+inline int s_SavedAntiPingPlayers = 1;
+inline int s_SavedAntiPingGrenade = 1;
+inline int s_SavedAntiPingWeapons = 1;
+inline int s_SavedAntiPingSmooth = 0;
+inline int s_SavedAntiPingGunfire = 1;
+inline int s_SavedAntiPingPreInput = 1;
+inline int s_SavedPredictionMargin = 100;
+
 inline bool OptimizeBkwEffects()
 {
 	return g_Config.m_BkwOptimizer && g_Config.m_BkwOptimizerScope == 0 && g_Config.m_BkwOptimizerPreset == 1;
+}
+
+inline void RestoreWholeOptimizer()
+{
+	if(!s_WholeOptimizerOverride)
+		return;
+	g_Config.m_BcOptimizer = s_SavedBcOptimizer;
+	g_Config.m_BcOptimizerDisableParticles = s_SavedDisableParticles;
+	g_Config.m_BcOptimizerFpsFog = s_SavedFpsFog;
+	g_Config.m_BcOptimizerFpsFogCullMapTiles = s_SavedFpsFogCullMapTiles;
+	g_Config.m_ClSubTickAiming = s_SavedSubTickAiming;
+	s_WholeOptimizerOverride = false;
 }
 
 inline void ApplyOptimizerProfile()
@@ -31,11 +63,10 @@ inline void ApplyOptimizerProfile()
 	}
 	if(BkwMaxFps)
 	{
-		// Temporary low-cost visual overrides. They are restored when the BKW-only
-		// Max FPS profile is disabled or changed.
 		g_Config.m_BkwTfMenuStyle = 3;
 		g_Config.m_BkwDdnetMenuStyle = 3;
 		g_Config.m_BkwTfDuelHudStyle = 1;
+		RestoreWholeOptimizer();
 		return;
 	}
 	if(s_BkwVisualOverride)
@@ -46,8 +77,22 @@ inline void ApplyOptimizerProfile()
 		s_BkwVisualOverride = false;
 	}
 
-	if(!g_Config.m_BkwOptimizer || g_Config.m_BkwOptimizerScope == 0)
+	const bool WholeActive = g_Config.m_BkwOptimizer && g_Config.m_BkwOptimizerScope == 1;
+	if(!WholeActive)
+	{
+		RestoreWholeOptimizer();
 		return;
+	}
+
+	if(!s_WholeOptimizerOverride)
+	{
+		s_SavedBcOptimizer = g_Config.m_BcOptimizer;
+		s_SavedDisableParticles = g_Config.m_BcOptimizerDisableParticles;
+		s_SavedFpsFog = g_Config.m_BcOptimizerFpsFog;
+		s_SavedFpsFogCullMapTiles = g_Config.m_BcOptimizerFpsFogCullMapTiles;
+		s_SavedSubTickAiming = g_Config.m_ClSubTickAiming;
+		s_WholeOptimizerOverride = true;
+	}
 
 	g_Config.m_BcOptimizer = 1;
 	switch(g_Config.m_BkwOptimizerPreset)
@@ -56,6 +101,7 @@ inline void ApplyOptimizerProfile()
 		g_Config.m_BcOptimizerDisableParticles = 1;
 		g_Config.m_BcOptimizerFpsFog = 1;
 		g_Config.m_BcOptimizerFpsFogCullMapTiles = 1;
+		g_Config.m_ClSubTickAiming = s_SavedSubTickAiming;
 		break;
 	case 2: // Low latency
 		g_Config.m_BcOptimizerDisableParticles = 0;
@@ -71,6 +117,7 @@ inline void ApplyOptimizerProfile()
 		g_Config.m_BcOptimizerDisableParticles = 0;
 		g_Config.m_BcOptimizerFpsFog = 0;
 		g_Config.m_BcOptimizerFpsFogCullMapTiles = 0;
+		g_Config.m_ClSubTickAiming = s_SavedSubTickAiming;
 		break;
 	}
 }
@@ -108,16 +155,54 @@ inline void UpdateTipoCheat(CGameClient *pGameClient, IClient *pClient)
 	s_LastEmoteAt = Now;
 }
 
+inline void SaveAntiPingSettings()
+{
+	if(s_AntiPingOverride)
+		return;
+	s_SavedAntiPing = g_Config.m_ClAntiPing;
+	s_SavedAntiPingLimit = g_Config.m_ClAntiPingLimit;
+	s_SavedAntiPingPercent = g_Config.m_ClAntiPingPercent;
+	s_SavedAntiPingPlayers = g_Config.m_ClAntiPingPlayers;
+	s_SavedAntiPingGrenade = g_Config.m_ClAntiPingGrenade;
+	s_SavedAntiPingWeapons = g_Config.m_ClAntiPingWeapons;
+	s_SavedAntiPingSmooth = g_Config.m_ClAntiPingSmooth;
+	s_SavedAntiPingGunfire = g_Config.m_ClAntiPingGunfire;
+	s_SavedAntiPingPreInput = g_Config.m_ClAntiPingPreInput;
+	s_SavedPredictionMargin = g_Config.m_ClPredictionMargin;
+	s_AntiPingOverride = true;
+}
+
+inline void RestoreAntiPingSettings()
+{
+	if(!s_AntiPingOverride)
+		return;
+	g_Config.m_ClAntiPing = s_SavedAntiPing;
+	g_Config.m_ClAntiPingLimit = s_SavedAntiPingLimit;
+	g_Config.m_ClAntiPingPercent = s_SavedAntiPingPercent;
+	g_Config.m_ClAntiPingPlayers = s_SavedAntiPingPlayers;
+	g_Config.m_ClAntiPingGrenade = s_SavedAntiPingGrenade;
+	g_Config.m_ClAntiPingWeapons = s_SavedAntiPingWeapons;
+	g_Config.m_ClAntiPingSmooth = s_SavedAntiPingSmooth;
+	g_Config.m_ClAntiPingGunfire = s_SavedAntiPingGunfire;
+	g_Config.m_ClAntiPingPreInput = s_SavedAntiPingPreInput;
+	g_Config.m_ClPredictionMargin = s_SavedPredictionMargin;
+	s_AntiPingOverride = false;
+}
+
 inline void UpdateAdaptiveAntiPing(IClient *pClient)
 {
+	const bool OptimizerLatency = g_Config.m_BkwOptimizer && g_Config.m_BkwOptimizerScope == 1 && g_Config.m_BkwOptimizerPreset == 2;
 	if(!g_Config.m_BkwAdaptiveAntiPing || pClient->State() != IClient::STATE_ONLINE)
 	{
 		s_AntiPingAverage = 0.0f;
 		s_AntiPingJitter = 0.0f;
 		s_LastAntiPingUpdate = 0;
+		if(!OptimizerLatency)
+			RestoreAntiPingSettings();
 		return;
 	}
 
+	SaveAntiPingSettings();
 	const int64_t Now = time_get();
 	if(s_LastAntiPingUpdate != 0 && Now - s_LastAntiPingUpdate < time_freq() / 2)
 		return;
