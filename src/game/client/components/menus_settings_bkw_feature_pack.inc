@@ -1,3 +1,5 @@
+#include "bkw/video_map_converter.inc"
+
 void RenderBkwOptimizerSettings(CMenus *pMenus, CUi *pUi, CUIRect PageView)
 {
 	static int s_Enable;
@@ -144,12 +146,14 @@ void RenderBkwAnimatedBackgroundSettings(CMenus *pMenus, CUi *pUi, CGameClient *
 	static int s_MenuEnable;
 	static int s_GameEnable;
 	static CButtonContainer s_Reload;
+	static CButtonContainer s_Convert;
 	static CLineInput s_PathInput;
+	static CLineInput s_OutputInput;
 	PageView.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.46f), IGraphics::CORNER_ALL, 8.0f);
 	PageView.Margin(10.0f, &PageView);
 	CUIRect Row;
 	PageView.HSplitTop(26.0f, &Row, &PageView);
-	pUi->DoLabel(&Row, "Animated Background", 18.0f, TEXTALIGN_ML);
+	pUi->DoLabel(&Row, "Animated Background / MP4 → .map", 18.0f, TEXTALIGN_ML);
 	PageView.HSplitTop(5.0f, nullptr, &PageView);
 	PageView.HSplitTop(24.0f, &Row, &PageView);
 	if(pMenus->DoButton_CheckBox(&s_MenuEnable, "Видео-фон в меню", g_Config.m_BcMenuMediaBackground, &Row))
@@ -165,11 +169,52 @@ void RenderBkwAnimatedBackgroundSettings(CMenus *pMenus, CUi *pUi, CGameClient *
 	pUi->DoEditBox(&s_PathInput, &Row, 11.0f);
 	PageView.HSplitTop(6.0f, nullptr, &PageView);
 	PageView.HSplitTop(30.0f, &Row, &PageView);
-	if(pMenus->DoButton_Menu(&s_Reload, "Перезагрузить фон", 0, &Row))
+	if(pMenus->DoButton_Menu(&s_Reload, "Перезагрузить видео-фон", 0, &Row))
 		pGameClient->m_MenuBackground.ReloadBkwMediaBackground();
+
+	PageView.HSplitTop(11.0f, nullptr, &PageView);
+	PageView.HSplitTop(1.0f, &Row, &PageView);
+	Row.Draw(ColorRGBA(1.0f, 1.0f, 1.0f, 0.10f), IGraphics::CORNER_NONE, 0.0f);
+	PageView.HSplitTop(9.0f, nullptr, &PageView);
+	PageView.HSplitTop(22.0f, &Row, &PageView);
+	pUi->DoLabel(&Row, "Экспорт в обычную DDNet .map", 14.0f, TEXTALIGN_ML);
+	PageView.HSplitTop(4.0f, nullptr, &PageView);
+	PageView.HSplitTop(36.0f, &Row, &PageView);
+	pUi->DoLabel(&Row, "Кадры упаковываются в embedded RGBA atlas, отображаются quads и переключаются одним Color Envelope с точками Step по alpha.", 10.2f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
+
+	PageView.HSplitTop(6.0f, nullptr, &PageView);
+	PageView.HSplitTop(30.0f, &Row, &PageView);
+	s_OutputInput.SetBuffer(g_Config.m_BkwVideoMapOutput, sizeof(g_Config.m_BkwVideoMapOutput));
+	s_OutputInput.SetEmptyText("bkw_video.map");
+	pUi->DoEditBox(&s_OutputInput, &Row, 11.0f);
+
+	PageView.HSplitTop(5.0f, nullptr, &PageView);
+	PageView.HSplitTop(28.0f, &Row, &PageView);
+	pUi->DoScrollbarOption(&g_Config.m_BkwVideoMapFps, &g_Config.m_BkwVideoMapFps, &Row, "FPS карты", 5, 30);
+	PageView.HSplitTop(5.0f, nullptr, &PageView);
+	PageView.HSplitTop(28.0f, &Row, &PageView);
+	pUi->DoScrollbarOption(&g_Config.m_BkwVideoMapDimension, &g_Config.m_BkwVideoMapDimension, &Row, "Макс. сторона кадра", 128, 512, &CUi::ms_LinearScrollbarScale, 0, " px");
+	PageView.HSplitTop(5.0f, nullptr, &PageView);
+	PageView.HSplitTop(28.0f, &Row, &PageView);
+	pUi->DoScrollbarOption(&g_Config.m_BkwVideoMapMaxSeconds, &g_Config.m_BkwVideoMapMaxSeconds, &Row, "Длительность", 1, 60, &CUi::ms_LinearScrollbarScale, 0, " s");
+
 	PageView.HSplitTop(7.0f, nullptr, &PageView);
-	PageView.HSplitTop(48.0f, &Row, &PageView);
-	char aStatus[256];
-	str_format(aStatus, sizeof(aStatus), "%s  MP4 воспроизводится напрямую через FFmpeg — это легче и качественнее, чем превращать каждый кадр в .map.", pGameClient->m_MenuBackground.BkwMediaBackgroundStatus());
-	pUi->DoLabel(&Row, aStatus, 10.2f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
+	PageView.HSplitTop(32.0f, &Row, &PageView);
+	if(pMenus->DoButton_Menu(&s_Convert, "Конвертировать MP4 → .map", 0, &Row))
+	{
+		BkwVideoMap::Convert(
+			pGameClient->Graphics(),
+			pGameClient->Storage(),
+			g_Config.m_BcMenuMediaBackgroundPath,
+			g_Config.m_BkwVideoMapOutput,
+			g_Config.m_BkwVideoMapFps,
+			g_Config.m_BkwVideoMapDimension,
+			g_Config.m_BkwVideoMapMaxSeconds);
+	}
+	PageView.HSplitTop(7.0f, nullptr, &PageView);
+	PageView.HSplitTop(46.0f, &Row, &PageView);
+	pUi->DoLabel(&Row, BkwVideoMap::s_aStatus, 10.2f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
+	PageView.HSplitTop(5.0f, nullptr, &PageView);
+	PageView.HSplitTop(38.0f, &Row, &PageView);
+	pUi->DoLabel(&Row, "Результат сохраняется в maps/<имя>.map и открывается обычным редактором: группа BKW Video, atlas layers, quads и BKW Video Step envelope остаются редактируемыми.", 10.0f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
 }
