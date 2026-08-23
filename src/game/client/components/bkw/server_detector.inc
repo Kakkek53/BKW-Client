@@ -157,18 +157,22 @@ inline void UpdateMaster(IHttp *pHttp)
 	log_info("bkw-master", "loaded %d TeeFusion addresses from DDNet master", (int)s_vTeeFusionAddresses.size());
 }
 
-inline bool IsTeeFusion(IHttp *pHttp, const NETADDR &ServerAddress)
+inline bool IsTeeFusionCached(const NETADDR &ServerAddress)
 {
-	UpdateMaster(pHttp);
 	if(!s_MasterReady)
 		return false;
-
 	for(const NETADDR &Address : s_vTeeFusionAddresses)
 	{
 		if(net_addr_comp(&Address, &ServerAddress) == 0)
 			return true;
 	}
 	return false;
+}
+
+inline bool IsTeeFusion(IHttp *pHttp, const NETADDR &ServerAddress)
+{
+	UpdateMaster(pHttp);
+	return IsTeeFusionCached(ServerAddress);
 }
 
 inline bool IsDdnet(const CServerInfo &ServerInfo)
