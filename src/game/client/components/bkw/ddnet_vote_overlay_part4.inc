@@ -84,25 +84,58 @@ inline void RenderBkwDdnetVoteOverlay(CUi *pUi, CGameClient *pGameClient, const 
 
 	if(BkwDdnetVoteState::DetailOpen && BkwDdnetVoteState::SelectedMap >= 0 && BkwDdnetVoteState::SelectedMap < (int)BkwDdnetVoteState::vThumbnails.size())
 	{
+		// Completely hide the live game first, then use the selected map screenshot
+		// as the detail-page backdrop. Cover preserves the DDNet 360x225 aspect.
+		Screen.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 1.0f), IGraphics::CORNER_NONE, 0.0f);
 		const int MapIndex = BkwDdnetVoteState::SelectedMap;
 		if(Interactive)
 			BkwDdnetUpdateThumbnail(pUi, MapIndex);
 		const auto &Thumb = BkwDdnetVoteState::vThumbnails[MapIndex];
 		if(Thumb.m_Texture.IsValid())
-			BkwDdnetRenderTexture(pUi, Thumb.m_Texture, Screen, 0.58f);
-		Screen.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 0.72f), IGraphics::CORNER_NONE, 0.0f);
+			BkwDdnetRenderTextureCover(pUi, Thumb.m_Texture, Screen, 360.0f / 225.0f, 0.74f);
+		Screen.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 0.58f), IGraphics::CORNER_NONE, 0.0f);
 	}
 	else
 	{
 		Screen.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, Interactive ? 0.34f : 0.58f), IGraphics::CORNER_NONE, 0.0f);
 	}
 
-	const float CardW = minimum(Screen.w - 18.0f, 820.0f);
-	const float CardH = minimum(Screen.h - 14.0f, 480.0f);
+	const float MenuScale = std::clamp(g_Config.m_BkwDdnetMenuScale / 100.0f, 0.75f, 1.25f);
+	const float MenuOpacity = std::clamp(g_Config.m_BkwDdnetMenuOpacity / 100.0f, 0.45f, 1.0f);
+	const float Rounding = std::clamp((float)g_Config.m_BkwDdnetMenuRounding, 0.0f, 28.0f);
+	const int MenuStyle = std::clamp(g_Config.m_BkwDdnetMenuStyle, 0, 3);
+	const float CardW = minimum(Screen.w - 18.0f, 820.0f * MenuScale);
+	const float CardH = minimum(Screen.h - 14.0f, 480.0f * MenuScale);
 	CUIRect Card{Screen.x + (Screen.w - CardW) * 0.5f, Screen.y + (Screen.h - CardH) * 0.5f, CardW, CardH};
-	Card.Draw(ColorRGBA(0.66f, 0.68f, 0.72f, 0.62f), IGraphics::CORNER_ALL, 18.0f);
-	Card.Margin(3.2f, &Card);
-	Card.Draw(ColorRGBA(0.024f, 0.026f, 0.031f, BkwDdnetVoteState::DetailOpen ? 0.91f : 0.995f), IGraphics::CORNER_ALL, 16.0f);
+
+	if(MenuStyle == 1)
+	{
+		// Liquid Glass: translucent dark layers with a thin cool edge, no white bloom.
+		Card.Draw(ColorRGBA(0.35f, 0.55f, 0.78f, 0.18f * MenuOpacity), IGraphics::CORNER_ALL, Rounding + 1.0f);
+		Card.Margin(1.3f, &Card);
+		Card.Draw(ColorRGBA(0.030f, 0.040f, 0.060f, 0.88f * MenuOpacity), IGraphics::CORNER_ALL, maximum(0.0f, Rounding - 1.0f));
+	}
+	else if(MenuStyle == 2)
+	{
+		// Neon: dark frame with a restrained cyan/purple accent.
+		Card.Draw(ColorRGBA(0.06f, 0.18f, 0.28f, 0.90f * MenuOpacity), IGraphics::CORNER_ALL, Rounding + 1.0f);
+		Card.Margin(1.4f, &Card);
+		Card.Draw(ColorRGBA(0.018f, 0.020f, 0.034f, 0.97f * MenuOpacity), IGraphics::CORNER_ALL, maximum(0.0f, Rounding - 1.0f));
+		CUIRect Accent = Card;
+		Accent.h = 2.0f;
+		Accent.Draw4(ColorRGBA(0.18f, 0.78f, 1.0f, 0.90f), ColorRGBA(0.82f, 0.25f, 1.0f, 0.90f), ColorRGBA(0.18f, 0.78f, 1.0f, 0.90f), ColorRGBA(0.82f, 0.25f, 1.0f, 0.90f), IGraphics::CORNER_T, maximum(0.0f, Rounding - 1.0f));
+	}
+	else if(MenuStyle == 3)
+	{
+		Card.Draw(ColorRGBA(0.018f, 0.020f, 0.024f, 0.92f * MenuOpacity), IGraphics::CORNER_ALL, Rounding);
+	}
+	else
+	{
+		// Standard: intentionally dark border, replacing the old bright grey frame.
+		Card.Draw(ColorRGBA(0.12f, 0.13f, 0.16f, 0.78f * MenuOpacity), IGraphics::CORNER_ALL, Rounding + 1.0f);
+		Card.Margin(1.6f, &Card);
+		Card.Draw(ColorRGBA(0.024f, 0.026f, 0.031f, (BkwDdnetVoteState::DetailOpen ? 0.93f : 0.99f) * MenuOpacity), IGraphics::CORNER_ALL, maximum(0.0f, Rounding - 1.0f));
+	}
 	Card.Margin(13.0f, &Card);
 
 	CUIRect Header, Body;
