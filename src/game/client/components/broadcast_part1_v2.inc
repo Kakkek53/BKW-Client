@@ -31,6 +31,7 @@ namespace
 constexpr float BKW_TF_DUEL_TIMEOUT_SECONDS = 3.0f;
 constexpr float BKW_TF_DUEL_FADE_SECONDS = 0.65f;
 constexpr float BKW_TF_DUEL_SCORE_PULSE_SECONDS = 0.28f;
+constexpr float BKW_TF_DUEL_CANDIDATE_WINDOW_SECONDS = 2.2f;
 
 std::string BkwTrimDuelLine(const char *pText)
 {
@@ -61,7 +62,7 @@ bool BkwParseTeeFusionDuelScore(const std::string &Text, std::string &Name, int 
 	if(NameBegin == std::string::npos)
 		return false;
 	Name = Name.substr(NameBegin, NameEnd - NameBegin + 1);
-	if(Name.empty())
+	if(Name.empty() || Name.size() >= 64)
 		return false;
 
 	const std::string ScoreText = Text.substr(Separator + 3);
@@ -75,7 +76,12 @@ bool BkwParseTeeFusionDuelScore(const std::string &Text, std::string &Name, int 
 	if(!pEnd || *pEnd != '\0')
 		return false;
 
-	Score = std::clamp((int)ParsedScore, -9999, 9999);
+	// TeeFusion duel scores are non-negative. Restricting the range also prevents
+	// unrelated "text - number" broadcasts from looking like plausible duel data.
+	if(ParsedScore < 0 || ParsedScore > 9999)
+		return false;
+
+	Score = (int)ParsedScore;
 	return true;
 }
 
@@ -94,35 +100,52 @@ void BkwDuelLabel(CUi *pUi, const CUIRect &Rect, const char *pText, float Size, 
 	pUi->DoLabel(&Rect, pText, Size, Align, Props);
 }
 
-void BkwDuelDrawLiquidGlass(CUIRect Card, float Alpha)
+void BkwDuelDrawLiquidGlass(CUIRect Card, float Alpha, float Rounding)
 {
-	for(int i = 4; i >= 1; --i)
+	for(int i = 3; i >= 1; --i)
 	{
 		CUIRect Glow = Card;
-		const float Expand = (float)i * 2.0f;
+		const float Expand = (float)i * 1.7f;
 		Glow.x -= Expand;
 		Glow.y -= Expand;
 		Glow.w += Expand * 2.0f;
 		Glow.h += Expand * 2.0f;
-		Glow.Draw(BkwDuelAlpha(ColorRGBA(0.0f, 0.0f, 0.0f, 0.025f + i * 0.012f), Alpha), IGraphics::CORNER_ALL, 18.0f + Expand);
+		Glow.Draw(BkwDuelAlpha(ColorRGBA(0.0f, 0.0f, 0.0f, 0.028f + i * 0.012f), Alpha), IGraphics::CORNER_ALL, Rounding + Expand);
 	}
 
-	Card.Draw(BkwDuelAlpha(ColorRGBA(0.86f, 0.92f, 1.0f, 0.16f), Alpha), IGraphics::CORNER_ALL, 17.0f);
+	Card.Draw(BkwDuelAlpha(ColorRGBA(0.82f, 0.90f, 1.0f, 0.17f), Alpha), IGraphics::CORNER_ALL, Rounding);
 	CUIRect Inner;
-	Card.Margin(1.25f, &Inner);
+	Card.Margin(1.0f, &Inner);
 	Inner.Draw4(
-		BkwDuelAlpha(ColorRGBA(0.11f, 0.15f, 0.22f, 0.72f), Alpha),
-		BkwDuelAlpha(ColorRGBA(0.15f, 0.19f, 0.28f, 0.64f), Alpha),
-		BkwDuelAlpha(ColorRGBA(0.055f, 0.075f, 0.12f, 0.70f), Alpha),
-		BkwDuelAlpha(ColorRGBA(0.075f, 0.095f, 0.15f, 0.66f), Alpha),
-		IGraphics::CORNER_ALL, 16.0f);
+		BkwDuelAlpha(ColorRGBA(0.10f, 0.14f, 0.21f, 0.78f), Alpha),
+		BkwDuelAlpha(ColorRGBA(0.13f, 0.17f, 0.25f, 0.72f), Alpha),
+		BkwDuelAlpha(ColorRGBA(0.045f, 0.060f, 0.10f, 0.78f), Alpha),
+		BkwDuelAlpha(ColorRGBA(0.065f, 0.080f, 0.13f, 0.74f), Alpha),
+		IGraphics::CORNER_ALL, maximum(0.0f, Rounding - 1.0f));
+}
 
-	CUIRect Highlight = Inner;
-	Highlight.x += 12.0f;
-	Highlight.w -= 24.0f;
-	Highlight.y += 1.0f;
-	Highlight.h = 1.2f;
-	Highlight.Draw(BkwDuelAlpha(ColorRGBA(1.0f, 1.0f, 1.0f, 0.27f), Alpha), IGraphics::CORNER_ALL, 1.0f);
+CUIRect BkwDuelCardRect(const CUIRect &Screen, float Width, float Height, int Position)
+{
+	constexpr float Margin = 14.0f;
+	const int Column = std::clamp(Position, 0, 8) % 3;
+	const int Row = std::clamp(Position, 0, 8) / 3;
+
+	CUIRect Card{0.0f, 0.0f, Width, Height};
+	if(Column == 0)
+		Card.x = Screen.x + Margin;
+	else if(Column == 1)
+		Card.x = Screen.x + (Screen.w - Width) * 0.5f;
+	else
+		Card.x = Screen.x + Screen.w - Width - Margin;
+
+	if(Row == 0)
+		Card.y = Screen.y + Margin;
+	else if(Row == 1)
+		Card.y = Screen.y + (Screen.h - Height) * 0.5f;
+	else
+		Card.y = Screen.y + Screen.h - Height - Margin;
+
+	return Card;
 }
 } // namespace
 
@@ -130,16 +153,44 @@ void CBroadcast::ResetTeeFusionDuel()
 {
 	m_TeeFusionDuelActive = false;
 	m_TeeFusionDuelLastUpdate = 0.0f;
+	m_TeeFusionDuelLastTitleAt = -1000.0f;
 	m_TeeFusionDuelCycle = 0;
 	m_TeeFusionDuelPlayerCount = 0;
+	m_TeeFusionDuelCandidateCount = 0;
 	for(auto &Player : m_aTeeFusionDuelPlayers)
 		Player = STeeFusionDuelPlayer();
+	for(auto &Candidate : m_aTeeFusionDuelCandidates)
+		Candidate = STeeFusionDuelCandidate();
 }
 
 bool CBroadcast::IsTeeFusionServer() const
 {
 	return Client()->State() == IClient::STATE_ONLINE &&
 		BkwServerDetector::IsTeeFusion(Http(), Client()->ServerAddress());
+}
+
+void CBroadcast::BufferTeeFusionDuelCandidate(const char *pName, int Score, float SeenAt)
+{
+	for(int i = 0; i < m_TeeFusionDuelCandidateCount; ++i)
+	{
+		if(str_comp(m_aTeeFusionDuelCandidates[i].m_aName, pName) == 0)
+		{
+			m_aTeeFusionDuelCandidates[i].m_Score = Score;
+			m_aTeeFusionDuelCandidates[i].m_SeenAt = SeenAt;
+			return;
+		}
+	}
+
+	int Index = -1;
+	if(m_TeeFusionDuelCandidateCount < 2)
+		Index = m_TeeFusionDuelCandidateCount++;
+	else
+		Index = m_aTeeFusionDuelCandidates[0].m_SeenAt <= m_aTeeFusionDuelCandidates[1].m_SeenAt ? 0 : 1;
+
+	m_aTeeFusionDuelCandidates[Index] = STeeFusionDuelCandidate();
+	str_copy(m_aTeeFusionDuelCandidates[Index].m_aName, pName);
+	m_aTeeFusionDuelCandidates[Index].m_Score = Score;
+	m_aTeeFusionDuelCandidates[Index].m_SeenAt = SeenAt;
 }
 
 void CBroadcast::UpdateTeeFusionDuelPlayer(const char *pName, int Score)
@@ -192,6 +243,28 @@ void CBroadcast::UpdateTeeFusionDuelPlayer(const char *pName, int Score)
 	m_TeeFusionDuelActive = true;
 }
 
+void CBroadcast::ConfirmTeeFusionDuelCandidates(float Now)
+{
+	const bool WasActive = m_TeeFusionDuelActive;
+	for(int i = 0; i < m_TeeFusionDuelCandidateCount; ++i)
+	{
+		const auto &Candidate = m_aTeeFusionDuelCandidates[i];
+		if(Candidate.m_aName[0] == '\0' || Now - Candidate.m_SeenAt > BKW_TF_DUEL_CANDIDATE_WINDOW_SECONDS)
+			continue;
+		UpdateTeeFusionDuelPlayer(Candidate.m_aName, Candidate.m_Score);
+	}
+
+	if(m_TeeFusionDuelActive)
+		m_TeeFusionDuelLastUpdate = Now;
+
+	if(g_Config.m_Debug && !WasActive && m_TeeFusionDuelPlayerCount >= 2)
+	{
+		log_info("bkw-duel", "confirmed TeeFusion duel: %s %d VS %d %s",
+			m_aTeeFusionDuelPlayers[0].m_aName, m_aTeeFusionDuelPlayers[0].m_Score,
+			m_aTeeFusionDuelPlayers[1].m_Score, m_aTeeFusionDuelPlayers[1].m_aName);
+	}
+}
+
 bool CBroadcast::HandleTeeFusionDuelBroadcast(const char *pText)
 {
 	if(!IsTeeFusionServer() || !pText || pText[0] == '\0')
@@ -213,3 +286,41 @@ bool CBroadcast::HandleTeeFusionDuelBroadcast(const char *pText)
 
 		if(BkwIsTeeFusionDuelTitle(Line))
 		{
+			m_TeeFusionDuelLastTitleAt = Now;
+			++m_TeeFusionDuelCycle;
+			ConfirmTeeFusionDuelCandidates(Now);
+			if(m_TeeFusionDuelActive)
+				m_TeeFusionDuelLastUpdate = Now;
+			AnyHandled = true;
+			continue;
+		}
+
+		std::string Name;
+		int Score = 0;
+		if(BkwParseTeeFusionDuelScore(Line, Name, Score))
+		{
+			BufferTeeFusionDuelCandidate(Name.c_str(), Score, Now);
+			const bool ConfirmedContext = m_TeeFusionDuelActive ||
+				Now - m_TeeFusionDuelLastTitleAt <= BKW_TF_DUEL_CANDIDATE_WINDOW_SECONDS;
+			if(ConfirmedContext)
+			{
+				UpdateTeeFusionDuelPlayer(Name.c_str(), Score);
+				AnyHandled = true;
+			}
+			else
+			{
+				// Keep the candidate, but do not hide or consume an unconfirmed
+				// "name - number" broadcast. The next duel title can confirm it.
+				AnyUnknown = true;
+			}
+		}
+		else
+		{
+			AnyUnknown = true;
+		}
+	}
+
+	// Suppress the original broadcast only when the entire message has been
+	// confirmed as TeeFusion duel data. Mixed or merely candidate messages stay.
+	return AnyHandled && !AnyUnknown;
+}
