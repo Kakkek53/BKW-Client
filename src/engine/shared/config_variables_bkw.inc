@@ -39,3 +39,9 @@ MACRO_CONFIG_INT(BkwHookTargetSize, bkw_hook_target_size, 58, 32, 96, CFGFLAG_CL
 MACRO_CONFIG_INT(BkwAdaptiveAntiPing, bkw_adaptive_antiping, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable adaptive AntiPing tuning")
 MACRO_CONFIG_INT(BkwAdaptiveAntiPingStrength, bkw_adaptive_antiping_strength, 55, 0, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Adaptive AntiPing strength")
 MACRO_CONFIG_INT(BkwAdaptiveAntiPingStatus, bkw_adaptive_antiping_status, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show adaptive AntiPing status in BKW settings")
+
+// MP4 -> standard DDNet .map converter. Uses atlas images, quads and a STEP color envelope.
+MACRO_CONFIG_STR(BkwVideoMapOutput, bkw_video_map_output, 128, "bkw_video.map", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Output map filename for the BKW video map converter")
+MACRO_CONFIG_INT(BkwVideoMapFps, bkw_video_map_fps, 15, 5, 30, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Requested FPS for MP4 to map conversion")
+MACRO_CONFIG_INT(BkwVideoMapDimension, bkw_video_map_dimension, 256, 128, 512, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Maximum decoded video frame dimension for MP4 to map conversion")
+MACRO_CONFIG_INT(BkwVideoMapMaxSeconds, bkw_video_map_max_seconds, 15, 1, 60, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Maximum video duration in seconds for MP4 to map conversion")
