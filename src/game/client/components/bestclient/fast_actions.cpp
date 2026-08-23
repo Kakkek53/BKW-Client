@@ -1,3 +1,5 @@
+#include <game/collision.h>
+
 #include <game/client/components/bestclient/fast_actions_part1.inc>
 #include <game/client/components/bkw/feature_pack_runtime.inc>
 #include <game/client/components/bestclient/fast_actions_part2.inc>
@@ -8,7 +10,7 @@
 #define BkwRenderCheckpoints() \
 	do \
 	{ \
-		BkwFeaturePackRuntime::OnRender(GameClient(), Client(), Graphics()); \
+		BkwFeaturePackRuntime::OnRender(GameClient(), Client(), Graphics(), Collision()); \
 		this->BkwRenderCheckpoints(); \
 	} while(0)
 #include <game/client/components/bestclient/fast_actions_part3.inc>
