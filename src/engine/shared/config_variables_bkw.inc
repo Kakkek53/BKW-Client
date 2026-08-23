@@ -17,3 +17,25 @@ MACRO_CONFIG_INT(BkwTfDuelHudPosition, bkw_tf_duel_hud_position, 1, 0, 8, CFGFLA
 MACRO_CONFIG_INT(BkwTfDuelHudScale, bkw_tf_duel_hud_scale, 85, 60, 140, CFGFLAG_CLIENT | CFGFLAG_SAVE, "TeeFusion duel HUD scale in percent")
 MACRO_CONFIG_INT(BkwTfDuelHudOpacity, bkw_tf_duel_hud_opacity, 92, 20, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "TeeFusion duel HUD opacity in percent")
 MACRO_CONFIG_INT(BkwTfDuelHudRounding, bkw_tf_duel_hud_rounding, 12, 0, 24, CFGFLAG_CLIENT | CFGFLAG_SAVE, "TeeFusion duel HUD corner radius")
+
+// BKW Feature Pack: optimizer.
+MACRO_CONFIG_INT(BkwOptimizer, bkw_optimizer, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable BKW optimization profiles")
+MACRO_CONFIG_INT(BkwOptimizerScope, bkw_optimizer_scope, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Optimization scope: 0 BKW features only, 1 whole client")
+MACRO_CONFIG_INT(BkwOptimizerPreset, bkw_optimizer_preset, 0, 0, 2, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Optimization preset: 0 balanced, 1 max FPS, 2 low latency")
+
+// BKW Feature Pack: TipoCheat fun tools. They use the normal client input/rate limits.
+MACRO_CONFIG_INT(BkwTipoCheat, bkw_tipo_cheat, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable TipoCheat fun tools")
+MACRO_CONFIG_INT(BkwTipoCheatSpin, bkw_tipo_cheat_spin, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Automatically rotate the aim and lock manual mouse rotation")
+MACRO_CONFIG_INT(BkwTipoCheatSpinSpeed, bkw_tipo_cheat_spin_speed, 45, 1, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "TipoCheat spin speed")
+MACRO_CONFIG_INT(BkwTipoCheatEmoteDance, bkw_tipo_cheat_emote_dance, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Cycle through emoticons with a safe interval")
+MACRO_CONFIG_INT(BkwTipoCheatEmoteInterval, bkw_tipo_cheat_emote_interval, 2200, 1200, 10000, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Emote dance interval in milliseconds")
+
+// Hook target indicator.
+MACRO_CONFIG_INT(BkwHookTargetIndicator, bkw_hook_target_indicator, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show a subtle marker when the current hook path reaches a player")
+MACRO_CONFIG_COL(BkwHookTargetColor, bkw_hook_target_color, 0x5533FF66U, CFGFLAG_CLIENT | CFGFLAG_SAVE | CFGFLAG_COLALPHA, "Hook target indicator color")
+MACRO_CONFIG_INT(BkwHookTargetSize, bkw_hook_target_size, 58, 32, 96, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Hook target indicator square size")
+
+// Adaptive AntiPing. This tunes DDNet's existing prediction controls instead of replacing physics.
+MACRO_CONFIG_INT(BkwAdaptiveAntiPing, bkw_adaptive_antiping, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable adaptive AntiPing tuning")
+MACRO_CONFIG_INT(BkwAdaptiveAntiPingStrength, bkw_adaptive_antiping_strength, 55, 0, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Adaptive AntiPing strength")
+MACRO_CONFIG_INT(BkwAdaptiveAntiPingStatus, bkw_adaptive_antiping_status, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show adaptive AntiPing status in BKW settings")
