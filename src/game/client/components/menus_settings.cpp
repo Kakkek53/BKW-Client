@@ -1,3 +1,5 @@
+#include <base/fs.h>
+
 #include <engine/shared/datafile.h>
 #include <engine/storage.h>
 
@@ -5,6 +7,7 @@
 #include <game/mapitems.h>
 
 #include <array>
+#include <iterator>
 #include <vector>
 
 #include "menus_settings_bkw_part1.inc"
