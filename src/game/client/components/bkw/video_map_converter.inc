@@ -20,12 +20,10 @@ inline void SetStatus(const char *pText)
 	str_copy(s_aStatus, pText);
 }
 
-inline void SetStatusf(const char *pFormat, ...)
+template<typename... TArgs>
+inline void SetStatusf(const char *pFormat, TArgs... Args)
 {
-	va_list Args;
-	va_start(Args, pFormat);
-	str_format_v(s_aStatus, sizeof(s_aStatus), pFormat, Args);
-	va_end(Args);
+	str_format(s_aStatus, sizeof(s_aStatus), pFormat, Args...);
 }
 
 inline void CopyFrameToAtlas(const CImageInfo &Frame, unsigned char *pAtlas, int AtlasWidth, int AtlasHeight, int CellX, int CellY)
@@ -47,8 +45,8 @@ inline void CopyFrameToAtlas(const CImageInfo &Frame, unsigned char *pAtlas, int
 		mem_copy(pDst, pSrc, (size_t)FrameW * 4ull);
 	}
 
-	// Extrude the edge pixels into a small gutter. This prevents neighbouring
-	// atlas cells from bleeding into each other when texture filtering/mipmaps are active.
+	// Extrude edge pixels into a small gutter so atlas cells do not bleed into
+	// each other with texture filtering or mipmaps enabled.
 	for(int g = 1; g <= ATLAS_GUTTER; ++g)
 	{
 		const unsigned char *pTop = pAtlas + ((size_t)Y0 * AtlasWidth + X0) * 4ull;
@@ -119,9 +117,12 @@ inline bool Convert(IGraphics *pGraphics, IStorage *pStorage, const char *pSourc
 	Limits.m_MaxDimension = std::clamp(TargetDimension, 128, 512);
 	Limits.m_MaxFrames = 2400;
 	Limits.m_MaxTotalBytes = 256ull * 1024ull * 1024ull;
-	Limits.m_MaxAnimationDurationMs = 0; // Keep all timing; we crop/resample below instead of falling back to one frame.
+	// Existing decoder treats MaxAnimationDuration as a thumbnail fallback, so
+	// keep it disabled here. We crop the decoded timeline below instead.
+	Limits.m_MaxAnimationDurationMs = 0;
 	Limits.m_DecodeAllFrames = true;
 
+	SetStatus("Декодирую видео и собираю atlas…");
 	const bool DecodeOk = MediaDecoder::DecodeImageWithFfmpegCpu(
 		pGraphics,
 		static_cast<const unsigned char *>(pVideoData), VideoDataSize,
@@ -218,8 +219,7 @@ inline bool Convert(IGraphics *pGraphics, IStorage *pStorage, const char *pSourc
 	Writer.AddItem(MAPITEMTYPE_INFO, 0, sizeof(Info), &Info);
 
 	const int AtlasCount = (OutputFrameCount + FramesPerAtlas - 1) / FramesPerAtlas;
-	std::vector<std::vector<CQuad>> vvAtlasQuads;
-	vvAtlasQuads.resize(AtlasCount);
+	std::vector<std::vector<CQuad>> vvAtlasQuads(AtlasCount);
 
 	const float SourceAspect = (float)FrameW / (float)FrameH;
 	int WorldWidth = 1600;
@@ -364,6 +364,7 @@ inline bool Convert(IGraphics *pGraphics, IStorage *pStorage, const char *pSourc
 	aPoints[2].m_aValues[3] = f2fx(1.0f);
 	Writer.AddItem(MAPITEMTYPE_ENVPOINTS, 0, sizeof(aPoints), aPoints);
 
+	SetStatus("Сжимаю atlas и записываю .map…");
 	Writer.Finish();
 
 	if(EffectiveFps != std::clamp(RequestedFps, 5, 30))
