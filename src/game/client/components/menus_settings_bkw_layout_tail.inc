@@ -39,6 +39,11 @@
 		constexpr float TfMenuHeight = 280.0f;
 		constexpr float TfDuelHudHeight = 405.0f;
 		constexpr float DdnetMenuHeight = 280.0f;
+		constexpr float OptimizerHeight = 245.0f;
+		constexpr float TipoCheatHeight = 250.0f;
+		constexpr float HookTargetHeight = 220.0f;
+		constexpr float AntiPingHeight = 170.0f;
+		constexpr float AnimatedBackgroundHeight = 245.0f;
 		constexpr float CameraDriftHeight = 320.0f;
 		constexpr float HudHeight = 800.0f;
 		constexpr float BackgroundHeight = 470.0f;
@@ -49,7 +54,7 @@
 		CUIRect Content = PageView;
 		s_PersonalizationScrollRegion.Begin(&Content, &ScrollParams);
 
-		CUIRect TfMenuSection, TfDuelHudSection, DdnetMenuSection, CameraDriftSection, HudSection, BackgroundSection;
+		CUIRect TfMenuSection, TfDuelHudSection, DdnetMenuSection, OptimizerSection, TipoCheatSection, HookTargetSection, AntiPingSection, AnimatedBackgroundSection, CameraDriftSection, HudSection, BackgroundSection;
 		Content.HSplitTop(TfMenuHeight, &TfMenuSection, &Content);
 		s_PersonalizationScrollRegion.AddRect(TfMenuSection);
 		RenderTfMenuSettings(pMenus, pUi, pGameClient, TfMenuSection);
@@ -63,6 +68,31 @@
 		Content.HSplitTop(DdnetMenuHeight, &DdnetMenuSection, &Content);
 		s_PersonalizationScrollRegion.AddRect(DdnetMenuSection);
 		RenderDdnetVoteMenuSettings(pMenus, pUi, DdnetMenuSection);
+		Content.HSplitTop(Gap, nullptr, &Content);
+
+		Content.HSplitTop(OptimizerHeight, &OptimizerSection, &Content);
+		s_PersonalizationScrollRegion.AddRect(OptimizerSection);
+		RenderBkwOptimizerSettings(pMenus, pUi, OptimizerSection);
+		Content.HSplitTop(Gap, nullptr, &Content);
+
+		Content.HSplitTop(TipoCheatHeight, &TipoCheatSection, &Content);
+		s_PersonalizationScrollRegion.AddRect(TipoCheatSection);
+		RenderBkwTipoCheatSettings(pMenus, pUi, TipoCheatSection);
+		Content.HSplitTop(Gap, nullptr, &Content);
+
+		Content.HSplitTop(HookTargetHeight, &HookTargetSection, &Content);
+		s_PersonalizationScrollRegion.AddRect(HookTargetSection);
+		RenderBkwHookTargetSettings(pMenus, pUi, HookTargetSection);
+		Content.HSplitTop(Gap, nullptr, &Content);
+
+		Content.HSplitTop(AntiPingHeight, &AntiPingSection, &Content);
+		s_PersonalizationScrollRegion.AddRect(AntiPingSection);
+		RenderBkwAdaptiveAntiPingSettings(pMenus, pUi, pClient, AntiPingSection);
+		Content.HSplitTop(Gap, nullptr, &Content);
+
+		Content.HSplitTop(AnimatedBackgroundHeight, &AnimatedBackgroundSection, &Content);
+		s_PersonalizationScrollRegion.AddRect(AnimatedBackgroundSection);
+		RenderBkwAnimatedBackgroundSettings(pMenus, pUi, pGameClient, AnimatedBackgroundSection);
 		Content.HSplitTop(Gap, nullptr, &Content);
 
 		Content.HSplitTop(CameraDriftHeight, &CameraDriftSection, &Content);
