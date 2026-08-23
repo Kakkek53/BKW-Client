@@ -25,7 +25,7 @@
 		// Neon: cyan vs purple, but the geometry is identical to every other style.
 		Card.Draw(BkwDuelAlpha(ColorRGBA(0.018f, 0.022f, 0.038f, 0.91f), Alpha), IGraphics::CORNER_ALL, Rounding);
 		CUIRect Accent = Card;
-		Accent.h = maximum(1.4f, 1.8f * Scale);
+		Accent.h = std::max(1.4f, 1.8f * Scale);
 		Accent.Draw4(
 			BkwDuelAlpha(ColorRGBA(0.18f, 0.78f, 1.0f, 0.95f), Alpha),
 			BkwDuelAlpha(ColorRGBA(0.82f, 0.25f, 1.0f, 0.95f), Alpha),
