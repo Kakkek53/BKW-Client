@@ -18,6 +18,13 @@ class CBroadcast : public CComponent
 		int m_LastSeenCycle = -1;
 	};
 
+	struct STeeFusionDuelCandidate
+	{
+		char m_aName[64] = "";
+		int m_Score = 0;
+		float m_SeenAt = -1000.0f;
+	};
+
 	// broadcasts
 	char m_aBroadcastText[1024];
 	int m_BroadcastTick;
@@ -27,9 +34,12 @@ class CBroadcast : public CComponent
 	// TeeFusion duel HUD
 	bool m_TeeFusionDuelActive = false;
 	float m_TeeFusionDuelLastUpdate = 0.0f;
+	float m_TeeFusionDuelLastTitleAt = -1000.0f;
 	int m_TeeFusionDuelCycle = 0;
 	int m_TeeFusionDuelPlayerCount = 0;
 	STeeFusionDuelPlayer m_aTeeFusionDuelPlayers[2];
+	int m_TeeFusionDuelCandidateCount = 0;
+	STeeFusionDuelCandidate m_aTeeFusionDuelCandidates[2];
 
 	void RenderServerBroadcast();
 	void RenderTeeFusionDuelHud();
@@ -37,6 +47,8 @@ class CBroadcast : public CComponent
 	bool IsTeeFusionServer() const;
 	bool HandleTeeFusionDuelBroadcast(const char *pText);
 	void UpdateTeeFusionDuelPlayer(const char *pName, int Score);
+	void BufferTeeFusionDuelCandidate(const char *pName, int Score, float SeenAt);
+	void ConfirmTeeFusionDuelCandidates(float Now);
 
 public:
 	int Sizeof() const override { return sizeof(*this); }
