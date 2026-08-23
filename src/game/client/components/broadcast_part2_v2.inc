@@ -100,7 +100,7 @@ void CBroadcast::RenderTeeFusionDuelHud()
 	Ui()->MapScreen();
 	const CUIRect Screen = *Ui()->Screen();
 	const float Scale = std::clamp(g_Config.m_BkwTfDuelHudScale / 100.0f, 0.60f, 1.40f);
-	const float CardWidth = std::min(318.0f * Scale, maximum(160.0f, Screen.w - 28.0f));
+	const float CardWidth = std::min(318.0f * Scale, std::max(160.0f, Screen.w - 28.0f));
 	const float CardHeight = 46.0f * Scale;
 	CUIRect Card = BkwDuelCardRect(Screen, CardWidth, CardHeight, g_Config.m_BkwTfDuelHudPosition);
 	const float Rounding = std::clamp((float)g_Config.m_BkwTfDuelHudRounding * Scale, 0.0f, CardHeight * 0.5f);
