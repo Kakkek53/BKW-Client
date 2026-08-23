@@ -1,104 +1,72 @@
-	const float Now = Client()->GlobalTime();
-	const float LeftPulse = std::clamp(1.0f - (Now - LeftPlayer.m_ScoreChangedAt) / BKW_TF_DUEL_SCORE_PULSE_SECONDS, 0.0f, 1.0f);
-	const float RightPulse = HasRight ? std::clamp(1.0f - (Now - RightPlayer.m_ScoreChangedAt) / BKW_TF_DUEL_SCORE_PULSE_SECONDS, 0.0f, 1.0f) : 0.0f;
+	ColorRGBA NameLeft(0.94f, 0.96f, 1.0f, 0.96f);
+	ColorRGBA NameRight(0.94f, 0.96f, 1.0f, 0.96f);
+	ColorRGBA ScoreLeft(0.67f, 0.86f, 1.0f, 1.0f);
+	ColorRGBA ScoreRight(0.88f, 0.76f, 1.0f, 1.0f);
+	ColorRGBA VsColor(1.0f, 1.0f, 1.0f, 0.45f);
 
-	const int Style = std::clamp(g_Config.m_BkwTfDuelHudStyle, 0, 3);
 	if(Style == 0)
 	{
-		BkwDuelDrawLiquidGlass(Card, Alpha);
-
-		CUIRect Header, Content;
-		Card.HSplitTop(22.0f, &Header, &Content);
-		BkwDuelLabel(Ui(), Header, "TEEFUSION  •  DUEL", 8.5f, TEXTALIGN_MC, BkwDuelAlpha(ColorRGBA(0.82f, 0.90f, 1.0f, 0.86f), Alpha));
-
-		Content.Margin(8.0f, &Content);
-		CUIRect Left, Center, Right;
-		Content.VSplitLeft(Content.w * 0.43f, &Left, &Content);
-		Content.VSplitRight(Content.w * 0.43f, &Center, &Right);
-
-		CUIRect LeftName, LeftScore, RightName, RightScore;
-		Left.HSplitTop(18.0f, &LeftName, &LeftScore);
-		Right.HSplitTop(18.0f, &RightName, &RightScore);
-		BkwDuelLabel(Ui(), LeftName, LeftPlayer.m_aName, 10.0f, TEXTALIGN_MC, BkwDuelAlpha(ColorRGBA(0.93f, 0.96f, 1.0f, 0.93f), Alpha));
-		BkwDuelLabel(Ui(), RightName, HasRight ? RightPlayer.m_aName : "Ожидание…", 10.0f, TEXTALIGN_MC, BkwDuelAlpha(ColorRGBA(0.93f, 0.96f, 1.0f, HasRight ? 0.93f : 0.46f), Alpha));
-		BkwDuelLabel(Ui(), LeftScore, aLeftScore, 24.0f + LeftPulse * 1.8f, TEXTALIGN_MC, BkwDuelAlpha(ColorRGBA(0.64f + LeftPulse * 0.20f, 0.83f + LeftPulse * 0.12f, 1.0f, 1.0f), Alpha));
-		BkwDuelLabel(Ui(), RightScore, aRightScore, 24.0f + RightPulse * 1.8f, TEXTALIGN_MC, BkwDuelAlpha(ColorRGBA(0.88f + RightPulse * 0.10f, 0.77f + RightPulse * 0.12f, 1.0f, 1.0f), Alpha));
-		BkwDuelLabel(Ui(), Center, "VS", 9.5f, TEXTALIGN_MC, BkwDuelAlpha(ColorRGBA(1.0f, 1.0f, 1.0f, 0.40f), Alpha));
+		// Liquid Glass: layered translucent surface without the old oversized header.
+		BkwDuelDrawLiquidGlass(Card, Alpha, Rounding);
 	}
 	else if(Style == 1)
 	{
-		// Minimal: almost no chrome, only a subtle readability shadow and divider.
+		// Minimal: almost no chrome, only enough contrast to keep names readable.
 		CUIRect Shadow = Card;
-		Shadow.y += 2.0f;
-		Shadow.Draw(BkwDuelAlpha(ColorRGBA(0.0f, 0.0f, 0.0f, 0.14f), Alpha), IGraphics::CORNER_ALL, 12.0f);
-		Card.Draw(BkwDuelAlpha(ColorRGBA(0.02f, 0.025f, 0.035f, 0.24f), Alpha), IGraphics::CORNER_ALL, 12.0f);
-		CUIRect Header, Row;
-		Card.HSplitTop(20.0f, &Header, &Row);
-		BkwDuelLabel(Ui(), Header, "DUEL", 8.0f, TEXTALIGN_MC, BkwDuelAlpha(ColorRGBA(1.0f, 1.0f, 1.0f, 0.50f), Alpha));
-		Row.Margin(10.0f, &Row);
-		CUIRect Left, Mid, Right;
-		Row.VSplitLeft(Row.w * 0.44f, &Left, &Row);
-		Row.VSplitRight(Row.w * 0.44f, &Mid, &Right);
-		char aLeft[96], aRight[96];
-		str_format(aLeft, sizeof(aLeft), "%s   %s", LeftPlayer.m_aName, aLeftScore);
-		str_format(aRight, sizeof(aRight), "%s   %s", aRightScore, HasRight ? RightPlayer.m_aName : "…");
-		BkwDuelLabel(Ui(), Left, aLeft, 13.0f, TEXTALIGN_MR, BkwDuelAlpha(ColorRGBA(1.0f, 1.0f, 1.0f, 0.96f), Alpha));
-		BkwDuelLabel(Ui(), Right, aRight, 13.0f, TEXTALIGN_ML, BkwDuelAlpha(ColorRGBA(1.0f, 1.0f, 1.0f, 0.96f), Alpha));
-		CUIRect Divider = Mid;
-		Divider.x += Divider.w * 0.5f - 0.5f;
-		Divider.w = 1.0f;
-		Divider.y += 10.0f;
-		Divider.h -= 20.0f;
-		Divider.Draw(BkwDuelAlpha(ColorRGBA(1.0f, 1.0f, 1.0f, 0.28f), Alpha), IGraphics::CORNER_ALL, 1.0f);
+		Shadow.y += 1.5f * Scale;
+		Shadow.Draw(BkwDuelAlpha(ColorRGBA(0.0f, 0.0f, 0.0f, 0.12f), Alpha), IGraphics::CORNER_ALL, Rounding);
+		Card.Draw(BkwDuelAlpha(ColorRGBA(0.02f, 0.025f, 0.035f, 0.25f), Alpha), IGraphics::CORNER_ALL, Rounding);
+		ScoreLeft = ColorRGBA(1.0f, 1.0f, 1.0f, 1.0f);
+		ScoreRight = ScoreLeft;
+		VsColor = ColorRGBA(1.0f, 1.0f, 1.0f, 0.34f);
 	}
 	else if(Style == 2)
 	{
-		// Neon arena card.
-		Card.Draw(BkwDuelAlpha(ColorRGBA(0.018f, 0.022f, 0.038f, 0.90f), Alpha), IGraphics::CORNER_ALL, 11.0f);
-		CUIRect TopAccent = Card;
-		TopAccent.h = 2.0f;
-		TopAccent.Draw4(
+		// Neon: cyan vs purple, but the geometry is identical to every other style.
+		Card.Draw(BkwDuelAlpha(ColorRGBA(0.018f, 0.022f, 0.038f, 0.91f), Alpha), IGraphics::CORNER_ALL, Rounding);
+		CUIRect Accent = Card;
+		Accent.h = maximum(1.4f, 1.8f * Scale);
+		Accent.Draw4(
 			BkwDuelAlpha(ColorRGBA(0.18f, 0.78f, 1.0f, 0.95f), Alpha),
 			BkwDuelAlpha(ColorRGBA(0.82f, 0.25f, 1.0f, 0.95f), Alpha),
 			BkwDuelAlpha(ColorRGBA(0.18f, 0.78f, 1.0f, 0.95f), Alpha),
 			BkwDuelAlpha(ColorRGBA(0.82f, 0.25f, 1.0f, 0.95f), Alpha),
-			IGraphics::CORNER_T, 11.0f);
-
-		CUIRect Header, Row;
-		Card.HSplitTop(21.0f, &Header, &Row);
-		BkwDuelLabel(Ui(), Header, "TEEFUSION DUEL", 8.5f, TEXTALIGN_MC, BkwDuelAlpha(ColorRGBA(0.75f, 0.80f, 0.92f, 0.78f), Alpha));
-		Row.Margin(8.0f, &Row);
-		CUIRect Left, Center, Right;
-		Row.VSplitLeft(Row.w * 0.44f, &Left, &Row);
-		Row.VSplitRight(Row.w * 0.44f, &Center, &Right);
-		CUIRect LeftName, LeftScore, RightName, RightScore;
-		Left.HSplitTop(18.0f, &LeftName, &LeftScore);
-		Right.HSplitTop(18.0f, &RightName, &RightScore);
-		BkwDuelLabel(Ui(), LeftName, LeftPlayer.m_aName, 9.5f, TEXTALIGN_MC, BkwDuelAlpha(ColorRGBA(0.52f, 0.88f, 1.0f, 1.0f), Alpha));
-		BkwDuelLabel(Ui(), RightName, HasRight ? RightPlayer.m_aName : "Ожидание…", 9.5f, TEXTALIGN_MC, BkwDuelAlpha(ColorRGBA(0.92f, 0.58f, 1.0f, HasRight ? 1.0f : 0.45f), Alpha));
-		BkwDuelLabel(Ui(), LeftScore, aLeftScore, 25.0f + LeftPulse * 2.0f, TEXTALIGN_MC, BkwDuelAlpha(ColorRGBA(0.38f, 0.82f, 1.0f, 1.0f), Alpha));
-		BkwDuelLabel(Ui(), RightScore, aRightScore, 25.0f + RightPulse * 2.0f, TEXTALIGN_MC, BkwDuelAlpha(ColorRGBA(0.86f, 0.38f, 1.0f, 1.0f), Alpha));
-		BkwDuelLabel(Ui(), Center, "VS", 9.0f, TEXTALIGN_MC, BkwDuelAlpha(ColorRGBA(1.0f, 1.0f, 1.0f, 0.36f), Alpha));
+			IGraphics::CORNER_T, Rounding);
+		NameLeft = ColorRGBA(0.52f, 0.88f, 1.0f, 1.0f);
+		NameRight = ColorRGBA(0.92f, 0.58f, 1.0f, 1.0f);
+		ScoreLeft = ColorRGBA(0.38f, 0.82f, 1.0f, 1.0f);
+		ScoreRight = ColorRGBA(0.86f, 0.38f, 1.0f, 1.0f);
 	}
 	else
 	{
-		// Classic: compact esports-style scoreboard.
-		Card.h = 64.0f;
-		Card.Draw(BkwDuelAlpha(ColorRGBA(0.035f, 0.035f, 0.045f, 0.88f), Alpha), IGraphics::CORNER_ALL, 5.0f);
-		CUIRect Header, Row;
-		Card.HSplitTop(18.0f, &Header, &Row);
-		Header.Draw(BkwDuelAlpha(ColorRGBA(1.0f, 1.0f, 1.0f, 0.065f), Alpha), IGraphics::CORNER_T, 5.0f);
-		BkwDuelLabel(Ui(), Header, "TEEFUSION • ДУЭЛЬ", 8.0f, TEXTALIGN_MC, BkwDuelAlpha(ColorRGBA(0.90f, 0.92f, 0.96f, 0.84f), Alpha));
-		Row.Margin(7.0f, &Row);
-		CUIRect Left, Score, Right;
-		Row.VSplitLeft(Row.w * 0.37f, &Left, &Row);
-		Row.VSplitRight(Row.w * 0.37f, &Score, &Right);
-		BkwDuelLabel(Ui(), Left, LeftPlayer.m_aName, 11.0f, TEXTALIGN_MR, BkwDuelAlpha(ColorRGBA(1.0f, 1.0f, 1.0f, 0.94f), Alpha));
-		BkwDuelLabel(Ui(), Right, HasRight ? RightPlayer.m_aName : "…", 11.0f, TEXTALIGN_ML, BkwDuelAlpha(ColorRGBA(1.0f, 1.0f, 1.0f, HasRight ? 0.94f : 0.40f), Alpha));
-		char aScore[64];
-		str_format(aScore, sizeof(aScore), "%s   :   %s", aLeftScore, aRightScore);
-		BkwDuelLabel(Ui(), Score, aScore, 18.0f, TEXTALIGN_MC, BkwDuelAlpha(ColorRGBA(0.72f, 0.84f, 1.0f, 1.0f), Alpha));
+		// Classic: opaque esports-style strip.
+		Card.Draw(BkwDuelAlpha(ColorRGBA(0.035f, 0.035f, 0.045f, 0.90f), Alpha), IGraphics::CORNER_ALL, Rounding);
+		ScoreLeft = ColorRGBA(0.74f, 0.86f, 1.0f, 1.0f);
+		ScoreRight = ScoreLeft;
+		VsColor = ColorRGBA(1.0f, 1.0f, 1.0f, 0.54f);
 	}
+
+	// One shared, mathematically symmetric layout for all styles:
+	// 30% name | 12% score | 16% VS | 12% score | 30% name.
+	CUIRect Row = Card;
+	Row.Margin(6.0f * Scale, &Row);
+	const float NameW = Row.w * 0.30f;
+	const float ScoreW = Row.w * 0.12f;
+	const float VsW = Row.w * 0.16f;
+	CUIRect LeftName{Row.x, Row.y, NameW, Row.h};
+	CUIRect LeftScore{LeftName.x + LeftName.w, Row.y, ScoreW, Row.h};
+	CUIRect Vs{LeftScore.x + LeftScore.w, Row.y, VsW, Row.h};
+	CUIRect RightScore{Vs.x + Vs.w, Row.y, ScoreW, Row.h};
+	CUIRect RightName{RightScore.x + RightScore.w, Row.y, NameW, Row.h};
+
+	const float NameSize = 9.5f * Scale;
+	const float ScoreSize = 18.0f * Scale;
+	const float VsSize = 8.5f * Scale;
+	BkwDuelLabel(Ui(), LeftName, LeftPlayer.m_aName, NameSize, TEXTALIGN_MR, BkwDuelAlpha(NameLeft, Alpha));
+	BkwDuelLabel(Ui(), LeftScore, aLeftScore, ScoreSize + LeftPulse * 1.5f * Scale, TEXTALIGN_MC, BkwDuelAlpha(ScoreLeft, Alpha));
+	BkwDuelLabel(Ui(), Vs, "VS", VsSize, TEXTALIGN_MC, BkwDuelAlpha(VsColor, Alpha));
+	BkwDuelLabel(Ui(), RightScore, aRightScore, ScoreSize + RightPulse * 1.5f * Scale, TEXTALIGN_MC, BkwDuelAlpha(ScoreRight, Alpha));
+	BkwDuelLabel(Ui(), RightName, RightPlayer.m_aName, NameSize, TEXTALIGN_ML, BkwDuelAlpha(NameRight, Alpha));
 }
 
 void CBroadcast::OnMessage(int MsgType, void *pRawMsg)
@@ -136,9 +104,7 @@ void CBroadcast::DoBroadcast(const char *pText)
 		while((pOriginalText = str_next_token(pOriginalText, "\n", aLine, sizeof(aLine))))
 		{
 			if(aLine[0] != '\0')
-			{
 				log_info_color(LogColor, "broadcast", "%s", aLine);
-			}
 		}
 	}
 }
