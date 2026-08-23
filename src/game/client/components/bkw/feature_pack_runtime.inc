@@ -9,6 +9,10 @@ inline int64_t s_LastAntiPingUpdate = 0;
 inline int64_t s_LastEmoteAt = 0;
 inline int s_EmoteIndex = 0;
 inline bool s_WasSpinActive = false;
+inline bool s_BkwVisualOverride = false;
+inline int s_SavedTfMenuStyle = 0;
+inline int s_SavedDdnetMenuStyle = 0;
+inline int s_SavedDuelStyle = 0;
 
 inline bool OptimizeBkwEffects()
 {
@@ -17,15 +21,33 @@ inline bool OptimizeBkwEffects()
 
 inline void ApplyOptimizerProfile()
 {
-	if(!g_Config.m_BkwOptimizer)
-		return;
-
-	if(g_Config.m_BkwOptimizerScope == 0)
+	const bool BkwMaxFps = OptimizeBkwEffects();
+	if(BkwMaxFps && !s_BkwVisualOverride)
 	{
-		// BKW-only mode is intentionally non-destructive. Individual BKW renderers
-		// temporarily simplify expensive decoration instead of rewriting user settings.
+		s_SavedTfMenuStyle = g_Config.m_BkwTfMenuStyle;
+		s_SavedDdnetMenuStyle = g_Config.m_BkwDdnetMenuStyle;
+		s_SavedDuelStyle = g_Config.m_BkwTfDuelHudStyle;
+		s_BkwVisualOverride = true;
+	}
+	if(BkwMaxFps)
+	{
+		// Temporary low-cost visual overrides. They are restored when the BKW-only
+		// Max FPS profile is disabled or changed.
+		g_Config.m_BkwTfMenuStyle = 3;
+		g_Config.m_BkwDdnetMenuStyle = 3;
+		g_Config.m_BkwTfDuelHudStyle = 1;
 		return;
 	}
+	if(s_BkwVisualOverride)
+	{
+		g_Config.m_BkwTfMenuStyle = s_SavedTfMenuStyle;
+		g_Config.m_BkwDdnetMenuStyle = s_SavedDdnetMenuStyle;
+		g_Config.m_BkwTfDuelHudStyle = s_SavedDuelStyle;
+		s_BkwVisualOverride = false;
+	}
+
+	if(!g_Config.m_BkwOptimizer || g_Config.m_BkwOptimizerScope == 0)
+		return;
 
 	g_Config.m_BcOptimizer = 1;
 	switch(g_Config.m_BkwOptimizerPreset)
@@ -124,7 +146,7 @@ inline void UpdateAdaptiveAntiPing(IClient *pClient)
 	g_Config.m_ClPredictionMargin = Margin;
 }
 
-inline void RenderHookTargetIndicator(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraphics)
+inline void RenderHookTargetIndicator(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraphics, CCollision *pCollision)
 {
 	if(!g_Config.m_BkwHookTargetIndicator || pClient->State() != IClient::STATE_ONLINE || pGameClient->m_Snap.m_SpecInfo.m_Active)
 		return;
@@ -137,13 +159,26 @@ inline void RenderHookTargetIndicator(CGameClient *pGameClient, IClient *pClient
 	if(length(Aim) < 0.001f)
 		return;
 	const vec2 Dir = normalize(Aim);
-	const vec2 Start = pGameClient->m_aClients[LocalId].m_RenderPos + Dir * HOOK_START_DISTANCE;
+	const vec2 LocalPos = pGameClient->m_aClients[LocalId].m_RenderPos;
+	const vec2 Start = LocalPos + Dir * HOOK_START_DISTANCE;
 	float HookLength = pGameClient->m_aClients[LocalId].m_Predicted.m_Tuning.m_HookLength;
 	if(HookLength < HOOK_START_DISTANCE)
 		HookLength = 380.0f;
-	vec2 End = pGameClient->m_aClients[LocalId].m_RenderPos + Dir * HookLength;
+	const vec2 FullEnd = LocalPos + Dir * HookLength;
+
+	vec2 CollisionEnd = FullEnd;
+	if(pCollision)
+	{
+		int Tele = 0;
+		vec2 HitPos;
+		const int Hit = pCollision->IntersectLineTeleHook(Start, FullEnd, &HitPos, nullptr, &Tele);
+		if(Hit)
+			CollisionEnd = HitPos;
+	}
+
+	vec2 CharacterEnd = CollisionEnd;
 	vec2 TargetPos;
-	const int TargetId = pGameClient->IntersectCharacter(Start, End, End, LocalId, &TargetPos);
+	const int TargetId = pGameClient->IntersectCharacter(Start, CollisionEnd, CharacterEnd, LocalId, &TargetPos);
 	if(TargetId < 0 || TargetId >= MAX_CLIENTS || !pGameClient->m_aClients[TargetId].m_Active)
 		return;
 
@@ -169,16 +204,16 @@ inline void RenderHookTargetIndicator(CGameClient *pGameClient, IClient *pClient
 	pGraphics->TextureClear();
 	pGraphics->LinesBegin();
 	pGraphics->SetColor(Color);
-	pGraphics->LinesDraw(aLines, std::size(aLines));
+	pGraphics->LinesDraw(aLines, sizeof(aLines) / sizeof(aLines[0]));
 	pGraphics->LinesEnd();
 }
 
-inline void OnRender(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraphics)
+inline void OnRender(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraphics, CCollision *pCollision)
 {
 	ApplyOptimizerProfile();
 	UpdateTipoCheat(pGameClient, pClient);
 	UpdateAdaptiveAntiPing(pClient);
-	RenderHookTargetIndicator(pGameClient, pClient, pGraphics);
+	RenderHookTargetIndicator(pGameClient, pClient, pGraphics, pCollision);
 }
 
 inline float AntiPingAverage() { return s_AntiPingAverage; }
