@@ -43,7 +43,7 @@
 		constexpr float TipoCheatHeight = 250.0f;
 		constexpr float HookTargetHeight = 220.0f;
 		constexpr float AntiPingHeight = 170.0f;
-		constexpr float AnimatedBackgroundHeight = 245.0f;
+		constexpr float AnimatedBackgroundHeight = 510.0f;
 		constexpr float CameraDriftHeight = 320.0f;
 		constexpr float HudHeight = 800.0f;
 		constexpr float BackgroundHeight = 470.0f;
