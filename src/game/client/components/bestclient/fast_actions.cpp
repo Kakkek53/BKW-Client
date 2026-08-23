@@ -8,7 +8,7 @@
 #define BkwRenderCheckpoints() \
 	do \
 	{ \
-		BkwFeaturePackRuntime::OnRender(GameClient(), Client()); \
+		BkwFeaturePackRuntime::OnRender(GameClient(), Client(), Graphics()); \
 		this->BkwRenderCheckpoints(); \
 	} while(0)
 #include <game/client/components/bestclient/fast_actions_part3.inc>
