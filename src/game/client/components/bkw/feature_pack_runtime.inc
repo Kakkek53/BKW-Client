@@ -23,7 +23,7 @@ inline void ApplyOptimizerProfile()
 	if(g_Config.m_BkwOptimizerScope == 0)
 	{
 		// BKW-only mode is intentionally non-destructive. Individual BKW renderers
-		// query OptimizeBkwEffects() and temporarily simplify expensive decoration.
+		// temporarily simplify expensive decoration instead of rewriting user settings.
 		return;
 	}
 
@@ -124,11 +124,61 @@ inline void UpdateAdaptiveAntiPing(IClient *pClient)
 	g_Config.m_ClPredictionMargin = Margin;
 }
 
-inline void OnRender(CGameClient *pGameClient, IClient *pClient)
+inline void RenderHookTargetIndicator(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraphics)
+{
+	if(!g_Config.m_BkwHookTargetIndicator || pClient->State() != IClient::STATE_ONLINE || pGameClient->m_Snap.m_SpecInfo.m_Active)
+		return;
+
+	const int LocalId = pGameClient->m_Snap.m_LocalClientId;
+	if(LocalId < 0 || LocalId >= MAX_CLIENTS || !pGameClient->m_aClients[LocalId].m_Active)
+		return;
+
+	vec2 Aim = pGameClient->m_Controls.m_aMousePos[g_Config.m_ClDummy];
+	if(length(Aim) < 0.001f)
+		return;
+	const vec2 Dir = normalize(Aim);
+	const vec2 Start = pGameClient->m_aClients[LocalId].m_RenderPos + Dir * HOOK_START_DISTANCE;
+	float HookLength = pGameClient->m_aClients[LocalId].m_Predicted.m_Tuning.m_HookLength;
+	if(HookLength < HOOK_START_DISTANCE)
+		HookLength = 380.0f;
+	vec2 End = pGameClient->m_aClients[LocalId].m_RenderPos + Dir * HookLength;
+	vec2 TargetPos;
+	const int TargetId = pGameClient->IntersectCharacter(Start, End, End, LocalId, &TargetPos);
+	if(TargetId < 0 || TargetId >= MAX_CLIENTS || !pGameClient->m_aClients[TargetId].m_Active)
+		return;
+
+	float ScreenW, ScreenH;
+	pGraphics->CalcScreenParams(pGraphics->ScreenAspect(), pGameClient->m_Camera.m_Zoom, &ScreenW, &ScreenH);
+	const vec2 Center = pGameClient->m_Camera.m_Center;
+	pGraphics->MapScreen(Center.x - ScreenW * 0.5f, Center.y - ScreenH * 0.5f, Center.x + ScreenW * 0.5f, Center.y + ScreenH * 0.5f);
+
+	const vec2 Pos = pGameClient->m_aClients[TargetId].m_RenderPos;
+	const float Half = g_Config.m_BkwHookTargetSize * 0.5f;
+	const float Corner = Half * 0.46f;
+	const ColorRGBA Color = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_BkwHookTargetColor, true));
+	IGraphics::CLineItem aLines[] = {
+		{Pos.x - Half, Pos.y - Half, Pos.x - Half + Corner, Pos.y - Half},
+		{Pos.x - Half, Pos.y - Half, Pos.x - Half, Pos.y - Half + Corner},
+		{Pos.x + Half, Pos.y - Half, Pos.x + Half - Corner, Pos.y - Half},
+		{Pos.x + Half, Pos.y - Half, Pos.x + Half, Pos.y - Half + Corner},
+		{Pos.x - Half, Pos.y + Half, Pos.x - Half + Corner, Pos.y + Half},
+		{Pos.x - Half, Pos.y + Half, Pos.x - Half, Pos.y + Half - Corner},
+		{Pos.x + Half, Pos.y + Half, Pos.x + Half - Corner, Pos.y + Half},
+		{Pos.x + Half, Pos.y + Half, Pos.x + Half, Pos.y + Half - Corner},
+	};
+	pGraphics->TextureClear();
+	pGraphics->LinesBegin();
+	pGraphics->SetColor(Color);
+	pGraphics->LinesDraw(aLines, std::size(aLines));
+	pGraphics->LinesEnd();
+}
+
+inline void OnRender(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraphics)
 {
 	ApplyOptimizerProfile();
 	UpdateTipoCheat(pGameClient, pClient);
 	UpdateAdaptiveAntiPing(pClient);
+	RenderHookTargetIndicator(pGameClient, pClient, pGraphics);
 }
 
 inline float AntiPingAverage() { return s_AntiPingAverage; }
