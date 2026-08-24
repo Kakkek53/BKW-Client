@@ -1,14 +1,26 @@
+#include <base/color.h>
+#include <base/math.h>
+#include <base/system.h>
+
+#include <engine/client.h>
+#include <engine/graphics.h>
+#include <engine/shared/config.h>
+
 #include <game/collision.h>
+#include <game/gamecore.h>
+#include <game/client/gameclient.h>
 
-#include <game/client/components/bestclient/fast_actions_part1.inc>
+#include <algorithm>
 
-// DDNet keeps this value local to CPlayers::RenderHookCollLine. Reuse the same
-// physics formula for the BKW hook-target indicator without introducing a
-// second magic number.
+// feature_pack_runtime.inc defines a namespace and therefore must be included at
+// file scope. fast_actions_part1.inc and part2.inc intentionally split member
+// functions across include boundaries, so inserting it between those files
+// places the namespace inside CFastActions::BkwRenderCheckpoints().
 #define HOOK_START_DISTANCE (CCharacterCore::PhysicalSize() * 1.5f)
 #include <game/client/components/bkw/feature_pack_runtime.inc>
 #undef HOOK_START_DISTANCE
 
+#include <game/client/components/bestclient/fast_actions_part1.inc>
 #include <game/client/components/bestclient/fast_actions_part2.inc>
 
 // Hook the feature pack into the existing render point without duplicating the
