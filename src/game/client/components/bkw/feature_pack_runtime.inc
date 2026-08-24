@@ -267,10 +267,18 @@ inline void RenderHookTargetIndicator(CGameClient *pGameClient, IClient *pClient
 	if(TargetId < 0 || TargetId >= MAX_CLIENTS || !pGameClient->m_aClients[TargetId].m_Active)
 		return;
 
-	float ScreenW, ScreenH;
-	pGraphics->CalcScreenParams(pGraphics->ScreenAspect(), pGameClient->m_Camera.m_Zoom, &ScreenW, &ScreenH);
-	const vec2 Center = pGameClient->m_Camera.m_Center;
-	pGraphics->MapScreen(Center.x - ScreenW * 0.5f, Center.y - ScreenH * 0.5f, Center.x + ScreenW * 0.5f, Center.y + ScreenH * 0.5f);
+	const CScreenRect OldScreen = pGraphics->GetScreen();
+	const CMapItemGroup *pGameGroup = pGameClient->Layers()->GameGroup();
+	if(pGameGroup)
+	{
+		const int ParallaxZoom = std::clamp(maximum(pGameGroup->m_ParallaxX, pGameGroup->m_ParallaxY), 0, 100);
+		const CScreenRect WorldScreen = pGraphics->MapScreenToWorld(
+			pGameClient->m_Camera.m_Center.x, pGameClient->m_Camera.m_Center.y,
+			pGameGroup->m_ParallaxX, pGameGroup->m_ParallaxY, (float)ParallaxZoom,
+			pGameGroup->m_OffsetX, pGameGroup->m_OffsetY,
+			pGraphics->ScreenAspect(), pGameClient->m_Camera.m_Zoom);
+		pGraphics->MapScreen(WorldScreen);
+	}
 
 	const vec2 Pos = pGameClient->m_aClients[TargetId].m_RenderPos;
 	const float Half = g_Config.m_BkwHookTargetSize * 0.5f;
@@ -291,6 +299,7 @@ inline void RenderHookTargetIndicator(CGameClient *pGameClient, IClient *pClient
 	pGraphics->SetColor(Color);
 	pGraphics->LinesDraw(aLines, sizeof(aLines) / sizeof(aLines[0]));
 	pGraphics->LinesEnd();
+	pGraphics->MapScreen(OldScreen);
 }
 
 inline void OnRender(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraphics, CCollision *pCollision)
