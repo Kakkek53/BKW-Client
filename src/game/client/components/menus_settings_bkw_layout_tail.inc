@@ -38,6 +38,7 @@
 		constexpr float Gap = 22.0f;
 		constexpr float TfMenuHeight = 280.0f;
 		constexpr float TfDuelHudHeight = 405.0f;
+		constexpr float LocalDuelHeight = 735.0f;
 		constexpr float DdnetMenuHeight = 280.0f;
 		constexpr float OptimizerHeight = 245.0f;
 		constexpr float TipoCheatHeight = 250.0f;
@@ -54,7 +55,7 @@
 		CUIRect Content = PageView;
 		s_PersonalizationScrollRegion.Begin(&Content, &ScrollParams);
 
-		CUIRect TfMenuSection, TfDuelHudSection, DdnetMenuSection, OptimizerSection, TipoCheatSection, HookTargetSection, AntiPingSection, AnimatedBackgroundSection, CameraDriftSection, HudSection, BackgroundSection;
+		CUIRect TfMenuSection, TfDuelHudSection, LocalDuelSection, DdnetMenuSection, OptimizerSection, TipoCheatSection, HookTargetSection, AntiPingSection, AnimatedBackgroundSection, CameraDriftSection, HudSection, BackgroundSection;
 		Content.HSplitTop(TfMenuHeight, &TfMenuSection, &Content);
 		s_PersonalizationScrollRegion.AddRect(TfMenuSection);
 		RenderTfMenuSettings(pMenus, pUi, pGameClient, TfMenuSection);
@@ -63,6 +64,11 @@
 		Content.HSplitTop(TfDuelHudHeight, &TfDuelHudSection, &Content);
 		s_PersonalizationScrollRegion.AddRect(TfDuelHudSection);
 		RenderTfDuelHudSettings(pMenus, pUi, TfDuelHudSection);
+		Content.HSplitTop(Gap, nullptr, &Content);
+
+		Content.HSplitTop(LocalDuelHeight, &LocalDuelSection, &Content);
+		s_PersonalizationScrollRegion.AddRect(LocalDuelSection);
+		RenderBkwLocalDuelSettings(pMenus, pUi, pGameClient, LocalDuelSection);
 		Content.HSplitTop(Gap, nullptr, &Content);
 
 		Content.HSplitTop(DdnetMenuHeight, &DdnetMenuSection, &Content);
