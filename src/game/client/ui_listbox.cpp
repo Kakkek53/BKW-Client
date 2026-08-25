@@ -146,6 +146,12 @@ CListboxItem CListBox::DoNextItem(const void *pId, bool Selected, float CornerRa
 	}
 
 	CListboxItem Item = DoNextRow();
+	// BKW extension: a callback may reserve and render a small action area on
+	// the right side of this row. With no callback this is a no-op and the
+	// original listbox geometry/input path is unchanged.
+	if(Item.m_Visible && ms_pRightActionCallback)
+		ms_pRightActionCallback(pId, &Item.m_Rect);
+
 	const int ItemClicked = Item.m_Visible ? Ui()->DoButtonLogic(pId, 0, &Item.m_Rect, BUTTONFLAG_LEFT) : 0;
 	if(ItemClicked)
 	{
