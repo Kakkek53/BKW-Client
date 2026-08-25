@@ -46,7 +46,7 @@ inline ESetupStage SetupStage() { return s_SetupStage; }
 
 inline bool ValidClient(const CGameClient *pGameClient, int ClientId)
 {
-	return ClientId >= 0 && ClientId < MAX_CLIENTS && pGameClient->m_aClients[ClientId].m_Active;
+	return pGameClient != nullptr && ClientId >= 0 && ClientId < MAX_CLIENTS && pGameClient->m_aClients[ClientId].m_Active;
 }
 
 inline const char *ClientName(const CGameClient *pGameClient, int ClientId)
@@ -61,7 +61,7 @@ inline bool IsFrozen(const CGameClient *pGameClient, int ClientId)
 
 inline int ResolveOpponent(const CGameClient *pGameClient, int LocalId)
 {
-	if(g_Config.m_BkwLocalDuelOpponent[0] == '\0')
+	if(!pGameClient || g_Config.m_BkwLocalDuelOpponent[0] == '\0')
 		return -1;
 	for(int i = 0; i < MAX_CLIENTS; ++i)
 	{
@@ -73,10 +73,10 @@ inline int ResolveOpponent(const CGameClient *pGameClient, int LocalId)
 	return -1;
 }
 
-inline void SendPublicChat(CGameClient *pGameClient, const char *pText)
+inline bool SendPublicChat(CGameClient *pGameClient, const char *pText)
 {
-	if(!pText || pText[0] == '\0' || pGameClient->Client()->State() != IClient::STATE_ONLINE)
-		return;
+	if(!pGameClient || !pText || pText[0] == '\0' || pGameClient->Client()->State() != IClient::STATE_ONLINE)
+		return false;
 
 	char aCommand[640] = "say \"";
 	char *pDst = aCommand + str_length(aCommand);
@@ -84,6 +84,7 @@ inline void SendPublicChat(CGameClient *pGameClient, const char *pText)
 	str_escape(&pDst, pText, pEnd);
 	str_append(aCommand, "\"");
 	pGameClient->Console()->ExecuteLine(aCommand, IConsole::CLIENT_ID_UNSPECIFIED);
+	return true;
 }
 
 inline void QueuePublicChat(const char *pText, int DelayMs)
@@ -96,7 +97,8 @@ inline void FlushPendingChat(CGameClient *pGameClient)
 {
 	if(s_aPendingChat[0] == '\0' || time_get() < s_PendingChatAt)
 		return;
-	SendPublicChat(pGameClient, s_aPendingChat);
+	if(!SendPublicChat(pGameClient, s_aPendingChat))
+		return;
 	s_aPendingChat[0] = '\0';
 	s_PendingChatAt = 0;
 }
@@ -135,6 +137,20 @@ inline void InitializeFreezeArming(CGameClient *pGameClient, int LocalId)
 	s_OpponentUnfrozenSince = OpponentFrozen ? 0 : Now;
 }
 
+inline void Stop()
+{
+	s_SetupStage = ESetupStage::NONE;
+	s_PendingOpponentId = -1;
+	s_Active = false;
+	s_Finished = false;
+	s_LocalArmed = false;
+	s_OpponentArmed = false;
+	s_LocalUnfrozenSince = 0;
+	s_OpponentUnfrozenSince = 0;
+	s_aPendingChat[0] = '\0';
+	s_PendingChatAt = 0;
+}
+
 inline void ResetScores(CGameClient *pGameClient, bool StartIfPossible = true)
 {
 	s_LocalScore = 0;
@@ -142,6 +158,7 @@ inline void ResetScores(CGameClient *pGameClient, bool StartIfPossible = true)
 	s_Finished = false;
 	s_aPendingChat[0] = '\0';
 	s_PendingChatAt = 0;
+	str_copy(s_aLastOpponentConfig, g_Config.m_BkwLocalDuelOpponent);
 
 	const int LocalId = pGameClient ? pGameClient->m_Snap.m_LocalClientId : -1;
 	if(pGameClient && ValidClient(pGameClient, LocalId))
@@ -175,7 +192,7 @@ inline void CancelSetup()
 
 inline void StartDuelWithOpponent(CGameClient *pGameClient, int OpponentId, int Limit)
 {
-	const int LocalId = pGameClient->m_Snap.m_LocalClientId;
+	const int LocalId = pGameClient ? pGameClient->m_Snap.m_LocalClientId : -1;
 	if(!ValidClient(pGameClient, LocalId) || !ValidClient(pGameClient, OpponentId) || OpponentId == LocalId)
 		return;
 
@@ -240,7 +257,7 @@ inline void DrawLabel(CUi *pUi, const CUIRect &Rect, const char *pText, float Si
 
 inline void DrawHud(CGameClient *pGameClient, IGraphics *pGraphics)
 {
-	if(!g_Config.m_BkwLocalDuelHud || (!s_Active && !s_Finished) || g_Config.m_BkwLocalDuelOpponent[0] == '\0')
+	if(!g_Config.m_BkwLocalDuel || !g_Config.m_BkwLocalDuelHud || (!s_Active && !s_Finished) || g_Config.m_BkwLocalDuelOpponent[0] == '\0')
 		return;
 
 	const int LocalId = pGameClient->m_Snap.m_LocalClientId;
@@ -326,7 +343,7 @@ inline void DrawSelectionTarget(CGameClient *pGameClient, IGraphics *pGraphics, 
 	pGraphics->TextureClear();
 	pGraphics->LinesBegin();
 	pGraphics->SetColor(ColorRGBA(0.28f, 1.0f, 0.48f, 0.82f));
-	pGraphics->LinesDraw(aLines, std::size(aLines));
+	pGraphics->LinesDraw(aLines, sizeof(aLines) / sizeof(aLines[0]));
 	pGraphics->LinesEnd();
 	pGraphics->MapScreen(OldScreen);
 }
@@ -437,7 +454,7 @@ inline void Update(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraph
 	{
 		s_SetupStage = ESetupStage::NONE;
 		s_Active = false;
-		DrawHud(pGameClient, pGraphics);
+		s_Finished = false;
 		return;
 	}
 
