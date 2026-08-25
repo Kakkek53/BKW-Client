@@ -20,6 +20,7 @@
 #undef HOOK_START_DISTANCE
 #include <game/client/components/bkw/local_duel.inc>
 #include <game/client/components/bkw/ego_vote_overlay.inc>
+#include <game/client/components/bkw/ego_vote_real_format_fix.inc>
 #include <game/client/components/bkw/vote_menu_debug.inc>
 
 #include <game/client/components/bestclient/fast_actions_part1.inc>
@@ -29,6 +30,8 @@
 // large split Fast Actions implementation. EGO does not replace the vote menu:
 // it only registers an optional right-side "Подробнее" action for map rows in
 // the standard CListBox and uses a normal UI popup for the API statistics.
+// The live EGO parser understands framed rows like:
+// "│ • MapName | ★★☆ | S | 144 ⚐ | 11:49 ◷".
 // Test build: F5 dumps the server's raw vote-option list to the local console.
 #define BkwRenderCheckpoints() \
 	do \
@@ -39,6 +42,7 @@
 		BkwLocalDuel::Update(GameClient(), Client(), Graphics()); \
 		BkwVoteMenuDebug::OnRender(GameClient(), Client(), Input()); \
 		BkwEgoVote::UpdateStandardVoteIntegration(Ui(), GameClient(), Client(), Http()); \
+		BkwEgoVoteRealFormat::OverrideStandardVoteAction(Ui(), GameClient(), Client(), Http()); \
 		this->BkwRenderCheckpoints(); \
 	} while(0)
 #include <game/client/components/bestclient/fast_actions_part3.inc>
