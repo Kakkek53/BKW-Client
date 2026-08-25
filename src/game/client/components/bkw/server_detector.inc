@@ -175,8 +175,18 @@ inline bool IsTeeFusion(IHttp *pHttp, const NETADDR &ServerAddress)
 	return IsTeeFusionCached(ServerAddress);
 }
 
+inline bool IsEgoByServerName(const CServerInfo &ServerInfo)
+{
+	return ContainsNoCase(ServerInfo.m_aName, "EGO |") && ContainsNoCase(ServerInfo.m_aName, "[eternal-gores.com]");
+}
+
 inline bool IsDdnet(const CServerInfo &ServerInfo)
 {
+	// Eternal Gores servers can expose DDNet-compatible version/game-type data,
+	// but their vote menu has its own BKW integration and must be routed by the
+	// server name requested by EGO: "EGO | ... [eternal-gores.com]".
+	if(IsEgoByServerName(ServerInfo))
+		return false;
 	if(str_comp_nocase(ServerInfo.m_aCommunityId, "ddnet") == 0)
 		return true;
 	return ContainsNoCase(ServerInfo.m_aName, "ddnet") ||
