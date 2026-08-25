@@ -10,6 +10,7 @@ MACRO_CONFIG_INT(BkwDdnetMenuScale, bkw_ddnet_menu_scale, 100, 75, 125, CFGFLAG_
 MACRO_CONFIG_INT(BkwDdnetMenuOpacity, bkw_ddnet_menu_opacity, 96, 45, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "DDNet vote menu window opacity in percent")
 MACRO_CONFIG_INT(BkwDdnetMenuRounding, bkw_ddnet_menu_rounding, 16, 0, 28, CFGFLAG_CLIENT | CFGFLAG_SAVE, "DDNet vote menu corner radius")
 MACRO_CONFIG_STR(BkwDdnetFavoriteMaps, bkw_ddnet_favorite_maps, 4096, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Favorite DDNet maps for the redesigned vote menu")
+MACRO_CONFIG_INT(BkwEgoMapDetails, bkw_ego_map_details, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show EGO map details buttons in the standard vote menu")
 MACRO_CONFIG_INT(BkwTfDuelHud, bkw_tf_duel_hud, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable the custom TeeFusion duel scoreboard")
 MACRO_CONFIG_INT(BkwTfDuelHudStyle, bkw_tf_duel_hud_style, 0, 0, 3, CFGFLAG_CLIENT | CFGFLAG_SAVE, "TeeFusion duel scoreboard style: 0 glass, 1 minimal, 2 neon, 3 classic")
 MACRO_CONFIG_INT(BkwTfDuelHideBroadcast, bkw_tf_duel_hide_broadcast, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Hide TeeFusion duel broadcast spam when the custom scoreboard is active")
