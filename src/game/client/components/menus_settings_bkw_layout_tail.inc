@@ -40,6 +40,7 @@
 		constexpr float TfDuelHudHeight = 405.0f;
 		constexpr float LocalDuelHeight = 735.0f;
 		constexpr float DdnetMenuHeight = 280.0f;
+		constexpr float EgoDetailsHeight = 135.0f;
 		constexpr float OptimizerHeight = 245.0f;
 		constexpr float TipoCheatHeight = 250.0f;
 		constexpr float HookTargetHeight = 220.0f;
@@ -55,7 +56,7 @@
 		CUIRect Content = PageView;
 		s_PersonalizationScrollRegion.Begin(&Content, &ScrollParams);
 
-		CUIRect TfMenuSection, TfDuelHudSection, LocalDuelSection, DdnetMenuSection, OptimizerSection, TipoCheatSection, HookTargetSection, AntiPingSection, AnimatedBackgroundSection, CameraDriftSection, HudSection, BackgroundSection;
+		CUIRect TfMenuSection, TfDuelHudSection, LocalDuelSection, DdnetMenuSection, EgoDetailsSection, OptimizerSection, TipoCheatSection, HookTargetSection, AntiPingSection, AnimatedBackgroundSection, CameraDriftSection, HudSection, BackgroundSection;
 		Content.HSplitTop(TfMenuHeight, &TfMenuSection, &Content);
 		s_PersonalizationScrollRegion.AddRect(TfMenuSection);
 		RenderTfMenuSettings(pMenus, pUi, pGameClient, TfMenuSection);
@@ -74,6 +75,11 @@
 		Content.HSplitTop(DdnetMenuHeight, &DdnetMenuSection, &Content);
 		s_PersonalizationScrollRegion.AddRect(DdnetMenuSection);
 		RenderDdnetVoteMenuSettings(pMenus, pUi, DdnetMenuSection);
+		Content.HSplitTop(Gap, nullptr, &Content);
+
+		Content.HSplitTop(EgoDetailsHeight, &EgoDetailsSection, &Content);
+		s_PersonalizationScrollRegion.AddRect(EgoDetailsSection);
+		RenderBkwEgoMapDetailsSettings(pMenus, pUi, EgoDetailsSection);
 		Content.HSplitTop(Gap, nullptr, &Content);
 
 		Content.HSplitTop(OptimizerHeight, &OptimizerSection, &Content);
