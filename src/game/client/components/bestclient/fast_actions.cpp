@@ -4,6 +4,7 @@
 
 #include <engine/client.h>
 #include <engine/graphics.h>
+#include <engine/keys.h>
 #include <engine/shared/config.h>
 
 #include <game/collision.h>
@@ -19,6 +20,7 @@
 #undef HOOK_START_DISTANCE
 #include <game/client/components/bkw/local_duel.inc>
 #include <game/client/components/bkw/ego_vote_overlay.inc>
+#include <game/client/components/bkw/vote_menu_debug.inc>
 
 #include <game/client/components/bestclient/fast_actions_part1.inc>
 #include <game/client/components/bestclient/fast_actions_part2.inc>
@@ -27,6 +29,7 @@
 // large split Fast Actions implementation. EGO does not replace the vote menu:
 // it only registers an optional right-side "Подробнее" action for map rows in
 // the standard CListBox and uses a normal UI popup for the API statistics.
+// Test build: F5 dumps the server's raw vote-option list to the local console.
 #define BkwRenderCheckpoints() \
 	do \
 	{ \
@@ -34,6 +37,7 @@
 			BkwFeaturePackRuntime::SaveAntiPingSettings(); \
 		BkwFeaturePackRuntime::OnRender(GameClient(), Client(), Graphics(), Collision()); \
 		BkwLocalDuel::Update(GameClient(), Client(), Graphics()); \
+		BkwVoteMenuDebug::OnRender(GameClient(), Client(), Input()); \
 		BkwEgoVote::UpdateStandardVoteIntegration(Ui(), GameClient(), Client(), Http()); \
 		this->BkwRenderCheckpoints(); \
 	} while(0)
