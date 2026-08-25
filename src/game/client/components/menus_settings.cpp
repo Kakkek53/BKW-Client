@@ -38,5 +38,10 @@ void BkwVideoMapStrToInts(int *pInts, size_t NumInts, const char *pStr)
 #include "bkw/video_map_converter.inc"
 #undef StrToInts
 
+// Keep the Local Duel namespace at file scope. The BKW settings files below are
+// included inside BkwMenuProxy, so including it there would create a different
+// nested namespace than the runtime uses.
+#include "bkw/local_duel.inc"
+
 #include "menus_settings_bkw_part1.inc"
 #include "menus_settings_bkw_part2.inc"
