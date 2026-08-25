@@ -8,6 +8,8 @@
 #include <game/client/components/voting.h>
 #include <game/client/gameclient.h>
 
+#include <game/client/components/bkw/ego_vote_real_format_fix.inc>
+
 namespace BkwVoteMenuDebug
 {
 inline void Print(IConsole *pConsole, const char *pText)
@@ -49,6 +51,13 @@ inline void Dump(CGameClient *pGameClient, IClient *pClient)
 	Print(pConsole, aBuf);
 	str_format(aBuf, sizeof(aBuf), "vote_options_reported=%d", pGameClient->m_Voting.NumOptions());
 	Print(pConsole, aBuf);
+	str_format(aBuf, sizeof(aBuf), "ego_detected=%d ego_details_enabled=%d catalog_ready=%d catalog_failed=%d api_maps_loaded=%d",
+		BkwEgoVote::IsEgoServerName(ServerInfo.m_aName) ? 1 : 0,
+		g_Config.m_BkwEgoMapDetails,
+		BkwEgoVote::s_CatalogReady ? 1 : 0,
+		BkwEgoVote::s_CatalogFailed ? 1 : 0,
+		(int)BkwEgoVote::s_vMaps.size());
+	Print(pConsole, aBuf);
 	Print(pConsole, "--- RAW OPTIONS IN EXACT ORDER ---");
 
 	int Index = 0;
@@ -62,6 +71,44 @@ inline void Dump(CGameClient *pGameClient, IClient *pClient)
 
 	str_format(aBuf, sizeof(aBuf), "vote_options_iterated=%d", Index);
 	Print(pConsole, aBuf);
+
+	if(BkwEgoVote::IsEgoServerName(ServerInfo.m_aName))
+	{
+		Print(pConsole, "--- EGO MAP PARSER ---");
+		bool InMapsSection = false;
+		Index = 0;
+		for(const CVoteOptionClient *pOption = pGameClient->m_Voting.FirstOption(); pOption; pOption = pOption->m_pNext, ++Index)
+		{
+			const char *pDescription = pOption->m_aDescription;
+			if(BkwEgoVoteRealFormat::IsMapsSectionStart(pDescription))
+			{
+				InMapsSection = true;
+				str_format(aBuf, sizeof(aBuf), "section_start[%03d]=\"%s\"", Index, pDescription);
+				Print(pConsole, aBuf);
+				continue;
+			}
+			if(InMapsSection && BkwEgoVoteRealFormat::IsSectionEnd(pDescription))
+			{
+				str_format(aBuf, sizeof(aBuf), "section_end[%03d]=\"%s\"", Index, pDescription);
+				Print(pConsole, aBuf);
+				InMapsSection = false;
+				continue;
+			}
+			if(!InMapsSection)
+				continue;
+
+			std::string MapName;
+			if(!BkwEgoVoteRealFormat::ExtractMapName(pDescription, MapName))
+				continue;
+			const BkwEgoVote::SMap *pMap = BkwEgoVote::FindMapByName(MapName);
+			if(pMap)
+				str_format(aBuf, sizeof(aBuf), "parsed[%03d] name=\"%s\" api_map_id=%d", Index, MapName.c_str(), pMap->m_Id);
+			else
+				str_format(aBuf, sizeof(aBuf), "parsed[%03d] name=\"%s\" api_map_id=NOT_FOUND", Index, MapName.c_str());
+			Print(pConsole, aBuf);
+		}
+	}
+
 	Print(pConsole, "END");
 	Print(pConsole, "====================================================");
 }
