@@ -18,6 +18,20 @@ MACRO_CONFIG_INT(BkwTfDuelHudScale, bkw_tf_duel_hud_scale, 85, 60, 140, CFGFLAG_
 MACRO_CONFIG_INT(BkwTfDuelHudOpacity, bkw_tf_duel_hud_opacity, 92, 20, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "TeeFusion duel HUD opacity in percent")
 MACRO_CONFIG_INT(BkwTfDuelHudRounding, bkw_tf_duel_hud_rounding, 12, 0, 24, CFGFLAG_CLIENT | CFGFLAG_SAVE, "TeeFusion duel HUD corner radius")
 
+// BKW Local Duel. Score changes are tracked locally from freeze state; optional chat messages use the normal public say command.
+MACRO_CONFIG_INT(BkwLocalDuel, bkw_local_duel, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable local freeze duel tracking")
+MACRO_CONFIG_STR(BkwLocalDuelOpponent, bkw_local_duel_opponent, 64, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "Opponent name for BKW local duel")
+MACRO_CONFIG_INT(BkwLocalDuelLimit, bkw_local_duel_limit, 5, 0, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Local duel score limit, 0 for infinite fun duel")
+MACRO_CONFIG_INT(BkwLocalDuelChatScore, bkw_local_duel_chat_score, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Send local duel score changes to public chat")
+MACRO_CONFIG_INT(BkwLocalDuelSelectKey, bkw_local_duel_select_key, 27, 0, 511, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Key used to start local duel opponent selection")
+MACRO_CONFIG_INT(BkwLocalDuelSelectModifier, bkw_local_duel_select_modifier, 0, 0, 31, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Modifier mask used for local duel opponent selection")
+MACRO_CONFIG_INT(BkwLocalDuelHud, bkw_local_duel_hud, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show BKW local duel HUD")
+MACRO_CONFIG_INT(BkwLocalDuelHudStyle, bkw_local_duel_hud_style, 0, 0, 3, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Local duel HUD style: 0 glass, 1 minimal, 2 neon, 3 classic")
+MACRO_CONFIG_INT(BkwLocalDuelHudPosition, bkw_local_duel_hud_position, 1, 0, 8, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Local duel HUD anchor: 0 TL, 1 TC, 2 TR, 3 CL, 4 C, 5 CR, 6 BL, 7 BC, 8 BR")
+MACRO_CONFIG_INT(BkwLocalDuelHudScale, bkw_local_duel_hud_scale, 85, 60, 140, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Local duel HUD scale in percent")
+MACRO_CONFIG_INT(BkwLocalDuelHudOpacity, bkw_local_duel_hud_opacity, 92, 20, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Local duel HUD opacity in percent")
+MACRO_CONFIG_INT(BkwLocalDuelHudRounding, bkw_local_duel_hud_rounding, 12, 0, 24, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Local duel HUD corner radius")
+
 // BKW Feature Pack: optimizer.
 MACRO_CONFIG_INT(BkwOptimizer, bkw_optimizer, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable BKW optimization profiles")
 MACRO_CONFIG_INT(BkwOptimizerScope, bkw_optimizer_scope, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Optimization scope: 0 BKW features only, 1 whole client")
