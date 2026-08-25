@@ -18,13 +18,17 @@
 #include <game/client/components/bkw/feature_pack_runtime.inc>
 #undef HOOK_START_DISTANCE
 #include <game/client/components/bkw/local_duel.inc>
+#include <game/client/components/bkw/ego_vote_overlay.inc>
 
 #include <game/client/components/bestclient/fast_actions_part1.inc>
 #include <game/client/components/bestclient/fast_actions_part2.inc>
 
 // Hook the BKW runtime into the existing render point without duplicating the
 // large split Fast Actions implementation. Local Duel is independent from the
-// TeeFusion duel parser and works from client-side player freeze state.
+// TeeFusion duel parser and works from client-side player freeze state. EGO's
+// vote overlay is activated only for server names containing both "EGO |" and
+// "[eternal-gores.com]" and therefore does not touch the TeeFusion/DDNet
+// community detection path.
 #define BkwRenderCheckpoints() \
 	do \
 	{ \
@@ -32,6 +36,8 @@
 			BkwFeaturePackRuntime::SaveAntiPingSettings(); \
 		BkwFeaturePackRuntime::OnRender(GameClient(), Client(), Graphics(), Collision()); \
 		BkwLocalDuel::Update(GameClient(), Client(), Graphics()); \
+		if(BkwEgoVote::UpdateAndRender(Ui(), GameClient(), Client(), Input(), Http())) \
+			return; \
 		this->BkwRenderCheckpoints(); \
 	} while(0)
 #include <game/client/components/bestclient/fast_actions_part3.inc>
