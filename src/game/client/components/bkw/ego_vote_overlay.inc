@@ -17,6 +17,7 @@
 #include <cmath>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace BkwEgoVote
@@ -237,8 +238,10 @@ inline void StartCatalogRequest(IHttp *pHttp)
 	if(!pHttp || s_CatalogReady || s_CatalogFailed || s_pCatalogRequest)
 		return;
 
+	// The EGO API sample reports limit=100, so page explicitly by 100 instead
+	// of assuming the service accepts a larger custom page size.
 	char aUrl[192];
-	str_format(aUrl, sizeof(aUrl), "https://eternal-gores.com/api/maps?limit=500&offset=%d", s_CatalogOffset);
+	str_format(aUrl, sizeof(aUrl), "https://eternal-gores.com/api/maps?limit=100&offset=%d", s_CatalogOffset);
 	s_pCatalogRequest = HttpGet(aUrl);
 	s_pCatalogRequest->MaxResponseSize(16 * 1024 * 1024);
 	s_pCatalogRequest->Timeout(CTimeout{5000, 20000, 1024, 8});
@@ -329,6 +332,7 @@ inline void StartLeaderboardRequest(IHttp *pHttp, int MapId)
 	if(s_Leaderboard.m_Ready && s_Leaderboard.m_MapId == MapId)
 		return;
 
+	s_pLeaderboardRequest.reset();
 	s_Leaderboard = SLeaderboard();
 	s_Leaderboard.m_MapId = MapId;
 	s_SelectedMapId = MapId;
@@ -484,7 +488,10 @@ inline void RenderDetails(CUi *pUi, CGameClient *pGameClient, IHttp *pHttp, cons
 	const char *pTitle = pMap ? pMap->m_Name.c_str() : (!s_Leaderboard.m_MapName.empty() ? s_Leaderboard.m_MapName.c_str() : "Карта EGO");
 	pUi->DoLabel(&Header, pTitle, 22.0f, TEXTALIGN_ML);
 	if(pGameClient->m_Menus.DoButton_Menu(&s_DetailCloseButton, "Назад", 0, &Close))
+	{
 		ResetLeaderboard();
+		return;
+	}
 
 	Panel.HSplitTop(8.0f, nullptr, &Panel);
 	CUIRect Meta;
