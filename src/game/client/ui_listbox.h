@@ -15,7 +15,16 @@ struct CListboxItem
 // Instances of CListBox must be static, as member addresses are used as UI item IDs
 class CListBox : private CUIElementBase
 {
+public:
+	// Optional client extension point for a narrow action area on the right side
+	// of a list row. The callback may shrink pItemRect before the normal row
+	// button is processed and render its own control in the freed space.
+	// It is disabled by default, so standard listboxes remain unchanged.
+	using FRightActionCallback = void (*)(const void *pItemId, CUIRect *pItemRect);
+
 private:
+	inline static FRightActionCallback ms_pRightActionCallback = nullptr;
+
 	CUIRect m_ListBoxView;
 	CUIRect m_RowView;
 	float m_ListBoxRowHeight;
@@ -43,6 +52,9 @@ protected:
 public:
 	CListBox();
 	void Reset();
+
+	static void SetRightActionCallback(FRightActionCallback pCallback) { ms_pRightActionCallback = pCallback; }
+	static FRightActionCallback RightActionCallback() { return ms_pRightActionCallback; }
 
 	void DoHeader(const CUIRect *pRect, const char *pTitle, float HeaderHeight = 20.0f, float Spacing = 2.0f);
 	void DoAutoSpacing(float Spacing = 20.0f) { m_AutoSpacing = Spacing; }
