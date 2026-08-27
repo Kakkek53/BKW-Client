@@ -20,7 +20,6 @@ namespace BkwMenuProxy
 enum
 {
 	TAB_MAIN = 0,
-	TAB_HOURS,
 	TAB_PERSONALIZATION,
 	TAB_SHOP,
 	TAB_COUNT,
