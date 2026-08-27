@@ -4,4 +4,5 @@
 #include "menus_settings_bkw_ego.inc"
 #include "menus_settings_bkw_compact.inc"
 #include "menus_settings_bkw_hours.inc"
+#include "menus_settings_bkw_minimap.inc"
 #include "menus_settings_bkw_render_head.inc"
