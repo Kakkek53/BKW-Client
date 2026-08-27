@@ -42,9 +42,9 @@ void RenderBkwMiniMapSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient
 
 	PageView.HSplitTop(5.0f, nullptr, &PageView);
 	PageView.HSplitTop(24.0f, &Row, &PageView);
-	pUi->DoScrollbarOption(&g_Config.m_BkwMiniMapFullZoom, &g_Config.m_BkwMiniMapFullZoom, &Row, "Масштаб полной карты", 100, 500, &CUi::ms_LinearScrollbarScale, 0, "%");
+	pUi->DoScrollbarOption(&g_Config.m_BkwMiniMapFullZoom, &g_Config.m_BkwMiniMapFullZoom, &Row, "Начальный масштаб полной карты", 100, 500, &CUi::ms_LinearScrollbarScale, 0, "%");
 
 	PageView.HSplitTop(6.0f, nullptr, &PageView);
-	PageView.HSplitTop(32.0f, &Row, &PageView);
-	pUi->DoLabel(&Row, "Мини-карта: стены, freeze/deep-freeze, death, start/finish, tele, speedup и игроки. Полная карта перемещается удержанием ЛКМ.", 10.0f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
+	PageView.HSplitTop(40.0f, &Row, &PageView);
+	pUi->DoLabel(&Row, "Мини-карта автоматически подбирает масштаб по содержимому. Полная карта: ЛКМ + движение — перемещение, колесо мыши — приблизить/отдалить.", 10.0f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
 }
