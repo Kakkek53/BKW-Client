@@ -2,4 +2,5 @@
 #include "menus_settings_bkw_feature_pack.inc"
 #include "menus_settings_bkw_local_duel.inc"
 #include "menus_settings_bkw_ego.inc"
+#include "menus_settings_bkw_compact.inc"
 #include "menus_settings_bkw_render_head.inc"
