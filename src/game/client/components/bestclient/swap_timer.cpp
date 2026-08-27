@@ -15,6 +15,7 @@
 
 #include <game/client/animstate.h>
 #include <game/client/components/binds.h>
+#include <game/client/components/bkw/minimap.inc>
 #include <game/client/components/camera.h>
 #include <game/client/components/hud_layout.h>
 #include <game/client/components/menus.h>
@@ -660,6 +661,7 @@ void CSwapTimer::OnRender()
 	if(Client()->State() != IClient::STATE_ONLINE || !g_Config.m_BcSwapTimer)
 	{
 		StopPeek();
+		BkwMiniMap::RenderLateOverlay(GameClient(), Graphics());
 		return;
 	}
 
@@ -668,6 +670,11 @@ void CSwapTimer::OnRender()
 
 	if(g_Config.m_BcSwapTimerStyle == 1)
 		RenderNameplateMode();
+
+	// Swap Timer is one of the last components in the render list. Draw the BKW
+	// full-map overlay here so chat, broadcast, scoreboard, menus and normal HUD
+	// elements cannot cover it. Input/state is still handled earlier by FastActions.
+	BkwMiniMap::RenderLateOverlay(GameClient(), Graphics());
 }
 
 void CSwapTimer::BuildHotkeyLayout(bool Show, float FontSize, float LeadGap, float IconGap, float PairGap, SHotkeyLayout &Out) const
