@@ -1,49 +1,34 @@
-struct SBkwCompactModuleState
+struct SBkwCompactToggleState
 {
-	bool m_Open = false;
 	int m_CheckboxId = 0;
-	CButtonContainer m_OpenButton;
-	CButtonContainer m_CollapseButton;
 };
 
-inline void RenderBkwCompactModuleRow(CMenus *pMenus, CUi *pUi, CUIRect Row, const char *pTitle, int *pEnabled, SBkwCompactModuleState &State)
+inline void RenderBkwCompactToggleRow(CMenus *pMenus, CUi *pUi, CUIRect Row, const char *pTitle, int *pEnabled, SBkwCompactToggleState &State)
 {
 	Row.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.40f), IGraphics::CORNER_ALL, 6.0f);
 	Row.Margin(5.0f, &Row);
-
-	CUIRect Main, Expand;
-	Row.VSplitRight(28.0f, &Main, &Expand);
-	Main.VSplitRight(5.0f, &Main, nullptr);
-	Expand.HMargin(1.0f, &Expand);
-
 	if(pEnabled)
 	{
-		if(pMenus->DoButton_CheckBox(&State.m_CheckboxId, pTitle, *pEnabled, &Main))
-		{
+		if(pMenus->DoButton_CheckBox(&State.m_CheckboxId, pTitle, *pEnabled, &Row))
 			*pEnabled ^= 1;
-			State.m_Open = *pEnabled != 0;
-		}
 	}
 	else
-	{
-		pUi->DoLabel(&Main, pTitle, 14.0f, TEXTALIGN_ML);
-	}
-
-	if(pMenus->DoButton_Menu(&State.m_OpenButton, "+", 0, &Expand, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 4.0f))
-		State.m_Open = true;
+		pUi->DoLabel(&Row, pTitle, 14.0f, TEXTALIGN_ML);
 }
 
-inline void RenderBkwCompactCollapseButton(CMenus *pMenus, CUIRect Section, SBkwCompactModuleState &State)
+inline void RenderBkwTeeFusionHeader(CMenus *pMenus, CUi *pUi, CUIRect Row)
 {
-	CUIRect Inner = Section;
-	Inner.Margin(10.0f, &Inner);
-	CUIRect TitleRow;
-	Inner.HSplitTop(26.0f, &TitleRow, nullptr);
-	CUIRect RightArea;
-	TitleRow.VSplitRight(126.0f, nullptr, &RightArea);
-	CUIRect Collapse;
-	RightArea.VSplitLeft(28.0f, &Collapse, nullptr);
-	Collapse.HMargin(1.0f, &Collapse);
-	if(pMenus->DoButton_Menu(&State.m_CollapseButton, "-", 0, &Collapse, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 4.0f))
-		State.m_Open = false;
+	static int s_MenuToggle;
+	static int s_DuelToggle;
+	Row.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.40f), IGraphics::CORNER_ALL, 6.0f);
+	Row.Margin(6.0f, &Row);
+	CUIRect Title, Toggles;
+	Row.HSplitTop(18.0f, &Title, &Toggles);
+	pUi->DoLabel(&Title, "TeeFusion", 15.0f, TEXTALIGN_ML);
+	CUIRect MenuToggle, DuelToggle;
+	Toggles.VSplitMid(&MenuToggle, &DuelToggle, 5.0f);
+	if(pMenus->DoButton_CheckBox(&s_MenuToggle, "Menu", g_Config.m_BkwTfMenu, &MenuToggle))
+		g_Config.m_BkwTfMenu ^= 1;
+	if(pMenus->DoButton_CheckBox(&s_DuelToggle, "Duel HUD", g_Config.m_BkwTfDuelHud, &DuelToggle))
+		g_Config.m_BkwTfDuelHud ^= 1;
 }
