@@ -37,14 +37,21 @@ enum ECellType : uint8_t
 };
 
 inline constexpr int MAX_GRID_DIMENSION = 256;
+inline constexpr float TILE_SIZE = 32.0f;
 inline int s_MapWidth = 0;
 inline int s_MapHeight = 0;
 inline int s_GridWidth = 0;
 inline int s_GridHeight = 0;
 inline char s_aMapName[128] = "";
 inline std::vector<uint8_t> s_vCells;
+inline vec2 s_ContentMin(0.0f, 0.0f);
+inline vec2 s_ContentMax(0.0f, 0.0f);
 inline bool s_FullOpen = false;
+inline bool s_Dragging = false;
 inline vec2 s_FullCenter(0.0f, 0.0f);
+inline float s_FullZoom = 1.0f;
+inline vec2 s_CursorUiPos(0.0f, 0.0f);
+inline vec2 s_LastCursorUiPos(0.0f, 0.0f);
 
 inline int CellPriority(ECellType Type)
 {
@@ -92,8 +99,12 @@ inline void ResetCache()
 	s_GridHeight = 0;
 	s_aMapName[0] = '\0';
 	s_vCells.clear();
+	s_ContentMin = vec2(0.0f, 0.0f);
+	s_ContentMax = vec2(0.0f, 0.0f);
 	s_FullOpen = false;
+	s_Dragging = false;
 	s_FullCenter = vec2(0.0f, 0.0f);
+	s_FullZoom = 1.0f;
 }
 
 inline bool EnsureCache(CCollision *pCollision, IClient *pClient)
@@ -113,6 +124,11 @@ inline bool EnsureCache(CCollision *pCollision, IClient *pClient)
 	s_GridWidth = std::max(1, std::min(Width, MAX_GRID_DIMENSION));
 	s_GridHeight = std::max(1, std::min(Height, MAX_GRID_DIMENSION));
 	s_vCells.assign((size_t)s_GridWidth * (size_t)s_GridHeight, CELL_AIR);
+
+	int MinGx = s_GridWidth;
+	int MinGy = s_GridHeight;
+	int MaxGx = -1;
+	int MaxGy = -1;
 
 	for(int Gy = 0; Gy < s_GridHeight; ++Gy)
 	{
@@ -139,11 +155,41 @@ inline bool EnsureCache(CCollision *pCollision, IClient *pClient)
 				}
 			}
 			s_vCells[(size_t)Gy * (size_t)s_GridWidth + (size_t)Gx] = Best;
+			if(Best != CELL_AIR)
+			{
+				MinGx = std::min(MinGx, Gx);
+				MinGy = std::min(MinGy, Gy);
+				MaxGx = std::max(MaxGx, Gx);
+				MaxGy = std::max(MaxGy, Gy);
+			}
 		}
 	}
 
+	const float WorldW = Width * TILE_SIZE;
+	const float WorldH = Height * TILE_SIZE;
+	if(MaxGx >= MinGx && MaxGy >= MinGy)
+	{
+		s_ContentMin.x = (float)MinGx * WorldW / s_GridWidth;
+		s_ContentMin.y = (float)MinGy * WorldH / s_GridHeight;
+		s_ContentMax.x = (float)(MaxGx + 1) * WorldW / s_GridWidth;
+		s_ContentMax.y = (float)(MaxGy + 1) * WorldH / s_GridHeight;
+
+		const float Padding = std::max(TILE_SIZE * 2.0f, std::max(s_ContentMax.x - s_ContentMin.x, s_ContentMax.y - s_ContentMin.y) * 0.025f);
+		s_ContentMin.x = std::max(0.0f, s_ContentMin.x - Padding);
+		s_ContentMin.y = std::max(0.0f, s_ContentMin.y - Padding);
+		s_ContentMax.x = std::min(WorldW, s_ContentMax.x + Padding);
+		s_ContentMax.y = std::min(WorldH, s_ContentMax.y + Padding);
+	}
+	else
+	{
+		s_ContentMin = vec2(0.0f, 0.0f);
+		s_ContentMax = vec2(WorldW, WorldH);
+	}
+
 	s_FullOpen = false;
-	s_FullCenter = vec2(Width * 16.0f, Height * 16.0f);
+	s_Dragging = false;
+	s_FullCenter = (s_ContentMin + s_ContentMax) * 0.5f;
+	s_FullZoom = 1.0f;
 	return true;
 }
 
@@ -177,29 +223,38 @@ inline void DrawQuadBatch(IGraphics *pGraphics, const std::vector<IGraphics::CQu
 	pGraphics->QuadsEnd();
 }
 
-inline float FitScale(const CUIRect &Rect)
+inline float ContentWidth()
 {
-	if(s_MapWidth <= 0 || s_MapHeight <= 0)
-		return 1.0f;
-	const float WorldW = s_MapWidth * 32.0f;
-	const float WorldH = s_MapHeight * 32.0f;
-	return std::max(0.0001f, std::min(Rect.w / WorldW, Rect.h / WorldH));
+	return std::max(TILE_SIZE, s_ContentMax.x - s_ContentMin.x);
 }
 
-inline vec2 ClampCenter(vec2 Center, const CUIRect &Rect, float Scale)
+inline float ContentHeight()
 {
-	const float WorldW = s_MapWidth * 32.0f;
-	const float WorldH = s_MapHeight * 32.0f;
+	return std::max(TILE_SIZE, s_ContentMax.y - s_ContentMin.y);
+}
+
+inline vec2 ContentCenter()
+{
+	return (s_ContentMin + s_ContentMax) * 0.5f;
+}
+
+inline float FitScaleToContent(const CUIRect &Rect)
+{
+	return std::max(0.0001f, std::min(Rect.w / ContentWidth(), Rect.h / ContentHeight()));
+}
+
+inline vec2 ClampCenterToContent(vec2 Center, const CUIRect &Rect, float Scale)
+{
 	const float HalfW = Rect.w / (2.0f * Scale);
 	const float HalfH = Rect.h / (2.0f * Scale);
-	if(HalfW * 2.0f >= WorldW)
-		Center.x = WorldW * 0.5f;
+	if(HalfW * 2.0f >= ContentWidth())
+		Center.x = (s_ContentMin.x + s_ContentMax.x) * 0.5f;
 	else
-		Center.x = std::clamp(Center.x, HalfW, WorldW - HalfW);
-	if(HalfH * 2.0f >= WorldH)
-		Center.y = WorldH * 0.5f;
+		Center.x = std::clamp(Center.x, s_ContentMin.x + HalfW, s_ContentMax.x - HalfW);
+	if(HalfH * 2.0f >= ContentHeight())
+		Center.y = (s_ContentMin.y + s_ContentMax.y) * 0.5f;
 	else
-		Center.y = std::clamp(Center.y, HalfH, WorldH - HalfH);
+		Center.y = std::clamp(Center.y, s_ContentMin.y + HalfH, s_ContentMax.y - HalfH);
 	return Center;
 }
 
@@ -209,20 +264,25 @@ inline vec2 WorldToMapScreen(vec2 World, const CUIRect &Rect, vec2 Center, float
 		Rect.y + Rect.h * 0.5f + (World.y - Center.y) * Scale);
 }
 
+inline bool PointInside(const CUIRect &Rect, vec2 Point)
+{
+	return Point.x >= Rect.x && Point.x <= Rect.x + Rect.w && Point.y >= Rect.y && Point.y <= Rect.y + Rect.h;
+}
+
 inline void RenderMapCells(IGraphics *pGraphics, const CUIRect &Rect, vec2 Center, float Scale, float Alpha)
 {
 	std::array<std::vector<IGraphics::CQuadItem>, CELL_COUNT> avQuads;
 	for(int Gy = 0; Gy < s_GridHeight; ++Gy)
 	{
-		const float WorldY0 = (float)Gy * (s_MapHeight * 32.0f) / s_GridHeight;
-		const float WorldY1 = (float)(Gy + 1) * (s_MapHeight * 32.0f) / s_GridHeight;
+		const float WorldY0 = (float)Gy * (s_MapHeight * TILE_SIZE) / s_GridHeight;
+		const float WorldY1 = (float)(Gy + 1) * (s_MapHeight * TILE_SIZE) / s_GridHeight;
 		for(int Gx = 0; Gx < s_GridWidth; ++Gx)
 		{
 			const ECellType Type = (ECellType)s_vCells[(size_t)Gy * (size_t)s_GridWidth + (size_t)Gx];
 			if(Type == CELL_AIR)
 				continue;
-			const float WorldX0 = (float)Gx * (s_MapWidth * 32.0f) / s_GridWidth;
-			const float WorldX1 = (float)(Gx + 1) * (s_MapWidth * 32.0f) / s_GridWidth;
+			const float WorldX0 = (float)Gx * (s_MapWidth * TILE_SIZE) / s_GridWidth;
+			const float WorldX1 = (float)(Gx + 1) * (s_MapWidth * TILE_SIZE) / s_GridWidth;
 			const vec2 P0 = WorldToMapScreen(vec2(WorldX0, WorldY0), Rect, Center, Scale);
 			const vec2 P1 = WorldToMapScreen(vec2(WorldX1, WorldY1), Rect, Center, Scale);
 			if(P1.x < Rect.x || P0.x > Rect.x + Rect.w || P1.y < Rect.y || P0.y > Rect.y + Rect.h)
@@ -248,7 +308,7 @@ inline void RenderPlayers(CGameClient *pGameClient, IGraphics *pGraphics, CUi *p
 			continue;
 		const vec2 Pos = pGameClient->m_aClients[ClientId].m_RenderPos;
 		const vec2 ScreenPos = WorldToMapScreen(Pos, Rect, Center, Scale);
-		if(ScreenPos.x < Rect.x || ScreenPos.x > Rect.x + Rect.w || ScreenPos.y < Rect.y || ScreenPos.y > Rect.y + Rect.h)
+		if(!PointInside(Rect, ScreenPos))
 			continue;
 		const bool Frozen = pGameClient->m_aClients[ClientId].m_Predicted.m_IsInFreeze || pGameClient->m_aClients[ClientId].m_DeepFrozen;
 		ColorRGBA Color = ClientId == LocalId ? ColorRGBA(0.30f, 1.00f, 0.42f, Alpha) : ColorRGBA(1.0f, 1.0f, 1.0f, Alpha);
@@ -256,9 +316,6 @@ inline void RenderPlayers(CGameClient *pGameClient, IGraphics *pGraphics, CUi *p
 			Color = ColorRGBA(0.35f, 0.82f, 1.0f, Alpha);
 		const float Radius = ShowNames ? 3.8f : 2.8f;
 
-		// IGraphics::DrawCircle emits freeform quads internally and therefore
-		// requires an active QuadsBegin/QuadsEnd block. Keep the block local to
-		// the marker so UI text rendering below never happens while quads are open.
 		pGraphics->TextureClear();
 		pGraphics->QuadsBegin();
 		pGraphics->SetColor(Color);
@@ -279,65 +336,227 @@ inline void RenderPlayers(CGameClient *pGameClient, IGraphics *pGraphics, CUi *p
 
 inline void DrawMap(CGameClient *pGameClient, IGraphics *pGraphics, CUi *pUi, CUIRect Rect, vec2 Center, float Zoom, float Alpha, bool ShowNames)
 {
-	Rect.Draw(ColorRGBA(0.018f, 0.022f, 0.032f, 0.90f * Alpha), IGraphics::CORNER_ALL, ShowNames ? 10.0f : 7.0f);
+	Rect.Draw(ColorRGBA(0.018f, 0.022f, 0.032f, 0.94f * Alpha), IGraphics::CORNER_ALL, ShowNames ? 10.0f : 7.0f);
 	CUIRect Inner = Rect;
 	Inner.Margin(5.0f, &Inner);
-	const float Scale = FitScale(Inner) * std::max(1.0f, Zoom);
-	Center = ClampCenter(Center, Inner, Scale);
+	const float Scale = FitScaleToContent(Inner) * std::max(1.0f, Zoom);
+	Center = ClampCenterToContent(Center, Inner, Scale);
 	RenderMapCells(pGraphics, Inner, Center, Scale, Alpha);
 	RenderPlayers(pGameClient, pGraphics, pUi, Inner, Center, Scale, Alpha, ShowNames);
 }
 
-inline void OpenFull(CGameClient *pGameClient)
+inline CUIRect FullMapRect(const CUIRect &Screen)
+{
+	CUIRect Available = Screen;
+	Available.Margin(28.0f, &Available);
+	const float ContentAspect = ContentWidth() / ContentHeight();
+	const float AvailableAspect = Available.w / std::max(1.0f, Available.h);
+	CUIRect Result = Available;
+	if(AvailableAspect > ContentAspect)
+	{
+		Result.w = Result.h * ContentAspect;
+		Result.x = Available.x + (Available.w - Result.w) * 0.5f;
+	}
+	else
+	{
+		Result.h = Result.w / std::max(0.01f, ContentAspect);
+		Result.y = Available.y + (Available.h - Result.h) * 0.5f;
+	}
+	return Result;
+}
+
+inline CUIRect MiniMapRect(const CUIRect &Screen)
+{
+	const float Size = (float)std::clamp(g_Config.m_BkwMiniMapSize, 120, 300);
+	const float ContentAspect = ContentWidth() / ContentHeight();
+	float Width = Size;
+	float Height = Size;
+	if(ContentAspect >= 1.0f)
+		Height = std::clamp(Size / ContentAspect, 66.0f, Size);
+	else
+		Width = std::clamp(Size * ContentAspect, 66.0f, Size);
+	return CUIRect{Screen.x + Screen.w - Width - 14.0f, Screen.y + 14.0f, Width, Height};
+}
+
+inline vec2 AbsoluteCursorUiPos(IInput *pInput, IGraphics *pGraphics, CUi *pUi)
+{
+	const vec2 Native = pInput->NativeMousePos();
+	const CUIRect Screen = *pUi->Screen();
+	const float WindowW = (float)std::max(1, pGraphics->WindowWidth());
+	const float WindowH = (float)std::max(1, pGraphics->WindowHeight());
+	return vec2(
+		std::clamp(Screen.x + Native.x / WindowW * Screen.w, Screen.x, Screen.x + Screen.w),
+		std::clamp(Screen.y + Native.y / WindowH * Screen.h, Screen.y, Screen.y + Screen.h));
+}
+
+inline void CloseFull(CGameClient *pGameClient, IInput *pInput)
+{
+	if(!s_FullOpen)
+		return;
+	s_FullOpen = false;
+	s_Dragging = false;
+	if(pInput)
+	{
+		if(pGameClient && pGameClient->m_Menus.IsActive())
+			pInput->MouseModeAbsolute();
+		else
+			pInput->MouseModeRelative();
+	}
+}
+
+inline void OpenFull(CGameClient *pGameClient, IInput *pInput, IGraphics *pGraphics)
 {
 	s_FullOpen = true;
+	s_Dragging = false;
+	s_FullZoom = std::clamp(g_Config.m_BkwMiniMapFullZoom / 100.0f, 1.0f, 8.0f);
 	const int LocalId = pGameClient ? pGameClient->m_Snap.m_LocalClientId : -1;
 	if(pGameClient && LocalId >= 0 && LocalId < MAX_CLIENTS && pGameClient->m_aClients[LocalId].m_Active)
 		s_FullCenter = pGameClient->m_aClients[LocalId].m_RenderPos;
 	else
-		s_FullCenter = vec2(s_MapWidth * 16.0f, s_MapHeight * 16.0f);
+		s_FullCenter = ContentCenter();
+	if(pInput)
+		pInput->MouseModeAbsolute();
+	if(pGameClient && pInput && pGraphics)
+	{
+		s_CursorUiPos = AbsoluteCursorUiPos(pInput, pGraphics, pGameClient->Ui());
+		s_LastCursorUiPos = s_CursorUiPos;
+	}
 }
 
-inline void HandleFullMapInput(CGameClient *pGameClient, IInput *pInput, CUi *pUi, const CUIRect &MapRect)
+inline void ApplyWheelZoom(const CUIRect &MapRect, float NewZoom)
+{
+	const float OldZoom = s_FullZoom;
+	NewZoom = std::clamp(NewZoom, 1.0f, 8.0f);
+	if(std::abs(NewZoom - OldZoom) < 0.0001f)
+		return;
+
+	const CUIRect Inner = [&]() {
+		CUIRect R = MapRect;
+		R.Margin(5.0f, &R);
+		return R;
+	}();
+	const float OldScale = FitScaleToContent(Inner) * OldZoom;
+	const float NewScale = FitScaleToContent(Inner) * NewZoom;
+	const vec2 MapScreenCenter(Inner.x + Inner.w * 0.5f, Inner.y + Inner.h * 0.5f);
+	const vec2 CursorOffset = s_CursorUiPos - MapScreenCenter;
+	const vec2 WorldUnderCursor = s_FullCenter + CursorOffset / OldScale;
+	s_FullCenter = WorldUnderCursor - CursorOffset / NewScale;
+	s_FullZoom = NewZoom;
+	s_FullCenter = ClampCenterToContent(s_FullCenter, Inner, NewScale);
+}
+
+inline void HandleFullMapInput(CGameClient *pGameClient, IInput *pInput, IGraphics *pGraphics, CUi *pUi, const CUIRect &MapRect)
 {
 	if(!s_FullOpen)
 		return;
 	if(pInput->KeyPress(KEY_ESCAPE))
 	{
-		s_FullOpen = false;
+		CloseFull(pGameClient, pInput);
 		return;
 	}
 
-	const float Scale = FitScale(MapRect) * std::max(1.0f, g_Config.m_BkwMiniMapFullZoom / 100.0f);
-	if(pInput->KeyIsPressed(KEY_MOUSE_1))
+	s_CursorUiPos = AbsoluteCursorUiPos(pInput, pGraphics, pUi);
+
+	if(PointInside(MapRect, s_CursorUiPos))
 	{
-		const vec2 Delta = pUi->MouseDelta();
-		s_FullCenter -= Delta / Scale;
-		s_FullCenter = ClampCenter(s_FullCenter, MapRect, Scale);
+		if(pInput->KeyPress(KEY_MOUSE_WHEEL_UP))
+			ApplyWheelZoom(MapRect, s_FullZoom * 1.16f);
+		if(pInput->KeyPress(KEY_MOUSE_WHEEL_DOWN))
+			ApplyWheelZoom(MapRect, s_FullZoom / 1.16f);
 	}
+
+	CUIRect Inner = MapRect;
+	Inner.Margin(5.0f, &Inner);
+	const float Scale = FitScaleToContent(Inner) * s_FullZoom;
+	if(pInput->KeyIsPressed(KEY_MOUSE_1) && PointInside(MapRect, s_CursorUiPos))
+	{
+		if(!s_Dragging)
+		{
+			s_Dragging = true;
+			s_LastCursorUiPos = s_CursorUiPos;
+		}
+		else
+		{
+			const vec2 Delta = s_CursorUiPos - s_LastCursorUiPos;
+			s_FullCenter -= Delta / Scale;
+			s_FullCenter = ClampCenterToContent(s_FullCenter, Inner, Scale);
+			s_LastCursorUiPos = s_CursorUiPos;
+		}
+	}
+	else
+	{
+		s_Dragging = false;
+		s_LastCursorUiPos = s_CursorUiPos;
+	}
+}
+
+inline void DrawMenuCursor(CGameClient *pGameClient, IGraphics *pGraphics)
+{
+	constexpr float CursorSize = 24.0f;
+	const IGraphics::CTextureHandle CursorTexture = pGameClient->CursorTexture();
+	if(CursorTexture.IsValid())
+	{
+		pGraphics->TextureSet(CursorTexture);
+		pGraphics->QuadsBegin();
+		pGraphics->SetColor(1.0f, 1.0f, 1.0f, 1.0f);
+		IGraphics::CQuadItem Cursor(s_CursorUiPos.x, s_CursorUiPos.y, CursorSize, CursorSize);
+		pGraphics->QuadsDrawTL(&Cursor, 1);
+		pGraphics->QuadsEnd();
+	}
+	else
+	{
+		CUIRect Cursor{s_CursorUiPos.x, s_CursorUiPos.y, 7.0f, 7.0f};
+		Cursor.Draw(ColorRGBA(1.0f, 1.0f, 1.0f, 1.0f), IGraphics::CORNER_ALL, 3.5f);
+	}
+}
+
+inline void DrawSmallMap(CGameClient *pGameClient, IGraphics *pGraphics)
+{
+	CUi *pUi = pGameClient->Ui();
+	const CScreenRect OldScreen = pGraphics->GetScreen();
+	pUi->MapScreen();
+	const CUIRect Screen = *pUi->Screen();
+	const float Alpha = std::clamp(g_Config.m_BkwMiniMapOpacity / 100.0f, 0.20f, 1.0f);
+	const CUIRect Mini = MiniMapRect(Screen);
+	DrawMap(pGameClient, pGraphics, pUi, Mini, ContentCenter(), 1.0f, Alpha, false);
+	pGraphics->MapScreen(OldScreen);
 }
 
 inline void Update(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraphics, IInput *pInput)
 {
 	if(!g_Config.m_BkwMiniMap || !pGameClient || !pClient || !pGraphics || !pInput || pClient->State() != IClient::STATE_ONLINE)
 	{
-		s_FullOpen = false;
+		CloseFull(pGameClient, pInput);
 		return;
 	}
-	CCollision *pCollision = pGameClient->Collision();
-	if(!EnsureCache(pCollision, pClient))
+	if(!EnsureCache(pGameClient->Collision(), pClient))
 		return;
 
 	const int Key = g_Config.m_BkwMiniMapFullKey;
-	if(Key > KEY_UNKNOWN && Key < KEY_LAST && !pGameClient->m_Menus.IsActive() && !pGameClient->m_Chat.IsActive() && !pGameClient->m_GameConsole.IsActive() && pInput->KeyPress(Key) && CBinds::GetModifierMask(pInput) == g_Config.m_BkwMiniMapFullModifier)
+	const bool TogglePressed = Key > KEY_UNKNOWN && Key < KEY_LAST && !pGameClient->m_Menus.IsActive() && !pGameClient->m_Chat.IsActive() && !pGameClient->m_GameConsole.IsActive() && pInput->KeyPress(Key) && CBinds::GetModifierMask(pInput) == g_Config.m_BkwMiniMapFullModifier;
+	if(TogglePressed)
 	{
 		if(s_FullOpen)
-			s_FullOpen = false;
+			CloseFull(pGameClient, pInput);
 		else
-			OpenFull(pGameClient);
+			OpenFull(pGameClient, pInput, pGraphics);
 	}
 
-	if(pGameClient->m_Menus.IsActive())
+	if(s_FullOpen)
+	{
+		CUi *pUi = pGameClient->Ui();
+		const CUIRect Screen = *pUi->Screen();
+		HandleFullMapInput(pGameClient, pInput, pGraphics, pUi, FullMapRect(Screen));
+		return;
+	}
+
+	if(!pGameClient->m_Menus.IsActive())
+		DrawSmallMap(pGameClient, pGraphics);
+}
+
+inline void RenderLateOverlay(CGameClient *pGameClient, IGraphics *pGraphics)
+{
+	if(!s_FullOpen || !g_Config.m_BkwMiniMap || !pGameClient || !pGraphics)
 		return;
 
 	CUi *pUi = pGameClient->Ui();
@@ -346,25 +565,20 @@ inline void Update(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraph
 	const CUIRect Screen = *pUi->Screen();
 	const float Alpha = std::clamp(g_Config.m_BkwMiniMapOpacity / 100.0f, 0.20f, 1.0f);
 
-	if(s_FullOpen)
-	{
-		CUIRect Shade = Screen;
-		Shade.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 0.52f), IGraphics::CORNER_NONE, 0.0f);
-		CUIRect MapRect = Screen;
-		MapRect.Margin(28.0f, &MapRect);
-		HandleFullMapInput(pGameClient, pInput, pUi, MapRect);
-		DrawMap(pGameClient, pGraphics, pUi, MapRect, s_FullCenter, g_Config.m_BkwMiniMapFullZoom / 100.0f, Alpha, true);
-		CUIRect Hint{MapRect.x + 10.0f, MapRect.y + 8.0f, MapRect.w - 20.0f, 20.0f};
-		pUi->DoLabel(&Hint, "BKW Full Map • удерживай ЛКМ и двигай мышь • Esc/клавиша карты — закрыть", 11.0f, TEXTALIGN_MC);
-	}
-	else
-	{
-		const float Size = (float)std::clamp(g_Config.m_BkwMiniMapSize, 120, 300);
-		CUIRect Mini{Screen.x + Screen.w - Size - 14.0f, Screen.y + 14.0f, Size, Size * 0.68f};
-		const vec2 Center(s_MapWidth * 16.0f, s_MapHeight * 16.0f);
-		DrawMap(pGameClient, pGraphics, pUi, Mini, Center, 1.0f, Alpha, false);
-	}
+	CUIRect Shade = Screen;
+	Shade.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 0.82f), IGraphics::CORNER_NONE, 0.0f);
+	const CUIRect MapRect = FullMapRect(Screen);
+	DrawMap(pGameClient, pGraphics, pUi, MapRect, s_FullCenter, s_FullZoom, Alpha, true);
 
+	char aHint[256];
+	str_format(aHint, sizeof(aHint), "BKW Full Map • ЛКМ + движение: перемещение • колесо: масштаб %d%% • Esc/клавиша карты: закрыть", (int)(s_FullZoom * 100.0f + 0.5f));
+	CUIRect Hint{Screen.x + 16.0f, Screen.y + 7.0f, Screen.w - 32.0f, 18.0f};
+	SLabelProperties HintProps;
+	HintProps.m_MaxWidth = Hint.w;
+	HintProps.m_EllipsisAtEnd = true;
+	pUi->DoLabel(&Hint, aHint, 11.0f, TEXTALIGN_MC, HintProps);
+
+	DrawMenuCursor(pGameClient, pGraphics);
 	pGraphics->MapScreen(OldScreen);
 }
 
