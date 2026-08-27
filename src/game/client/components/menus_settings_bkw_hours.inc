@@ -3,7 +3,7 @@
 void RenderBkwHoursSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient, IHttp *pHttp, CUIRect PageView)
 {
 	static CButtonContainer s_RefreshButton;
-	static char s_aLastAutoPlayer[MAX_NAME_LENGTH] = "";
+	static char s_aLastAutoPlayer[64] = "";
 
 	auto &Hours = Bkw::DdStatsHoursState();
 	Hours.Poll();
@@ -54,13 +54,14 @@ void RenderBkwHoursSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, 
 		return;
 	}
 
-	if(Hours.Loading() && str_comp(Hours.Player(), pCurrentPlayer) == 0)
+	const bool CurrentRequest = str_comp(s_aLastAutoPlayer, pCurrentPlayer) == 0;
+	if(Hours.Loading() && CurrentRequest)
 	{
 		pUi->DoLabel(&StatsCard, "Загрузка статистики DDStats...", 12.0f, TEXTALIGN_MC);
 		return;
 	}
 
-	if(Hours.Error() && str_comp(Hours.Player(), pCurrentPlayer) == 0)
+	if(Hours.Error() && CurrentRequest)
 	{
 		char aError[160];
 		if(Hours.HttpStatus() > 0)
@@ -71,7 +72,7 @@ void RenderBkwHoursSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, 
 		return;
 	}
 
-	if(Hours.Loaded() && str_comp(Hours.Player(), pCurrentPlayer) == 0)
+	if(Hours.Loaded() && CurrentRequest)
 	{
 		CUIRect BigHours, ExactLine, StartLine, AverageLine, SourceLine;
 		StatsCard.HSplitTop(42.0f, &BigHours, &StatsCard);
