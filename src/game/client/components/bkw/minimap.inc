@@ -255,8 +255,16 @@ inline void RenderPlayers(CGameClient *pGameClient, IGraphics *pGraphics, CUi *p
 		if(Frozen)
 			Color = ColorRGBA(0.35f, 0.82f, 1.0f, Alpha);
 		const float Radius = ShowNames ? 3.8f : 2.8f;
+
+		// IGraphics::DrawCircle emits freeform quads internally and therefore
+		// requires an active QuadsBegin/QuadsEnd block. Keep the block local to
+		// the marker so UI text rendering below never happens while quads are open.
+		pGraphics->TextureClear();
+		pGraphics->QuadsBegin();
 		pGraphics->SetColor(Color);
 		pGraphics->DrawCircle(ScreenPos.x, ScreenPos.y, Radius, 16);
+		pGraphics->QuadsEnd();
+
 		if(ShowNames)
 		{
 			CUIRect NameRect{ScreenPos.x + 6.0f, ScreenPos.y - 7.0f, 120.0f, 14.0f};
