@@ -33,6 +33,14 @@ MACRO_CONFIG_INT(BkwLocalDuelHudScale, bkw_local_duel_hud_scale, 85, 60, 140, CF
 MACRO_CONFIG_INT(BkwLocalDuelHudOpacity, bkw_local_duel_hud_opacity, 92, 20, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Local duel HUD opacity in percent")
 MACRO_CONFIG_INT(BkwLocalDuelHudRounding, bkw_local_duel_hud_rounding, 12, 0, 24, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Local duel HUD corner radius")
 
+// BKW Mini Map.
+MACRO_CONFIG_INT(BkwMiniMap, bkw_mini_map, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show BKW minimap in the top-right corner")
+MACRO_CONFIG_INT(BkwMiniMapSize, bkw_mini_map_size, 180, 120, 300, CFGFLAG_CLIENT | CFGFLAG_SAVE, "BKW minimap size")
+MACRO_CONFIG_INT(BkwMiniMapOpacity, bkw_mini_map_opacity, 90, 20, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "BKW minimap opacity")
+MACRO_CONFIG_INT(BkwMiniMapFullKey, bkw_mini_map_full_key, 0, 0, 511, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Key used to toggle the full BKW map")
+MACRO_CONFIG_INT(BkwMiniMapFullModifier, bkw_mini_map_full_modifier, 0, 0, 31, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Modifier mask used to toggle the full BKW map")
+MACRO_CONFIG_INT(BkwMiniMapFullZoom, bkw_mini_map_full_zoom, 180, 100, 500, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Zoom of the full BKW map in percent")
+
 // BKW Feature Pack: optimizer.
 MACRO_CONFIG_INT(BkwOptimizer, bkw_optimizer, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable BKW optimization profiles")
 MACRO_CONFIG_INT(BkwOptimizerScope, bkw_optimizer_scope, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Optimization scope: 0 BKW features only, 1 whole client")
