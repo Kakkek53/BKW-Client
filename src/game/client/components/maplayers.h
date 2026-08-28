@@ -37,6 +37,10 @@ public:
 
 	CEnvelopeState &EnvEvaluator() { return m_EnvEvaluator; }
 
+	// BKW Full Map: render the already loaded design layers with a temporary
+	// camera without mutating the normal gameplay camera or layer state.
+	void RenderBkwPreview(vec2 Center, float Zoom);
+
 private:
 	CRenderLayerParams m_Params;
 	CMapRenderer m_MapRenderer;
