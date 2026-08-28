@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -48,6 +49,7 @@ inline vec2 s_ContentMin(0.0f, 0.0f);
 inline vec2 s_ContentMax(0.0f, 0.0f);
 inline bool s_FullOpen = false;
 inline bool s_Dragging = false;
+inline bool s_LateOverlayHealthy = false;
 inline vec2 s_FullCenter(0.0f, 0.0f);
 inline float s_FullZoom = 1.0f;
 inline vec2 s_CursorUiPos(0.0f, 0.0f);
@@ -103,6 +105,7 @@ inline void ResetCache()
 	s_ContentMax = vec2(0.0f, 0.0f);
 	s_FullOpen = false;
 	s_Dragging = false;
+	s_LateOverlayHealthy = false;
 	s_FullCenter = vec2(0.0f, 0.0f);
 	s_FullZoom = 1.0f;
 }
@@ -129,6 +132,10 @@ inline bool EnsureCache(CCollision *pCollision, IClient *pClient)
 	int MinGy = s_GridHeight;
 	int MaxGx = -1;
 	int MaxGy = -1;
+	int AllMinGx = s_GridWidth;
+	int AllMinGy = s_GridHeight;
+	int AllMaxGx = -1;
+	int AllMaxGy = -1;
 
 	for(int Gy = 0; Gy < s_GridHeight; ++Gy)
 	{
@@ -155,7 +162,20 @@ inline bool EnsureCache(CCollision *pCollision, IClient *pClient)
 				}
 			}
 			s_vCells[(size_t)Gy * (size_t)s_GridWidth + (size_t)Gx] = Best;
-			if(Best != CELL_AIR)
+			if(Best == CELL_AIR)
+				continue;
+
+			AllMinGx = std::min(AllMinGx, Gx);
+			AllMinGy = std::min(AllMinGy, Gy);
+			AllMaxGx = std::max(AllMaxGx, Gx);
+			AllMaxGy = std::max(AllMaxGy, Gy);
+
+			// Many DDNet maps have a pure solid/nohook safety border around the entire
+			// map file. It is not useful minimap content and used to create enormous
+			// empty zones. Ignore only that outer border when calculating auto-fit.
+			const bool OuterBorderSolid = Best == CELL_SOLID &&
+				(Gx <= 1 || Gy <= 1 || Gx >= s_GridWidth - 2 || Gy >= s_GridHeight - 2);
+			if(!OuterBorderSolid)
 			{
 				MinGx = std::min(MinGx, Gx);
 				MinGy = std::min(MinGy, Gy);
@@ -163,6 +183,14 @@ inline bool EnsureCache(CCollision *pCollision, IClient *pClient)
 				MaxGy = std::max(MaxGy, Gy);
 			}
 		}
+	}
+
+	if(MaxGx < MinGx || MaxGy < MinGy)
+	{
+		MinGx = AllMinGx;
+		MinGy = AllMinGy;
+		MaxGx = AllMaxGx;
+		MaxGy = AllMaxGy;
 	}
 
 	const float WorldW = Width * TILE_SIZE;
@@ -174,7 +202,7 @@ inline bool EnsureCache(CCollision *pCollision, IClient *pClient)
 		s_ContentMax.x = (float)(MaxGx + 1) * WorldW / s_GridWidth;
 		s_ContentMax.y = (float)(MaxGy + 1) * WorldH / s_GridHeight;
 
-		const float Padding = std::max(TILE_SIZE * 2.0f, std::max(s_ContentMax.x - s_ContentMin.x, s_ContentMax.y - s_ContentMin.y) * 0.025f);
+		const float Padding = std::max(TILE_SIZE, std::max(s_ContentMax.x - s_ContentMin.x, s_ContentMax.y - s_ContentMin.y) * 0.0125f);
 		s_ContentMin.x = std::max(0.0f, s_ContentMin.x - Padding);
 		s_ContentMin.y = std::max(0.0f, s_ContentMin.y - Padding);
 		s_ContentMax.x = std::min(WorldW, s_ContentMax.x + Padding);
@@ -188,6 +216,7 @@ inline bool EnsureCache(CCollision *pCollision, IClient *pClient)
 
 	s_FullOpen = false;
 	s_Dragging = false;
+	s_LateOverlayHealthy = false;
 	s_FullCenter = (s_ContentMin + s_ContentMax) * 0.5f;
 	s_FullZoom = 1.0f;
 	return true;
@@ -243,6 +272,11 @@ inline float FitScaleToContent(const CUIRect &Rect)
 	return std::max(0.0001f, std::min(Rect.w / ContentWidth(), Rect.h / ContentHeight()));
 }
 
+inline float CoverScaleToContent(const CUIRect &Rect)
+{
+	return std::max(0.0001f, std::max(Rect.w / ContentWidth(), Rect.h / ContentHeight()));
+}
+
 inline vec2 ClampCenterToContent(vec2 Center, const CUIRect &Rect, float Scale)
 {
 	const float HalfW = Rect.w / (2.0f * Scale);
@@ -269,9 +303,26 @@ inline bool PointInside(const CUIRect &Rect, vec2 Point)
 	return Point.x >= Rect.x && Point.x <= Rect.x + Rect.w && Point.y >= Rect.y && Point.y <= Rect.y + Rect.h;
 }
 
-inline void RenderMapCells(IGraphics *pGraphics, const CUIRect &Rect, vec2 Center, float Scale, float Alpha)
+inline vec2 RectCenter(const CUIRect &Rect)
+{
+	return vec2(Rect.x + Rect.w * 0.5f, Rect.y + Rect.h * 0.5f);
+}
+
+inline float CircleRadius(const CUIRect &Rect)
+{
+	return std::min(Rect.w, Rect.h) * 0.5f;
+}
+
+inline bool PointInsideCircle(const CUIRect &Rect, vec2 Point, float Margin = 0.0f)
+{
+	return distance(RectCenter(Rect), Point) <= std::max(0.0f, CircleRadius(Rect) - Margin);
+}
+
+inline void RenderMapCells(IGraphics *pGraphics, const CUIRect &Rect, vec2 Center, float Scale, float Alpha, bool CircularClip = false)
 {
 	std::array<std::vector<IGraphics::CQuadItem>, CELL_COUNT> avQuads;
+	const vec2 ClipCenter = RectCenter(Rect);
+	const float ClipRadius = CircleRadius(Rect);
 	for(int Gy = 0; Gy < s_GridHeight; ++Gy)
 	{
 		const float WorldY0 = (float)Gy * (s_MapHeight * TILE_SIZE) / s_GridHeight;
@@ -287,6 +338,15 @@ inline void RenderMapCells(IGraphics *pGraphics, const CUIRect &Rect, vec2 Cente
 			const vec2 P1 = WorldToMapScreen(vec2(WorldX1, WorldY1), Rect, Center, Scale);
 			if(P1.x < Rect.x || P0.x > Rect.x + Rect.w || P1.y < Rect.y || P0.y > Rect.y + Rect.h)
 				continue;
+
+			if(CircularClip)
+			{
+				const vec2 CellCenter = (P0 + P1) * 0.5f;
+				const float HalfDiagonal = length(P1 - P0) * 0.5f;
+				if(distance(CellCenter, ClipCenter) + HalfDiagonal > ClipRadius)
+					continue;
+			}
+
 			const float X = std::max(P0.x, Rect.x);
 			const float Y = std::max(P0.y, Rect.y);
 			const float W = std::min(P1.x, Rect.x + Rect.w) - X;
@@ -299,7 +359,7 @@ inline void RenderMapCells(IGraphics *pGraphics, const CUIRect &Rect, vec2 Cente
 		DrawQuadBatch(pGraphics, avQuads[Type], CellColor((ECellType)Type, Alpha));
 }
 
-inline void RenderPlayers(CGameClient *pGameClient, IGraphics *pGraphics, CUi *pUi, const CUIRect &Rect, vec2 Center, float Scale, float Alpha, bool ShowNames)
+inline void RenderPlayers(CGameClient *pGameClient, IGraphics *pGraphics, CUi *pUi, const CUIRect &Rect, vec2 Center, float Scale, float Alpha, bool ShowNames, bool CircularClip = false)
 {
 	const int LocalId = pGameClient->m_Snap.m_LocalClientId;
 	for(int ClientId = 0; ClientId < MAX_CLIENTS; ++ClientId)
@@ -308,13 +368,21 @@ inline void RenderPlayers(CGameClient *pGameClient, IGraphics *pGraphics, CUi *p
 			continue;
 		const vec2 Pos = pGameClient->m_aClients[ClientId].m_RenderPos;
 		const vec2 ScreenPos = WorldToMapScreen(Pos, Rect, Center, Scale);
-		if(!PointInside(Rect, ScreenPos))
-			continue;
 		const bool Frozen = pGameClient->m_aClients[ClientId].m_Predicted.m_IsInFreeze || pGameClient->m_aClients[ClientId].m_DeepFrozen;
 		ColorRGBA Color = ClientId == LocalId ? ColorRGBA(0.30f, 1.00f, 0.42f, Alpha) : ColorRGBA(1.0f, 1.0f, 1.0f, Alpha);
 		if(Frozen)
 			Color = ColorRGBA(0.35f, 0.82f, 1.0f, Alpha);
 		const float Radius = ShowNames ? 3.8f : 2.8f;
+
+		if(CircularClip)
+		{
+			if(!PointInsideCircle(Rect, ScreenPos, Radius))
+				continue;
+		}
+		else if(!PointInside(Rect, ScreenPos))
+		{
+			continue;
+		}
 
 		pGraphics->TextureClear();
 		pGraphics->QuadsBegin();
@@ -334,6 +402,27 @@ inline void RenderPlayers(CGameClient *pGameClient, IGraphics *pGraphics, CUi *p
 	}
 }
 
+inline void DrawCircleOutline(IGraphics *pGraphics, vec2 Center, float Radius, ColorRGBA Color)
+{
+	constexpr int Segments = 72;
+	std::array<IGraphics::CLineItem, Segments> aLines;
+	for(int i = 0; i < Segments; ++i)
+	{
+		const float A0 = 2.0f * pi * i / Segments;
+		const float A1 = 2.0f * pi * (i + 1) / Segments;
+		aLines[i] = IGraphics::CLineItem(
+			Center.x + std::cos(A0) * Radius,
+			Center.y + std::sin(A0) * Radius,
+			Center.x + std::cos(A1) * Radius,
+			Center.y + std::sin(A1) * Radius);
+	}
+	pGraphics->TextureClear();
+	pGraphics->LinesBegin();
+	pGraphics->SetColor(Color);
+	pGraphics->LinesDraw(aLines.data(), aLines.size());
+	pGraphics->LinesEnd();
+}
+
 inline void DrawMap(CGameClient *pGameClient, IGraphics *pGraphics, CUi *pUi, CUIRect Rect, vec2 Center, float Zoom, float Alpha, bool ShowNames)
 {
 	Rect.Draw(ColorRGBA(0.018f, 0.022f, 0.032f, 0.94f * Alpha), IGraphics::CORNER_ALL, ShowNames ? 10.0f : 7.0f);
@@ -343,6 +432,31 @@ inline void DrawMap(CGameClient *pGameClient, IGraphics *pGraphics, CUi *pUi, CU
 	Center = ClampCenterToContent(Center, Inner, Scale);
 	RenderMapCells(pGraphics, Inner, Center, Scale, Alpha);
 	RenderPlayers(pGameClient, pGraphics, pUi, Inner, Center, Scale, Alpha, ShowNames);
+}
+
+inline void DrawCircularMiniMap(CGameClient *pGameClient, IGraphics *pGraphics, CUi *pUi, CUIRect Rect, float Alpha)
+{
+	const vec2 CircleCenter = RectCenter(Rect);
+	const float Radius = CircleRadius(Rect);
+
+	pGraphics->TextureClear();
+	pGraphics->QuadsBegin();
+	pGraphics->SetColor(ColorRGBA(0.018f, 0.022f, 0.032f, 0.82f * Alpha));
+	pGraphics->DrawCircle(CircleCenter.x, CircleCenter.y, Radius, 72);
+	pGraphics->QuadsEnd();
+
+	CUIRect Inner = Rect;
+	Inner.Margin(5.0f, &Inner);
+	const float Scale = CoverScaleToContent(Inner) * 1.04f;
+	vec2 Center = ContentCenter();
+	const int LocalId = pGameClient->m_Snap.m_LocalClientId;
+	if(LocalId >= 0 && LocalId < MAX_CLIENTS && pGameClient->m_aClients[LocalId].m_Active)
+		Center = pGameClient->m_aClients[LocalId].m_RenderPos;
+	Center = ClampCenterToContent(Center, Inner, Scale);
+
+	RenderMapCells(pGraphics, Inner, Center, Scale, Alpha, true);
+	RenderPlayers(pGameClient, pGraphics, pUi, Inner, Center, Scale, Alpha, false, true);
+	DrawCircleOutline(pGraphics, CircleCenter, Radius - 1.0f, ColorRGBA(1.0f, 1.0f, 1.0f, 0.72f * Alpha));
 }
 
 inline CUIRect FullMapRect(const CUIRect &Screen)
@@ -368,57 +482,55 @@ inline CUIRect FullMapRect(const CUIRect &Screen)
 inline CUIRect MiniMapRect(const CUIRect &Screen)
 {
 	const float Size = (float)std::clamp(g_Config.m_BkwMiniMapSize, 120, 300);
-	const float ContentAspect = ContentWidth() / ContentHeight();
-	float Width = Size;
-	float Height = Size;
-	if(ContentAspect >= 1.0f)
-		Height = std::clamp(Size / ContentAspect, 66.0f, Size);
-	else
-		Width = std::clamp(Size * ContentAspect, 66.0f, Size);
-	return CUIRect{Screen.x + Screen.w - Width - 14.0f, Screen.y + 14.0f, Width, Height};
+	return CUIRect{Screen.x + Screen.w - Size - 14.0f, Screen.y + 14.0f, Size, Size};
 }
 
-inline vec2 AbsoluteCursorUiPos(IInput *pInput, IGraphics *pGraphics, CUi *pUi)
+inline bool IsFullOpen()
 {
-	const vec2 Native = pInput->NativeMousePos();
+	return s_FullOpen;
+}
+
+inline bool HandleCursorMove(CUi *pUi, float X, float Y, IInput::ECursorType CursorType)
+{
+	if(!s_FullOpen || !pUi)
+		return false;
+
+	pUi->ConvertMouseMove(&X, &Y, CursorType);
 	const CUIRect Screen = *pUi->Screen();
-	const float WindowW = (float)std::max(1, pGraphics->WindowWidth());
-	const float WindowH = (float)std::max(1, pGraphics->WindowHeight());
-	return vec2(
-		std::clamp(Screen.x + Native.x / WindowW * Screen.w, Screen.x, Screen.x + Screen.w),
-		std::clamp(Screen.y + Native.y / WindowH * Screen.h, Screen.y, Screen.y + Screen.h));
+	s_CursorUiPos.x = std::clamp(s_CursorUiPos.x + X, Screen.x, Screen.x + Screen.w - 1.0f);
+	s_CursorUiPos.y = std::clamp(s_CursorUiPos.y + Y, Screen.y, Screen.y + Screen.h - 1.0f);
+	return true;
 }
 
 inline void CloseFull(CGameClient *pGameClient, IInput *pInput)
 {
+	(void)pGameClient;
+	(void)pInput;
 	if(!s_FullOpen)
 		return;
 	s_FullOpen = false;
 	s_Dragging = false;
-	if(pInput)
-	{
-		if(pGameClient && pGameClient->m_Menus.IsActive())
-			pInput->MouseModeAbsolute();
-		else
-			pInput->MouseModeRelative();
-	}
+	s_LateOverlayHealthy = false;
 }
 
 inline void OpenFull(CGameClient *pGameClient, IInput *pInput, IGraphics *pGraphics)
 {
+	(void)pInput;
+	(void)pGraphics;
 	s_FullOpen = true;
 	s_Dragging = false;
+	s_LateOverlayHealthy = false;
 	s_FullZoom = std::clamp(g_Config.m_BkwMiniMapFullZoom / 100.0f, 1.0f, 8.0f);
 	const int LocalId = pGameClient ? pGameClient->m_Snap.m_LocalClientId : -1;
 	if(pGameClient && LocalId >= 0 && LocalId < MAX_CLIENTS && pGameClient->m_aClients[LocalId].m_Active)
 		s_FullCenter = pGameClient->m_aClients[LocalId].m_RenderPos;
 	else
 		s_FullCenter = ContentCenter();
-	if(pInput)
-		pInput->MouseModeAbsolute();
-	if(pGameClient && pInput && pGraphics)
+
+	if(pGameClient)
 	{
-		s_CursorUiPos = AbsoluteCursorUiPos(pInput, pGraphics, pGameClient->Ui());
+		const CUIRect Screen = *pGameClient->Ui()->Screen();
+		s_CursorUiPos = RectCenter(Screen);
 		s_LastCursorUiPos = s_CursorUiPos;
 	}
 }
@@ -437,7 +549,7 @@ inline void ApplyWheelZoom(const CUIRect &MapRect, float NewZoom)
 	}();
 	const float OldScale = FitScaleToContent(Inner) * OldZoom;
 	const float NewScale = FitScaleToContent(Inner) * NewZoom;
-	const vec2 MapScreenCenter(Inner.x + Inner.w * 0.5f, Inner.y + Inner.h * 0.5f);
+	const vec2 MapScreenCenter = RectCenter(Inner);
 	const vec2 CursorOffset = s_CursorUiPos - MapScreenCenter;
 	const vec2 WorldUnderCursor = s_FullCenter + CursorOffset / OldScale;
 	s_FullCenter = WorldUnderCursor - CursorOffset / NewScale;
@@ -447,6 +559,8 @@ inline void ApplyWheelZoom(const CUIRect &MapRect, float NewZoom)
 
 inline void HandleFullMapInput(CGameClient *pGameClient, IInput *pInput, IGraphics *pGraphics, CUi *pUi, const CUIRect &MapRect)
 {
+	(void)pGraphics;
+	(void)pUi;
 	if(!s_FullOpen)
 		return;
 	if(pInput->KeyPress(KEY_ESCAPE))
@@ -454,8 +568,6 @@ inline void HandleFullMapInput(CGameClient *pGameClient, IInput *pInput, IGraphi
 		CloseFull(pGameClient, pInput);
 		return;
 	}
-
-	s_CursorUiPos = AbsoluteCursorUiPos(pInput, pGraphics, pUi);
 
 	if(PointInside(MapRect, s_CursorUiPos))
 	{
@@ -518,7 +630,35 @@ inline void DrawSmallMap(CGameClient *pGameClient, IGraphics *pGraphics)
 	const CUIRect Screen = *pUi->Screen();
 	const float Alpha = std::clamp(g_Config.m_BkwMiniMapOpacity / 100.0f, 0.20f, 1.0f);
 	const CUIRect Mini = MiniMapRect(Screen);
-	DrawMap(pGameClient, pGraphics, pUi, Mini, ContentCenter(), 1.0f, Alpha, false);
+	DrawCircularMiniMap(pGameClient, pGraphics, pUi, Mini, Alpha);
+	pGraphics->MapScreen(OldScreen);
+}
+
+inline void DrawFullOverlay(CGameClient *pGameClient, IGraphics *pGraphics)
+{
+	if(!s_FullOpen || !g_Config.m_BkwMiniMap || !pGameClient || !pGraphics)
+		return;
+
+	CUi *pUi = pGameClient->Ui();
+	const CScreenRect OldScreen = pGraphics->GetScreen();
+	pUi->MapScreen();
+	const CUIRect Screen = *pUi->Screen();
+	const float Alpha = std::clamp(g_Config.m_BkwMiniMapOpacity / 100.0f, 0.20f, 1.0f);
+
+	CUIRect Shade = Screen;
+	Shade.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 0.86f), IGraphics::CORNER_NONE, 0.0f);
+	const CUIRect MapRect = FullMapRect(Screen);
+	DrawMap(pGameClient, pGraphics, pUi, MapRect, s_FullCenter, s_FullZoom, Alpha, true);
+
+	char aHint[256];
+	str_format(aHint, sizeof(aHint), "BKW Full Map • ЛКМ + движение: перемещение • колесо: масштаб %d%% • Esc/клавиша карты: закрыть", (int)(s_FullZoom * 100.0f + 0.5f));
+	CUIRect Hint{Screen.x + 16.0f, Screen.y + 7.0f, Screen.w - 32.0f, 18.0f};
+	SLabelProperties HintProps;
+	HintProps.m_MaxWidth = Hint.w;
+	HintProps.m_EllipsisAtEnd = true;
+	pUi->DoLabel(&Hint, aHint, 11.0f, TEXTALIGN_MC, HintProps);
+
+	DrawMenuCursor(pGameClient, pGraphics);
 	pGraphics->MapScreen(OldScreen);
 }
 
@@ -547,6 +687,8 @@ inline void Update(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraph
 		CUi *pUi = pGameClient->Ui();
 		const CUIRect Screen = *pUi->Screen();
 		HandleFullMapInput(pGameClient, pInput, pGraphics, pUi, FullMapRect(Screen));
+		if(s_FullOpen && !s_LateOverlayHealthy)
+			DrawFullOverlay(pGameClient, pGraphics);
 		return;
 	}
 
@@ -559,27 +701,8 @@ inline void RenderLateOverlay(CGameClient *pGameClient, IGraphics *pGraphics)
 	if(!s_FullOpen || !g_Config.m_BkwMiniMap || !pGameClient || !pGraphics)
 		return;
 
-	CUi *pUi = pGameClient->Ui();
-	const CScreenRect OldScreen = pGraphics->GetScreen();
-	pUi->MapScreen();
-	const CUIRect Screen = *pUi->Screen();
-	const float Alpha = std::clamp(g_Config.m_BkwMiniMapOpacity / 100.0f, 0.20f, 1.0f);
-
-	CUIRect Shade = Screen;
-	Shade.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 0.82f), IGraphics::CORNER_NONE, 0.0f);
-	const CUIRect MapRect = FullMapRect(Screen);
-	DrawMap(pGameClient, pGraphics, pUi, MapRect, s_FullCenter, s_FullZoom, Alpha, true);
-
-	char aHint[256];
-	str_format(aHint, sizeof(aHint), "BKW Full Map • ЛКМ + движение: перемещение • колесо: масштаб %d%% • Esc/клавиша карты: закрыть", (int)(s_FullZoom * 100.0f + 0.5f));
-	CUIRect Hint{Screen.x + 16.0f, Screen.y + 7.0f, Screen.w - 32.0f, 18.0f};
-	SLabelProperties HintProps;
-	HintProps.m_MaxWidth = Hint.w;
-	HintProps.m_EllipsisAtEnd = true;
-	pUi->DoLabel(&Hint, aHint, 11.0f, TEXTALIGN_MC, HintProps);
-
-	DrawMenuCursor(pGameClient, pGraphics);
-	pGraphics->MapScreen(OldScreen);
+	s_LateOverlayHealthy = true;
+	DrawFullOverlay(pGameClient, pGraphics);
 }
 
 } // namespace BkwMiniMap
