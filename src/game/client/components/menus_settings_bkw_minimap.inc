@@ -13,7 +13,7 @@ void RenderBkwMiniMapSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient
 	PageView.HSplitTop(4.0f, nullptr, &PageView);
 
 	PageView.HSplitTop(22.0f, &Row, &PageView);
-	if(pMenus->DoButton_CheckBox(&s_Enable, "Показывать мини-карту справа сверху", g_Config.m_BkwMiniMap, &Row))
+	if(pMenus->DoButton_CheckBox(&s_Enable, "Показывать круглую мини-карту справа сверху", g_Config.m_BkwMiniMap, &Row))
 		g_Config.m_BkwMiniMap ^= 1;
 
 	if(!g_Config.m_BkwMiniMap)
@@ -46,5 +46,5 @@ void RenderBkwMiniMapSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient
 
 	PageView.HSplitTop(6.0f, nullptr, &PageView);
 	PageView.HSplitTop(40.0f, &Row, &PageView);
-	pUi->DoLabel(&Row, "Мини-карта автоматически подбирает масштаб по содержимому. Полная карта: ЛКМ + движение — перемещение, колесо мыши — приблизить/отдалить.", 10.0f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
+	pUi->DoLabel(&Row, "Круглая мини-карта заполняет область без пустых полос. Полная карта: ЛКМ + движение — перемещение, колесо мыши — приблизить/отдалить.", 10.0f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
 }
