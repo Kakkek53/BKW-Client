@@ -1,6 +1,7 @@
 void RenderBkwMiniMapSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, CUIRect PageView)
 {
 	static int s_Enable;
+	static int s_RealDesign;
 	static CButtonContainer s_KeyReader;
 	static CButtonContainer s_KeyClear;
 
@@ -27,6 +28,11 @@ void RenderBkwMiniMapSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient
 	PageView.HSplitTop(24.0f, &Row, &PageView);
 	pUi->DoScrollbarOption(&g_Config.m_BkwMiniMapOpacity, &g_Config.m_BkwMiniMapOpacity, &Row, "Прозрачность", 20, 100, &CUi::ms_LinearScrollbarScale, 0, "%");
 
+	PageView.HSplitTop(5.0f, nullptr, &PageView);
+	PageView.HSplitTop(22.0f, &Row, &PageView);
+	if(pMenus->DoButton_CheckBox(&s_RealDesign, "Реальные тайлы и фон в полной карте (экспериментально)", g_Config.m_BkwMiniMapRealDesign, &Row))
+		g_Config.m_BkwMiniMapRealDesign ^= 1;
+
 	PageView.HSplitTop(6.0f, nullptr, &PageView);
 	PageView.HSplitTop(18.0f, &Row, &PageView);
 	pUi->DoLabel(&Row, "Клавиша полной карты", 11.5f, TEXTALIGN_ML);
@@ -45,6 +51,6 @@ void RenderBkwMiniMapSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient
 	pUi->DoScrollbarOption(&g_Config.m_BkwMiniMapFullZoom, &g_Config.m_BkwMiniMapFullZoom, &Row, "Начальный масштаб полной карты", 100, 500, &CUi::ms_LinearScrollbarScale, 0, "%");
 
 	PageView.HSplitTop(6.0f, nullptr, &PageView);
-	PageView.HSplitTop(40.0f, &Row, &PageView);
-	pUi->DoLabel(&Row, "Круглая мини-карта заполняет область без пустых полос. Полная карта: ЛКМ + движение — перемещение, колесо мыши — приблизить/отдалить.", 10.0f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
+	PageView.HSplitTop(44.0f, &Row, &PageView);
+	pUi->DoLabel(&Row, "Мини-карта показывает точные collision-тайлы вокруг игрока без склеивания проходов. Полная карта занимает почти весь экран: ЛКМ — перемещение, колесо — масштаб.", 10.0f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
 }
