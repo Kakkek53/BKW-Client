@@ -75,3 +75,29 @@ void CMapLayers::OnRender()
 
 	m_MapRenderer.Render(m_Params);
 }
+
+void CMapLayers::RenderBkwPreview(vec2 Center, float Zoom)
+{
+	if(m_OnlineOnly && Client()->State() != IClient::STATE_ONLINE && Client()->State() != IClient::STATE_DEMOPLAYBACK)
+		return;
+
+	CRenderLayerParams Params = m_Params;
+	Params.m_RenderType = m_Type;
+	Params.m_EntityOverlayVal = 0;
+	Params.m_Center = Center;
+	Params.m_Zoom = maximum(Zoom, 0.01f);
+	Params.m_RenderText = false;
+	Params.m_RenderInvalidTiles = false;
+	Params.m_TileAndQuadBuffering = true;
+	Params.m_RenderTileBorder = false;
+	Params.m_DebugRenderGroupClips = false;
+	Params.m_DebugRenderQuadClips = false;
+	Params.m_DebugRenderClusterClips = false;
+	Params.m_DebugRenderTileClips = false;
+	Params.m_FpsFogEnabled = false;
+	Params.m_FpsFogMode = 0;
+	Params.m_FpsFogRadiusTiles = 0;
+	Params.m_FpsFogZoomPercent = 0;
+	Params.m_FpsFogCullMapTiles = false;
+	m_MapRenderer.Render(Params);
+}
