@@ -205,6 +205,11 @@ void CFastActions::OnRelease()
 
 bool CFastActions::OnCursorMove(float x, float y, IInput::ECursorType CursorType)
 {
+	// Full Map owns the relative mouse while it is open. This keeps the OS cursor
+	// hidden, stops the gameplay aim cursor from moving, and drives our drawn UI cursor.
+	if(BkwMiniMap::HandleCursorMove(Ui(), x, y, CursorType))
+		return true;
+
 	if(s_BkwTfMenuOverlayActive)
 	{
 		Ui()->ConvertMouseMove(&x, &y, CursorType);
@@ -216,6 +221,11 @@ bool CFastActions::OnCursorMove(float x, float y, IInput::ECursorType CursorType
 
 bool CFastActions::OnInput(const IInput::CEvent &Event)
 {
+	// Keep map interaction out of gameplay input (shooting, weapon wheel, aim, etc.).
+	// BkwMiniMap::Update polls the same key states later in the frame for close/zoom/drag.
+	if(BkwMiniMap::IsFullOpen())
+		return true;
+
 	if(s_BkwTfMenuOverlayActive)
 	{
 		Ui()->OnInput(Event);
