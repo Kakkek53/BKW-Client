@@ -83,7 +83,7 @@ void CMapLayers::RenderBkwPreview(vec2 Center, float Zoom)
 	if(m_OnlineOnly && Client()->State() != IClient::STATE_ONLINE && Client()->State() != IClient::STATE_DEMOPLAYBACK)
 		return;
 
-	CRenderLayerParams Params = m_Params;
+	CRenderLayerParams Params{};
 	Params.m_RenderType = m_Type;
 	Params.m_EntityOverlayVal = 0;
 	Params.m_Center = Center;
