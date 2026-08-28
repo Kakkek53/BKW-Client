@@ -5,6 +5,8 @@
 #include <game/client/gameclient.h>
 #include <game/localization.h>
 
+#include <algorithm>
+
 CMapLayers::CMapLayers(ERenderType Type, bool OnlineOnly)
 {
 	m_Type = Type;
@@ -85,7 +87,7 @@ void CMapLayers::RenderBkwPreview(vec2 Center, float Zoom)
 	Params.m_RenderType = m_Type;
 	Params.m_EntityOverlayVal = 0;
 	Params.m_Center = Center;
-	Params.m_Zoom = maximum(Zoom, 0.01f);
+	Params.m_Zoom = std::max(Zoom, 0.01f);
 	Params.m_RenderText = false;
 	Params.m_RenderInvalidTiles = false;
 	Params.m_TileAndQuadBuffering = true;
