@@ -30,7 +30,7 @@ void RenderBkwMiniMapSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient
 
 	PageView.HSplitTop(5.0f, nullptr, &PageView);
 	PageView.HSplitTop(22.0f, &Row, &PageView);
-	if(pMenus->DoButton_CheckBox(&s_RealDesign, "Реальные тайлы и фон в полной карте (экспериментально)", g_Config.m_BkwMiniMapRealDesign, &Row))
+	if(pMenus->DoButton_CheckBox(&s_RealDesign, "Реальные тайлы и фон в мини-карте и Full Map (экспериментально)", g_Config.m_BkwMiniMapRealDesign, &Row))
 		g_Config.m_BkwMiniMapRealDesign ^= 1;
 
 	PageView.HSplitTop(6.0f, nullptr, &PageView);
@@ -52,5 +52,5 @@ void RenderBkwMiniMapSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient
 
 	PageView.HSplitTop(6.0f, nullptr, &PageView);
 	PageView.HSplitTop(44.0f, &Row, &PageView);
-	pUi->DoLabel(&Row, "Мини-карта показывает точные collision-тайлы вокруг игрока без склеивания проходов. Полная карта занимает почти весь экран: ЛКМ — перемещение, колесо — масштаб.", 10.0f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
+	pUi->DoLabel(&Row, "Без real-design мини-карта показывает точные collision-тайлы без склеивания проходов. С real-design обе карты используют настоящие слои и фон текущей карты; игроки остаются поверх.", 10.0f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
 }
