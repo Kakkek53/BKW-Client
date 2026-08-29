@@ -101,5 +101,14 @@ void CMapLayers::RenderBkwPreview(vec2 Center, float Zoom)
 	Params.m_FpsFogRadiusTiles = 0;
 	Params.m_FpsFogZoomPercent = 0;
 	Params.m_FpsFogCullMapTiles = false;
+
+	// BKW previews may use an external pixel clip (the circular minimap is built
+	// from horizontal clipped strips). Normal map groups call ClipDisable() when
+	// gfx_noclip is disabled, so temporarily force the no-group-clip path while
+	// keeping the caller's external clip intact. The gameplay setting is restored
+	// immediately after rendering and normal map rendering is unaffected.
+	const int OldNoClip = g_Config.m_GfxNoclip;
+	g_Config.m_GfxNoclip = 1;
 	m_MapRenderer.Render(Params);
+	g_Config.m_GfxNoclip = OldNoClip;
 }
