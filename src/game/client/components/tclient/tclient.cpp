@@ -34,8 +34,6 @@ void CTClient::ConRandomTee(IConsole::IResult *pResult, void *pUserData) {}
 void CTClient::ConchainRandomColor(IConsole::IResult *pResult, void *pUserData, IConsole::FCommandCallback pfnCallback, void *pCallbackUserData)
 {
 	CTClient *pThis = static_cast<CTClient *>(pUserData);
-	// Resolve type to randomize
-	// Check length of type (0 = all, 1 = body, 2 = feet, 3 = skin, 4 = flag)
 	bool RandomizeBody = false;
 	bool RandomizeFeet = false;
 	bool RandomizeSkin = false;
@@ -53,7 +51,7 @@ void CTClient::ConchainRandomColor(IConsole::IResult *pResult, void *pUserData, 
 		const char *Type = pResult->GetString(0);
 		int Length = Type ? str_length(Type) : 0;
 		if(Length == 1 && Type[0] == '0')
-		{ // Randomize all
+		{
 			RandomizeBody = true;
 			RandomizeFeet = true;
 			RandomizeSkin = true;
@@ -61,25 +59,21 @@ void CTClient::ConchainRandomColor(IConsole::IResult *pResult, void *pUserData, 
 		}
 		else if(Length == 1)
 		{
-			// Randomize body
 			RandomizeBody = Type[0] == '1';
 		}
 		else if(Length == 2)
 		{
-			// Check for body and feet
 			RandomizeBody = Type[0] == '1';
 			RandomizeFeet = Type[1] == '1';
 		}
 		else if(Length == 3)
 		{
-			// Check for body, feet and skin
 			RandomizeBody = Type[0] == '1';
 			RandomizeFeet = Type[1] == '1';
 			RandomizeSkin = Type[2] == '1';
 		}
 		else if(Length == 4)
 		{
-			// Check for body, feet, skin and flag
 			RandomizeBody = Type[0] == '1';
 			RandomizeFeet = Type[1] == '1';
 			RandomizeSkin = Type[2] == '1';
@@ -102,7 +96,13 @@ void CTClient::OnInit()
 {
 	TextRender()->SetCustomFace(g_Config.m_TcCustomFont);
 	m_pGraphics = Kernel()->RequestInterface<IEngineGraphics>();
-	FetchTClientInfo();
+
+	// BKW no longer contacts the inherited TClient update/version endpoint at
+	// startup. Keep FetchTClientInfo() intact for now so the old implementation
+	// can be replaced by a dedicated BKW channel later without losing the code.
+	m_FetchedTClientInfo = true;
+	m_aVersionStr[0] = '0';
+	m_aVersionStr[1] = '\0';
 
 	char aError[512] = "";
 	if(!Storage()->FileExists("tclient/gui_logo.png", IStorage::TYPE_ALL))
@@ -156,24 +156,19 @@ void CTClient::OnMessage(int MsgType, void *pRawMsg)
 			str_copy(m_PreviousOwnMessage, pMsg->m_pMessage);
 
 		bool PingMessage = false;
-
 		bool ValidIds = !(GameClient()->m_aLocalIds[0] < 0 || (GameClient()->Client()->DummyConnected() && GameClient()->m_aLocalIds[1] < 0));
-
 		if(ValidIds && ClientId >= 0 && ClientId != GameClient()->m_aLocalIds[0] && (!GameClient()->Client()->DummyConnected() || ClientId != GameClient()->m_aLocalIds[1]))
 		{
 			PingMessage |= LineShouldHighlight(pMsg->m_pMessage, GameClient()->m_aClients[GameClient()->m_aLocalIds[0]].m_aName);
 			PingMessage |= GameClient()->Client()->DummyConnected() && LineShouldHighlight(pMsg->m_pMessage, GameClient()->m_aClients[GameClient()->m_aLocalIds[1]].m_aName);
 		}
-
 		if(pMsg->m_Team == TEAM_WHISPER_RECV)
 			PingMessage = true;
-
 		if(!PingMessage)
 			return;
 
 		char aPlayerName[MAX_NAME_LENGTH];
 		str_copy(aPlayerName, GameClient()->m_aClients[ClientId].m_aName, sizeof(aPlayerName));
-
 		bool PlayerMuted = GameClient()->m_aClients[ClientId].m_Foe || GameClient()->m_aClients[ClientId].m_ChatIgnore;
 		if(g_Config.m_TcAutoReplyMuted && PlayerMuted)
 		{
@@ -201,8 +196,8 @@ void CTClient::OnMessage(int MsgType, void *pRawMsg)
 
 	if(MsgType == NETMSGTYPE_SV_VOTESET)
 	{
-		const int LocalId = GameClient()->m_aLocalIds[g_Config.m_ClDummy]; // Do not care about spec behaviour
-		const bool Afk = LocalId >= 0 && GameClient()->m_aClients[LocalId].m_Afk; // TODO Depends on server afk time
+		const int LocalId = GameClient()->m_aLocalIds[g_Config.m_ClDummy];
+		const bool Afk = LocalId >= 0 && GameClient()->m_aClients[LocalId].m_Afk;
 		CNetMsg_Sv_VoteSet *pMsg = (CNetMsg_Sv_VoteSet *)pRawMsg;
 		if(pMsg->m_Timeout && !Afk)
 		{
@@ -224,7 +219,6 @@ void CTClient::OnMessage(int MsgType, void *pRawMsg)
 				int RaceTime = 0;
 				if(GameClient()->m_Snap.m_pGameInfoObj && GameClient()->m_Snap.m_pGameInfoObj->m_GameStateFlags & GAMESTATEFLAG_RACETIME)
 					RaceTime = (Client()->GameTick(g_Config.m_ClDummy) + GameClient()->m_Snap.m_pGameInfoObj->m_WarmupTimer) / Client()->GameTickSpeed();
-
 				if(RaceTime / 60 >= g_Config.m_TcAutoVoteWhenFarTime)
 				{
 					CGameClient::CClientData *pVoteCaller = nullptr;
@@ -233,7 +227,6 @@ void CTClient::OnMessage(int MsgType, void *pRawMsg)
 					{
 						if(!GameClient()->m_aStats[i].IsActive())
 							continue;
-
 						char aBuf[MAX_NAME_LENGTH + 4];
 						str_format(aBuf, sizeof(aBuf), "\'%s\'", GameClient()->m_aClients[i].m_aName);
 						if(str_find_nocase(pMsg->m_pDescription, aBuf) != nullptr)
@@ -248,7 +241,6 @@ void CTClient::OnMessage(int MsgType, void *pRawMsg)
 						bool Friend = pVoteCaller->m_Friend;
 						bool SameTeam = GameClient()->m_Teams.Team(GameClient()->m_Snap.m_LocalClientId) == pVoteCaller->m_Team && pVoteCaller->m_Team != 0;
 						bool MySelf = CallerId == LocalId;
-
 						if(!Friend && !SameTeam && !MySelf)
 						{
 							GameClient()->m_Voting.Vote(-1);
@@ -299,16 +291,13 @@ bool CTClient::ChatDoSpecId(const char *pInput)
 	const char *pNumber = str_startswith_nocase(pInput, "/specid ");
 	if(!pNumber)
 		return false;
-
 	const int Length = str_length(pInput);
 	CChat::CHistoryEntry *pEntry = GameClient()->m_Chat.m_History.Allocate(sizeof(CChat::CHistoryEntry) + Length);
 	pEntry->m_Team = 0;
 	str_copy(pEntry->m_aText, pInput, Length + 1);
-
 	int ClientId = 0;
 	if(!str_toint(pNumber, &ClientId))
 		return true;
-
 	SpecId(ClientId);
 	return true;
 }
@@ -317,13 +306,11 @@ void CTClient::SpecId(int ClientId)
 {
 	if(Client()->State() != IClient::STATE_ONLINE && Client()->State() != IClient::STATE_DEMOPLAYBACK)
 		return;
-
 	if(Client()->State() == IClient::STATE_DEMOPLAYBACK || GameClient()->m_Snap.m_SpecInfo.m_Active)
 	{
 		GameClient()->m_Spectator.Spectate(ClientId);
 		return;
 	}
-
 	if(ClientId < 0 || ClientId > (int)std::size(GameClient()->m_aClients))
 		return;
 	const auto &Player = GameClient()->m_aClients[ClientId];
@@ -378,19 +365,15 @@ void CTClient::AirRescue()
 	auto &AirRescuePositions = m_aAirRescuePositions[g_Config.m_ClDummy];
 	while(!AirRescuePositions.empty())
 	{
-		// Get latest pos from positions
 		const vec2 NewPos = AirRescuePositions.front();
 		AirRescuePositions.pop_front();
-		// Check for safety
 		if(!IsRadiusAirLike(NewPos, 2))
 			continue;
-		// Do it
 		char aBuf[256];
 		str_format(aBuf, sizeof(aBuf), "/tpxy %f %f", NewPos.x / 32.0f, NewPos.y / 32.0f);
 		GameClient()->m_Chat.SendChat(0, aBuf);
 		return;
 	}
-
 	GameClient()->Echo("No safe position found");
 }
 
@@ -413,36 +396,27 @@ void CTClient::OnConsoleInit()
 {
 	Console()->Register("calc", "r[expression]", CFGFLAG_CLIENT, ConCalc, this, "Evaluate an expression");
 	Console()->Register("airrescue", "", CFGFLAG_CLIENT, ConAirRescue, this, "Rescue to a nearby air tile");
-
 	Console()->Register("tc_random_player", "s[type]", CFGFLAG_CLIENT, ConRandomTee, this, "Randomize player color (0 = all, 1 = body, 2 = feet, 3 = skin, 4 = flag) example: 0011 = randomize skin and flag [number is position]");
 	Console()->Chain("tc_random_player", ConchainRandomColor, this);
-
 	Console()->Register("spec_id", "v[id]", CFGFLAG_CLIENT, ConSpecId, this, "Spectate a player by Id");
-
 	Console()->Register("emote_cycle", "", CFGFLAG_CLIENT, ConEmoteCycle, this, "Cycle through emotes");
-
-	Console()->Chain(
-		"tc_allow_any_res", [](IConsole::IResult *pResult, void *pUserData, IConsole::FCommandCallback pfnCallback, void *pCallbackUserData) {
-			pfnCallback(pResult, pCallbackUserData);
-			((CTClient *)pUserData)->SetForcedAspect();
-		},
-		this);
-
-	Console()->Chain(
-		"tc_regex_chat_ignore", [](IConsole::IResult *pResult, void *pUserData, IConsole::FCommandCallback pfnCallback, void *pCallbackUserData) {
-			if(pResult->NumArguments() == 1)
+	Console()->Chain("tc_allow_any_res", [](IConsole::IResult *pResult, void *pUserData, IConsole::FCommandCallback pfnCallback, void *pCallbackUserData) {
+		pfnCallback(pResult, pCallbackUserData);
+		((CTClient *)pUserData)->SetForcedAspect();
+	}, this);
+	Console()->Chain("tc_regex_chat_ignore", [](IConsole::IResult *pResult, void *pUserData, IConsole::FCommandCallback pfnCallback, void *pCallbackUserData) {
+		if(pResult->NumArguments() == 1)
+		{
+			auto Re = Regex(pResult->GetString(0));
+			if(!Re.error().empty())
 			{
-				auto Re = Regex(pResult->GetString(0));
-				if(!Re.error().empty())
-				{
-					log_error("tclient", "Invalid regex: %s", Re.error().c_str());
-					return;
-				}
-				((CTClient *)pUserData)->m_RegexChatIgnore = std::move(Re);
+				log_error("tclient", "Invalid regex: %s", Re.error().c_str());
+				return;
 			}
-			pfnCallback(pResult, pCallbackUserData);
-		},
-		this);
+			((CTClient *)pUserData)->m_RegexChatIgnore = std::move(Re);
+		}
+		pfnCallback(pResult, pCallbackUserData);
+	}, this);
 }
 
 void CTClient::RandomBodyColor()
@@ -465,16 +439,9 @@ void CTClient::RandomSkin(void *pUserData)
 void CTClient::RandomFlag(void *pUserData)
 {
 	CTClient *pThis = static_cast<CTClient *>(pUserData);
-	// get the flag count
 	int FlagCount = pThis->GameClient()->m_CountryFlags.Num();
-
-	// get a random flag number
 	int FlagNumber = std::rand() % FlagCount;
-
-	// get the flag name
 	const CCountryFlags::CCountryFlag &Flag = pThis->GameClient()->m_CountryFlags.GetByIndex(FlagNumber);
-
-	// set the flag code as number
 	g_Config.m_PlayerCountry = Flag.m_CountryCode;
 }
 
@@ -488,7 +455,6 @@ void CTClient::DoFinishCheck()
 	if(m_FinishTextTimeout > 0.0f)
 		return;
 	m_FinishTextTimeout = 1.0f;
-	// Check for finish tile
 	const auto &NearTile = [this](vec2 Pos, int RadiusInTiles, int Tile) -> bool {
 		const CCollision *pCollision = GameClient()->Collision();
 		for(int i = 0; i <= RadiusInTiles * 2; ++i)
@@ -501,9 +467,7 @@ void CTClient::DoFinishCheck()
 				vIndices.push_back(pCollision->GetPureMapIndex(Pos1));
 			for(int &Index : vIndices)
 			{
-				if(pCollision->GetTileIndex(Index) == Tile)
-					return true;
-				if(pCollision->GetFrontTileIndex(Index) == Tile)
+				if(pCollision->GetTileIndex(Index) == Tile || pCollision->GetFrontTileIndex(Index) == Tile)
 					return true;
 			}
 		}
@@ -521,7 +485,7 @@ void CTClient::DoFinishCheck()
 		CMsgPacker Packer(&Msg);
 		Msg.Pack(&Packer);
 		Client()->SendMsg(Conn, &Packer, MSGFLAG_VITAL);
-		GameClient()->m_aCheckInfo[Conn] = Client()->GameTickSpeed(); // 1 second
+		GameClient()->m_aCheckInfo[Conn] = Client()->GameTickSpeed();
 	};
 	int Dummy = g_Config.m_ClDummy;
 	const auto &Player = GameClient()->m_aClients[GameClient()->m_aLocalIds[Dummy]];
@@ -549,7 +513,6 @@ bool CTClient::ServerCommandExists(const char *pCommand)
 void CTClient::OnRender()
 {
 	SetForcedAspect();
-
 	if(m_pTClientInfoTask)
 	{
 		if(m_pTClientInfoTask->State() == EHttpState::DONE)
@@ -558,7 +521,6 @@ void CTClient::OnRender()
 			ResetTClientInfoTask();
 		}
 	}
-
 	DoFinishCheck();
 }
 
@@ -595,19 +557,15 @@ static TVersion ToTCVersion(char *pStr)
 {
 	int aVersion[3] = {0, 0, 0};
 	const char *p = strtok(pStr, ".");
-
 	for(int i = 0; i < 3 && p; ++i)
 	{
 		if(!str_isallnum(p))
 			return gs_InvalidTCVersion;
-
 		aVersion[i] = str_toint(p);
 		p = strtok(NULL, ".");
 	}
-
 	if(p)
 		return gs_InvalidTCVersion;
-
 	return std::make_tuple(aVersion[0], aVersion[1], aVersion[2]);
 }
 
@@ -618,7 +576,6 @@ void CTClient::FinishTClientInfo()
 		return;
 	const json_value &Json = *pJson;
 	const json_value &CurrentVersion = Json["version"];
-
 	if(CurrentVersion.type == json_string)
 	{
 		char aNewVersionStr[64];
@@ -626,9 +583,7 @@ void CTClient::FinishTClientInfo()
 		char aCurVersionStr[64];
 		str_copy(aCurVersionStr, TCLIENT_VERSION);
 		if(ToTCVersion(aNewVersionStr) > ToTCVersion(aCurVersionStr))
-		{
 			str_copy(m_aVersionStr, CurrentVersion);
-		}
 		else
 		{
 			m_aVersionStr[0] = '0';
@@ -636,13 +591,11 @@ void CTClient::FinishTClientInfo()
 		}
 		m_FetchedTClientInfo = true;
 	}
-
 	json_value_free(pJson);
 }
 
 void CTClient::SetForcedAspect()
 {
-	// TODO: Fix flashing on windows
 	int State = Client()->State();
 	bool Force = true;
 	if(g_Config.m_TcAllowAnyRes == 0)
@@ -667,7 +620,6 @@ void CTClient::OnStateChange(int OldState, int NewState)
 void CTClient::OnNewSnapshot()
 {
 	SetForcedAspect();
-	// Update volleyball
 	bool IsVolleyBall = false;
 	if(g_Config.m_TcVolleyBallBetterBall > 0 && g_Config.m_TcVolleyBallBetterBallSkin[0] != '\0')
 	{
@@ -677,10 +629,7 @@ void CTClient::OnNewSnapshot()
 			IsVolleyBall = str_startswith_nocase(GameClient()->Map()->BaseName(), "volleyball");
 	};
 	for(auto &Client : GameClient()->m_aClients)
-	{
 		Client.m_IsVolleyBall = IsVolleyBall && Client.m_DeepFrozen;
-	}
-	// Update air rescue
 	if(Client()->State() != IClient::STATE_DEMOPLAYBACK)
 	{
 		for(int Dummy = 0; Dummy < NUM_DUMMIES; ++Dummy)
@@ -691,13 +640,12 @@ void CTClient::OnNewSnapshot()
 			const auto &Char = GameClient()->m_Snap.m_aCharacters[ClientId];
 			if(!Char.m_Active)
 				continue;
-			if(Client()->GameTick(Dummy) % 10 != 0) // Works for both 25tps and 50tps
+			if(Client()->GameTick(Dummy) % 10 != 0)
 				continue;
 			const auto &Client = GameClient()->m_aClients[ClientId];
-			if(Client.m_FreezeEnd == -1) // You aren't safe when frozen
+			if(Client.m_FreezeEnd == -1)
 				continue;
 			const vec2 NewPos = vec2(Char.m_Cur.m_X, Char.m_Cur.m_Y);
-			// If new pos is under 2 tiles from old pos, don't record a new position
 			if(!m_aAirRescuePositions[Dummy].empty())
 			{
 				const vec2 OldPos = m_aAirRescuePositions[Dummy].front();
@@ -714,9 +662,7 @@ void CTClient::OnNewSnapshot()
 constexpr const char STRIP_CHARS[] = {'-', '=', '+', '_', ' '};
 static bool IsStripChar(char c)
 {
-	return std::any_of(std::begin(STRIP_CHARS), std::end(STRIP_CHARS), [c](char s) {
-		return s == c;
-	});
+	return std::any_of(std::begin(STRIP_CHARS), std::end(STRIP_CHARS), [c](char s) { return s == c; });
 }
 
 static void StripStr(const char *pIn, char *pOut, const char *pEnd)
@@ -726,18 +672,14 @@ static void StripStr(const char *pIn, char *pOut, const char *pEnd)
 		*pOut = '\0';
 		return;
 	}
-
 	while(*pIn && IsStripChar(*pIn))
 		pIn++;
-
-	// Special behaviour for empty checkbox
 	if((unsigned char)*pIn == 0xE2 && (unsigned char)(*(pIn + 1)) == 0x98 && (unsigned char)(*(pIn + 2)) == 0x90)
 	{
 		pIn += 3;
 		while(*pIn && IsStripChar(*pIn))
 			pIn++;
 	}
-
 	char *pLastValid = nullptr;
 	while(*pIn && pOut < pEnd - 1)
 	{
@@ -747,7 +689,6 @@ static void StripStr(const char *pIn, char *pOut, const char *pEnd)
 		pIn++;
 		pOut++;
 	}
-
 	if(pLastValid)
 		*(pLastValid + 1) = '\0';
 	else
@@ -759,85 +700,59 @@ void CTClient::RenderMiniVoteHud()
 	CUIRect View = {0.0f, 60.0f, 70.0f, 35.0f};
 	View.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 0.4f), IGraphics::CORNER_R, 3.0f);
 	View.Margin(3.0f, &View);
-
 	SLabelProperties Props;
 	Props.m_EllipsisAtEnd = true;
 	Props.m_MaxWidth = View.w;
-
 	CUIRect Row, LeftColumn, RightColumn, ProgressSpinner;
 	char aBuf[256];
-
-	// Vote description
 	View.HSplitTop(6.0f, &Row, &View);
 	StripStr(GameClient()->m_Voting.VoteDescription(), aBuf, aBuf + sizeof(aBuf));
 	Ui()->DoLabel(&Row, aBuf, 6.0f, TEXTALIGN_ML, Props);
-
-	// Vote reason
 	View.HSplitTop(3.0f, nullptr, &View);
 	View.HSplitTop(4.0f, &Row, &View);
 	Ui()->DoLabel(&Row, GameClient()->m_Voting.VoteReason(), 4.0f, TEXTALIGN_ML, Props);
-
-	// Time left
 	str_format(aBuf, sizeof(aBuf), Localize("%ds left"), GameClient()->m_Voting.SecondsLeft());
 	View.HSplitTop(3.0f, nullptr, &View);
 	View.HSplitTop(3.0f, &Row, &View);
 	Row.VSplitLeft(2.0f, nullptr, &Row);
 	Row.VSplitLeft(3.0f, &ProgressSpinner, &Row);
 	Row.VSplitLeft(2.0f, nullptr, &Row);
-
 	SProgressSpinnerProperties ProgressProps;
 	ProgressProps.m_Progress = std::clamp((time() - GameClient()->m_Voting.m_Opentime) / (float)(GameClient()->m_Voting.m_Closetime - GameClient()->m_Voting.m_Opentime), 0.0f, 1.0f);
 	Ui()->RenderProgressSpinner(ProgressSpinner.Center(), ProgressSpinner.h / 2.0f, ProgressProps);
-
 	Ui()->DoLabel(&Row, aBuf, 3.0f, TEXTALIGN_ML);
-
-	// Bars
 	View.HSplitTop(3.0f, nullptr, &View);
 	View.HSplitTop(3.0f, &Row, &View);
 	GameClient()->m_Voting.RenderBars(Row);
-
-	// F3 / F4
 	View.HSplitTop(3.0f, nullptr, &View);
 	View.HSplitTop(0.5f, &Row, &View);
 	Row.VSplitMid(&LeftColumn, &RightColumn, 4.0f);
-
 	char aKey[64];
 	GameClient()->m_Binds.GetKey("vote yes", aKey, sizeof(aKey));
 	TextRender()->TextColor(GameClient()->m_Voting.TakenChoice() == 1 ? ColorRGBA(0.2f, 0.9f, 0.2f, 0.85f) : TextRender()->DefaultTextColor());
 	Ui()->DoLabel(&LeftColumn, aKey[0] == '\0' ? "yes" : aKey, 0.5f, TEXTALIGN_ML);
-
 	GameClient()->m_Binds.GetKey("vote no", aKey, sizeof(aKey));
 	TextRender()->TextColor(GameClient()->m_Voting.TakenChoice() == -1 ? ColorRGBA(0.95f, 0.25f, 0.25f, 0.85f) : TextRender()->DefaultTextColor());
 	Ui()->DoLabel(&RightColumn, aKey[0] == '\0' ? "no" : aKey, 0.5f, TEXTALIGN_MR);
-
 	TextRender()->TextColor(TextRender()->DefaultTextColor());
 }
 
 void CTClient::RenderCenterLines()
 {
-	if(g_Config.m_TcShowCenter <= 0)
+	if(g_Config.m_TcShowCenter <= 0 || GameClient()->m_Scoreboard.IsActive())
 		return;
-
-	if(GameClient()->m_Scoreboard.IsActive())
-		return;
-
 	Graphics()->TextureClear();
-
-	float X0, Y0, X1, Y1;
 	const CScreenRect ScreenRect = Graphics()->GetScreen();
-	X0 = ScreenRect.m_TopLeft.x;
-	Y0 = ScreenRect.m_TopLeft.y;
-	X1 = ScreenRect.m_BottomRight.x;
-	Y1 = ScreenRect.m_BottomRight.y;
+	float X0 = ScreenRect.m_TopLeft.x;
+	float Y0 = ScreenRect.m_TopLeft.y;
+	float X1 = ScreenRect.m_BottomRight.x;
+	float Y1 = ScreenRect.m_BottomRight.y;
 	const float XMid = (X0 + X1) / 2.0f;
 	const float YMid = (Y0 + Y1) / 2.0f;
-
 	if(g_Config.m_TcShowCenterWidth == 0)
 	{
 		Graphics()->LinesBegin();
-		IGraphics::CLineItem aLines[2] = {
-			{XMid, Y0, XMid, Y1},
-			{X0, YMid, X1, YMid}};
+		IGraphics::CLineItem aLines[2] = {{XMid, Y0, XMid, Y1}, {X0, YMid, X1, YMid}};
 		Graphics()->SetColor(color_cast<ColorRGBA>(ColorHSLA(g_Config.m_TcShowCenterColor, true)));
 		Graphics()->LinesDraw(aLines, std::size(aLines));
 		Graphics()->LinesEnd();
@@ -846,10 +761,7 @@ void CTClient::RenderCenterLines()
 	{
 		const float W = g_Config.m_TcShowCenterWidth;
 		Graphics()->QuadsBegin();
-		IGraphics::CQuadItem aQuads[3] = {
-			{XMid, mix(Y0, Y1, 0.25f) - W / 4.0f, W, (Y1 - Y0 - W) / 2.0f},
-			{XMid, mix(Y0, Y1, 0.75f) + W / 4.0f, W, (Y1 - Y0 - W) / 2.0f},
-			{XMid, YMid, X1 - X0, W}};
+		IGraphics::CQuadItem aQuads[3] = {{XMid, mix(Y0, Y1, 0.25f) - W / 4.0f, W, (Y1 - Y0 - W) / 2.0f}, {XMid, mix(Y0, Y1, 0.75f) + W / 4.0f, W, (Y1 - Y0 - W) / 2.0f}, {XMid, YMid, X1 - X0, W}};
 		Graphics()->SetColor(color_cast<ColorRGBA>(ColorHSLA(g_Config.m_TcShowCenterColor, true)));
 		Graphics()->QuadsDraw(aQuads, std::size(aQuads));
 		Graphics()->QuadsEnd();
@@ -858,7 +770,6 @@ void CTClient::RenderCenterLines()
 
 void CTClient::RenderCtfFlag(vec2 Pos, float Alpha)
 {
-	// from CItems::RenderFlag
 	float Size = 42.0f;
 	int QuadOffset;
 	if(g_Config.m_TcFakeCtfFlags == 1)
