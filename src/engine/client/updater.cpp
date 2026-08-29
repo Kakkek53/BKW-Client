@@ -317,9 +317,10 @@ void CUpdater::Init()
 	m_pStorage = Kernel()->RequestInterface<IStorage>();
 	m_pHttp = Kernel()->RequestInterface<IHttp>();
 
-#if !defined(CONF_HEADLESS_CLIENT) && (defined(CONF_FAMILY_WINDOWS) || defined(CONF_PLATFORM_LINUX) || defined(CONF_PLATFORM_ANDROID))
-	m_bAutoCheckPending = true;
-#endif
+	// BKW temporarily disables the inherited BestClient startup update check.
+	// Keep the updater implementation intact so it can later be pointed at a
+	// dedicated BKW release channel without rebuilding the updater architecture.
+	m_bAutoCheckPending = false;
 }
 
 void CUpdater::SetCurrentState(EUpdaterState NewState)
