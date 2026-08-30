@@ -186,6 +186,11 @@
 		s_PersonalizationScrollRegion.End();
 		LegacyTab = LEGACY_HUD;
 	}
+	else if(s_CurrentTab == TAB_ACCOUNT)
+	{
+		RenderBkwAccountSettings(pMenus, pUi, pGameClient, pClient, pInput, pHttp, PageView);
+		LegacyTab = LEGACY_HUD;
+	}
 	else
 	{
 		RenderLegacySection(LEGACY_SHOP, PageView);
