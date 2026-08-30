@@ -115,9 +115,6 @@ inline bool EnsureCache(CCollision *pCollision, IClient *pClient)
 	int AllMaxX = -1;
 	int AllMaxY = -1;
 
-	// Only bounds are cached. The actual minimap geometry is read from collision
-	// tile-by-tile while rendering, so narrow passages can never be merged into a
-	// single "highest priority" cell as in the old 256x256 approximation.
 	for(int Y = 0; Y < Height; ++Y)
 	{
 		for(int X = 0; X < Width; ++X)
@@ -131,8 +128,7 @@ inline bool EnsureCache(CCollision *pCollision, IClient *pClient)
 			AllMaxX = std::max(AllMaxX, X);
 			AllMaxY = std::max(AllMaxY, Y);
 
-			const bool OuterBorderSolid = Type == CELL_SOLID &&
-				(X <= 1 || Y <= 1 || X >= Width - 2 || Y >= Height - 2);
+			const bool OuterBorderSolid = Type == CELL_SOLID && (X <= 1 || Y <= 1 || X >= Width - 2 || Y >= Height - 2);
 			if(OuterBorderSolid)
 				continue;
 
@@ -238,8 +234,7 @@ inline vec2 ClampCenterToContent(vec2 Center, const CUIRect &Rect, float Scale)
 
 inline vec2 WorldToMapScreen(vec2 World, const CUIRect &Rect, vec2 Center, float Scale)
 {
-	return vec2(Rect.x + Rect.w * 0.5f + (World.x - Center.x) * Scale,
-		Rect.y + Rect.h * 0.5f + (World.y - Center.y) * Scale);
+	return vec2(Rect.x + Rect.w * 0.5f + (World.x - Center.x) * Scale, Rect.y + Rect.h * 0.5f + (World.y - Center.y) * Scale);
 }
 
 inline bool PointInside(const CUIRect &Rect, vec2 Point)
@@ -290,9 +285,6 @@ inline void AppendVisibleQuad(std::vector<IGraphics::CQuadItem> &vQuads, float X
 	if(!RectIntersectsCircle(X0, Y0, ClippedW, ClippedH, Rect))
 		return;
 
-	// Keep a small safety inset so rasterization/antialiasing cannot leak a tile
-	// beyond the circular outline. A boundary rectangle is accepted only when its
-	// complete area is inside the circle, never merely because its center is.
 	constexpr float ClipSafety = 0.45f;
 	if(RectFullyInsideCircle(X0, Y0, ClippedW, ClippedH, Rect, ClipSafety))
 	{
@@ -345,10 +337,6 @@ inline void RenderCollisionTiles(CCollision *pCollision, IGraphics *pGraphics, c
 			if(Type == CELL_AIR)
 				continue;
 
-			// Exact mode draws the exact tile. If a gigantic Full Map needs sampling,
-			// draw only the sampled tile instead of filling the whole sample block.
-			// That may omit tiny detail at extreme zoom-out, but it cannot invent a
-			// thick wall across a real passage.
 			const int DrawX = Step == 1 ? X : SampleX;
 			const int DrawY = Step == 1 ? Y : SampleY;
 			const vec2 P0 = WorldToMapScreen(vec2(DrawX * TILE_SIZE, DrawY * TILE_SIZE), Rect, Center, Scale);
@@ -392,9 +380,6 @@ inline bool HasVisibleEligibleMiniMapPlayer(const CGameClient *pGameClient, cons
 	return false;
 }
 
-// Normal mini-map zoom stays unchanged while at least one other active,
-// non-frozen player is visible. Otherwise zoom out only as far as necessary to
-// bring such a player into the circle. Frozen players never influence zoom.
 inline void ComputeMiniView(CGameClient *pGameClient, const CUIRect &Rect, vec2 &Center, float &Scale)
 {
 	Scale = std::max(MINI_TILE_PIXELS / TILE_SIZE, CoverScaleToContent(Rect));
@@ -404,6 +389,8 @@ inline void ComputeMiniView(CGameClient *pGameClient, const CUIRect &Rect, vec2 
 		Anchor = pGameClient->m_aClients[LocalId].m_RenderPos;
 
 	Center = ClampCenterToContent(Anchor, Rect, Scale);
+	if(!g_Config.m_BkwMiniMapAutoZoom)
+		return;
 	if(!HasEligibleMiniMapPlayer(pGameClient) || HasVisibleEligibleMiniMapPlayer(pGameClient, Rect, Center, Scale))
 		return;
 
@@ -412,8 +399,6 @@ inline void ComputeMiniView(CGameClient *pGameClient, const CUIRect &Rect, vec2 
 	const float MinScale = std::max(0.0001f, std::min(Scale, SafeRadius / std::max(TILE_SIZE, HalfContentDiagonal)));
 	vec2 MinCenter = ClampCenterToContent(Anchor, Rect, MinScale);
 
-	// If even the whole-map fallback cannot expose one (for example a transient
-	// snapshot at the map edge), use that fallback rather than chasing frozen tees.
 	if(!HasVisibleEligibleMiniMapPlayer(pGameClient, Rect, MinCenter, MinScale))
 	{
 		Scale = MinScale;
@@ -421,7 +406,6 @@ inline void ComputeMiniView(CGameClient *pGameClient, const CUIRect &Rect, vec2 
 		return;
 	}
 
-	// Binary search the closest possible zoom-out: Low is visible, High is not.
 	float Low = MinScale;
 	float High = Scale;
 	vec2 BestCenter = MinCenter;
@@ -693,9 +677,6 @@ inline void DrawSmallMap(CGameClient *pGameClient, IGraphics *pGraphics)
 inline void DrawRealDesignFullMap(CGameClient *pGameClient, IGraphics *pGraphics, CUi *pUi, const CUIRect &Screen, const CUIRect &MapRect, float Alpha)
 {
 	const float Aspect = std::max(0.1f, pGraphics->ScreenAspect());
-	// DDNet's world camera is 300 units high at zoom 1. Choose the largest camera
-	// viewport that stays inside the content bounds (cover), then our FullZoom
-	// acts as zoom-in exactly like the schematic mode.
 	const float CoverCameraZoom = std::max(0.01f, std::min(ContentHeight() / 300.0f, ContentWidth() / (300.0f * Aspect)));
 	const float CameraZoom = CoverCameraZoom / std::max(1.0f, s_FullZoom);
 
@@ -707,9 +688,6 @@ inline void DrawRealDesignFullMap(CGameClient *pGameClient, IGraphics *pGraphics
 	pUi->MapScreen();
 	const float Scale = Screen.w / std::max(1.0f, WorldRect.Width());
 	RenderPlayers(pGameClient, pGraphics, pUi, Screen, s_FullCenter, Scale, Alpha, true);
-
-	// A subtle frame shows the interactive area while the real map design itself
-	// remains almost full-screen.
 	MapRect.Draw(ColorRGBA(1.0f, 1.0f, 1.0f, 0.08f), IGraphics::CORNER_ALL, 10.0f);
 }
 
