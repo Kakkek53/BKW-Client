@@ -254,12 +254,12 @@ inline bool PointInsideCircle(const CUIRect &Rect, vec2 Point, float Margin = 0.
 	return distance(RectCenter(Rect), Point) <= std::max(0.0f, CircleRadius(Rect) - Margin);
 }
 
-inline bool RectFullyInsideCircle(float X, float Y, float W, float H, const CUIRect &CircleRect)
+inline bool RectFullyInsideCircle(float X, float Y, float W, float H, const CUIRect &CircleRect, float Margin = 0.0f)
 {
-	return PointInsideCircle(CircleRect, vec2(X, Y)) &&
-		PointInsideCircle(CircleRect, vec2(X + W, Y)) &&
-		PointInsideCircle(CircleRect, vec2(X, Y + H)) &&
-		PointInsideCircle(CircleRect, vec2(X + W, Y + H));
+	return PointInsideCircle(CircleRect, vec2(X, Y), Margin) &&
+		PointInsideCircle(CircleRect, vec2(X + W, Y), Margin) &&
+		PointInsideCircle(CircleRect, vec2(X, Y + H), Margin) &&
+		PointInsideCircle(CircleRect, vec2(X + W, Y + H), Margin);
 }
 
 inline bool RectIntersectsCircle(float X, float Y, float W, float H, const CUIRect &CircleRect)
@@ -289,16 +289,18 @@ inline void AppendVisibleQuad(std::vector<IGraphics::CQuadItem> &vQuads, float X
 
 	if(!RectIntersectsCircle(X0, Y0, ClippedW, ClippedH, Rect))
 		return;
-	if(RectFullyInsideCircle(X0, Y0, ClippedW, ClippedH, Rect))
+
+	// Keep a small safety inset so rasterization/antialiasing cannot leak a tile
+	// beyond the circular outline. A boundary rectangle is accepted only when its
+	// complete area is inside the circle, never merely because its center is.
+	constexpr float ClipSafety = 0.45f;
+	if(RectFullyInsideCircle(X0, Y0, ClippedW, ClippedH, Rect, ClipSafety))
 	{
 		vQuads.emplace_back(X0, Y0, ClippedW, ClippedH);
 		return;
 	}
 
-	// Only boundary tiles are split. This fills the round edge much more tightly
-	// than dropping every square that touches the circle, while keeping the center
-	// of the minimap exact and cheap.
-	constexpr int Subdivisions = 4;
+	constexpr int Subdivisions = 8;
 	const float SubW = ClippedW / Subdivisions;
 	const float SubH = ClippedH / Subdivisions;
 	for(int Sy = 0; Sy < Subdivisions; ++Sy)
@@ -307,8 +309,8 @@ inline void AppendVisibleQuad(std::vector<IGraphics::CQuadItem> &vQuads, float X
 		{
 			const float SubX = X0 + Sx * SubW;
 			const float SubY = Y0 + Sy * SubH;
-			if(PointInsideCircle(Rect, vec2(SubX + SubW * 0.5f, SubY + SubH * 0.5f)))
-				vQuads.emplace_back(SubX, SubY, SubW + 0.08f, SubH + 0.08f);
+			if(RectFullyInsideCircle(SubX, SubY, SubW, SubH, Rect, ClipSafety))
+				vQuads.emplace_back(SubX, SubY, SubW, SubH);
 		}
 	}
 }
@@ -359,6 +361,88 @@ inline void RenderCollisionTiles(CCollision *pCollision, IGraphics *pGraphics, c
 		DrawQuadBatch(pGraphics, avQuads[Type], CellColor((ECellType)Type, Alpha));
 }
 
+inline bool IsPlayerFrozen(const CGameClient *pGameClient, int ClientId)
+{
+	return pGameClient->m_aClients[ClientId].m_Predicted.m_IsInFreeze || pGameClient->m_aClients[ClientId].m_DeepFrozen;
+}
+
+inline bool HasEligibleMiniMapPlayer(const CGameClient *pGameClient)
+{
+	const int LocalId = pGameClient->m_Snap.m_LocalClientId;
+	for(int ClientId = 0; ClientId < MAX_CLIENTS; ++ClientId)
+	{
+		if(ClientId == LocalId || !pGameClient->m_aClients[ClientId].m_Active || IsPlayerFrozen(pGameClient, ClientId))
+			continue;
+		return true;
+	}
+	return false;
+}
+
+inline bool HasVisibleEligibleMiniMapPlayer(const CGameClient *pGameClient, const CUIRect &Rect, vec2 Center, float Scale)
+{
+	const int LocalId = pGameClient->m_Snap.m_LocalClientId;
+	for(int ClientId = 0; ClientId < MAX_CLIENTS; ++ClientId)
+	{
+		if(ClientId == LocalId || !pGameClient->m_aClients[ClientId].m_Active || IsPlayerFrozen(pGameClient, ClientId))
+			continue;
+		const vec2 ScreenPos = WorldToMapScreen(pGameClient->m_aClients[ClientId].m_RenderPos, Rect, Center, Scale);
+		if(PointInsideCircle(Rect, ScreenPos, 4.5f))
+			return true;
+	}
+	return false;
+}
+
+// Normal mini-map zoom stays unchanged while at least one other active,
+// non-frozen player is visible. Otherwise zoom out only as far as necessary to
+// bring such a player into the circle. Frozen players never influence zoom.
+inline void ComputeMiniView(CGameClient *pGameClient, const CUIRect &Rect, vec2 &Center, float &Scale)
+{
+	Scale = std::max(MINI_TILE_PIXELS / TILE_SIZE, CoverScaleToContent(Rect));
+	vec2 Anchor = ContentCenter();
+	const int LocalId = pGameClient->m_Snap.m_LocalClientId;
+	if(LocalId >= 0 && LocalId < MAX_CLIENTS && pGameClient->m_aClients[LocalId].m_Active)
+		Anchor = pGameClient->m_aClients[LocalId].m_RenderPos;
+
+	Center = ClampCenterToContent(Anchor, Rect, Scale);
+	if(!HasEligibleMiniMapPlayer(pGameClient) || HasVisibleEligibleMiniMapPlayer(pGameClient, Rect, Center, Scale))
+		return;
+
+	const float SafeRadius = std::max(1.0f, CircleRadius(Rect) - 5.0f);
+	const float HalfContentDiagonal = 0.5f * std::sqrt(ContentWidth() * ContentWidth() + ContentHeight() * ContentHeight());
+	const float MinScale = std::max(0.0001f, std::min(Scale, SafeRadius / std::max(TILE_SIZE, HalfContentDiagonal)));
+	vec2 MinCenter = ClampCenterToContent(Anchor, Rect, MinScale);
+
+	// If even the whole-map fallback cannot expose one (for example a transient
+	// snapshot at the map edge), use that fallback rather than chasing frozen tees.
+	if(!HasVisibleEligibleMiniMapPlayer(pGameClient, Rect, MinCenter, MinScale))
+	{
+		Scale = MinScale;
+		Center = MinCenter;
+		return;
+	}
+
+	// Binary search the closest possible zoom-out: Low is visible, High is not.
+	float Low = MinScale;
+	float High = Scale;
+	vec2 BestCenter = MinCenter;
+	for(int Iteration = 0; Iteration < 12; ++Iteration)
+	{
+		const float Mid = (Low + High) * 0.5f;
+		const vec2 MidCenter = ClampCenterToContent(Anchor, Rect, Mid);
+		if(HasVisibleEligibleMiniMapPlayer(pGameClient, Rect, MidCenter, Mid))
+		{
+			Low = Mid;
+			BestCenter = MidCenter;
+		}
+		else
+		{
+			High = Mid;
+		}
+	}
+	Scale = Low;
+	Center = BestCenter;
+}
+
 inline void RenderPlayers(CGameClient *pGameClient, IGraphics *pGraphics, CUi *pUi, const CUIRect &Rect, vec2 Center, float Scale, float Alpha, bool ShowNames, bool CircularClip = false)
 {
 	const int LocalId = pGameClient->m_Snap.m_LocalClientId;
@@ -367,7 +451,7 @@ inline void RenderPlayers(CGameClient *pGameClient, IGraphics *pGraphics, CUi *p
 		if(!pGameClient->m_aClients[ClientId].m_Active)
 			continue;
 		const vec2 ScreenPos = WorldToMapScreen(pGameClient->m_aClients[ClientId].m_RenderPos, Rect, Center, Scale);
-		const bool Frozen = pGameClient->m_aClients[ClientId].m_Predicted.m_IsInFreeze || pGameClient->m_aClients[ClientId].m_DeepFrozen;
+		const bool Frozen = IsPlayerFrozen(pGameClient, ClientId);
 		ColorRGBA Color = ClientId == LocalId ? ColorRGBA(0.30f, 1.00f, 0.42f, Alpha) : ColorRGBA(1.0f, 1.0f, 1.0f, Alpha);
 		if(Frozen)
 			Color = ColorRGBA(0.35f, 0.82f, 1.0f, Alpha);
@@ -442,12 +526,9 @@ inline void DrawCircularMiniMap(CGameClient *pGameClient, IGraphics *pGraphics, 
 
 	CUIRect Inner = Rect;
 	Inner.Margin(3.0f, &Inner);
-	const float Scale = std::max(MINI_TILE_PIXELS / TILE_SIZE, CoverScaleToContent(Inner));
-	vec2 Center = ContentCenter();
-	const int LocalId = pGameClient->m_Snap.m_LocalClientId;
-	if(LocalId >= 0 && LocalId < MAX_CLIENTS && pGameClient->m_aClients[LocalId].m_Active)
-		Center = pGameClient->m_aClients[LocalId].m_RenderPos;
-	Center = ClampCenterToContent(Center, Inner, Scale);
+	vec2 Center;
+	float Scale;
+	ComputeMiniView(pGameClient, Inner, Center, Scale);
 
 	RenderCollisionTiles(pGameClient->Collision(), pGraphics, Inner, Center, Scale, Alpha, true);
 	RenderPlayers(pGameClient, pGraphics, pUi, Inner, Center, Scale, Alpha, false, true);
