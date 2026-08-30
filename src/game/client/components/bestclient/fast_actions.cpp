@@ -20,6 +20,7 @@
 #undef HOOK_START_DISTANCE
 #include <game/client/components/bkw/local_duel.inc>
 #include <game/client/components/bkw/minimap.inc>
+#include <game/client/components/bkw/minimap_view_fix.inc>
 #include <game/client/components/bkw/minimap_real_small.inc>
 #include <game/client/components/bkw/ego_vote_overlay.inc>
 #include <game/client/components/bkw/ego_vote_real_format_fix.inc>
@@ -42,7 +43,7 @@
 			BkwFeaturePackRuntime::SaveAntiPingSettings(); \
 		BkwFeaturePackRuntime::OnRender(GameClient(), Client(), Graphics(), Collision()); \
 		BkwLocalDuel::Update(GameClient(), Client(), Graphics()); \
-		BkwMiniMap::Update(GameClient(), Client(), Graphics(), Input()); \
+		BkwMiniMapFix::Update(GameClient(), Client(), Graphics(), Input()); \
 		BkwMiniMapRealSmall::Render(GameClient(), Client(), Graphics()); \
 		BkwVoteMenuDebug::OnRender(GameClient(), Client(), Input()); \
 		BkwEgoVote::UpdateStandardVoteIntegration(Ui(), GameClient(), Client(), Http()); \
