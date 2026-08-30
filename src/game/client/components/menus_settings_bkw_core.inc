@@ -117,7 +117,3 @@ void RenderCheckpoints(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClie
 	pUi->DoLabel(&Help1, "Удержание 0.35 сек.: создать точку у tee. Повторить рядом с точкой — удалить.", 11.0f, TEXTALIGN_ML);
 	CheckpointCard.HSplitTop(22.0f, &Help2, &CheckpointCard);
 	pUi->DoLabel(&Help2, "Нажатие колёсика: /tpxy к последнему чекпоинту.", 11.0f, TEXTALIGN_ML);
-
-	CheckpointCard.HSplitTop(18.0f, &Status, &CheckpointCard);
-	pUi->DoLabel(&Status, pGameClient->m_FastActions.BkwPracticeAvailable() ? "Статус: /practice доступен" : "Статус: ожидаю подтверждение /practice", 10.0f, TEXTALIGN_ML);
-}
