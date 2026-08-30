@@ -13,8 +13,8 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 	PageView.HSplitTop(7.0f, nullptr, &PageView);
 	CUIRect TabBar;
 	PageView.HSplitTop(22.0f, &TabBar, &PageView);
-	const char *apTabs[TAB_COUNT] = {"Основное", "Персонализация", "Магазин"};
-	const float aTabWidths[TAB_COUNT] = {96.0f, 136.0f, 92.0f};
+	const char *apTabs[TAB_COUNT] = {"Основное", "Персонализация", "Аккаунт", "Магазин"};
+	const float aTabWidths[TAB_COUNT] = {96.0f, 136.0f, 94.0f, 92.0f};
 
 	CUIRect CompactTabs = TabBar;
 	for(int Tab = 0; Tab < TAB_COUNT; ++Tab)
