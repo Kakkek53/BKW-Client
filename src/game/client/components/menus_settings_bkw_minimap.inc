@@ -1,6 +1,7 @@
 void RenderBkwMiniMapSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, CUIRect PageView)
 {
 	static int s_Enable;
+	static int s_AutoZoom;
 	static int s_RealDesign;
 	static CButtonContainer s_KeyReader;
 	static CButtonContainer s_KeyClear;
@@ -28,12 +29,17 @@ void RenderBkwMiniMapSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient
 	PageView.HSplitTop(24.0f, &Row, &PageView);
 	pUi->DoScrollbarOption(&g_Config.m_BkwMiniMapOpacity, &g_Config.m_BkwMiniMapOpacity, &Row, "Прозрачность", 20, 100, &CUi::ms_LinearScrollbarScale, 0, "%");
 
-	PageView.HSplitTop(5.0f, nullptr, &PageView);
+	PageView.HSplitTop(4.0f, nullptr, &PageView);
+	PageView.HSplitTop(22.0f, &Row, &PageView);
+	if(pMenus->DoButton_CheckBox(&s_AutoZoom, "Авто-зум до незамороженного игрока", g_Config.m_BkwMiniMapAutoZoom, &Row))
+		g_Config.m_BkwMiniMapAutoZoom ^= 1;
+
+	PageView.HSplitTop(4.0f, nullptr, &PageView);
 	PageView.HSplitTop(22.0f, &Row, &PageView);
 	if(pMenus->DoButton_CheckBox(&s_RealDesign, "Реальные тайлы и фон в мини-карте и Full Map (экспериментально)", g_Config.m_BkwMiniMapRealDesign, &Row))
 		g_Config.m_BkwMiniMapRealDesign ^= 1;
 
-	PageView.HSplitTop(6.0f, nullptr, &PageView);
+	PageView.HSplitTop(5.0f, nullptr, &PageView);
 	PageView.HSplitTop(18.0f, &Row, &PageView);
 	pUi->DoLabel(&Row, "Клавиша полной карты", 11.5f, TEXTALIGN_ML);
 	PageView.HSplitTop(3.0f, nullptr, &PageView);
@@ -46,11 +52,11 @@ void RenderBkwMiniMapSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient
 		g_Config.m_BkwMiniMapFullModifier = KeyResult.m_Bind.m_ModifierMask;
 	}
 
-	PageView.HSplitTop(5.0f, nullptr, &PageView);
+	PageView.HSplitTop(4.0f, nullptr, &PageView);
 	PageView.HSplitTop(24.0f, &Row, &PageView);
 	pUi->DoScrollbarOption(&g_Config.m_BkwMiniMapFullZoom, &g_Config.m_BkwMiniMapFullZoom, &Row, "Начальный масштаб полной карты", 100, 500, &CUi::ms_LinearScrollbarScale, 0, "%");
 
-	PageView.HSplitTop(6.0f, nullptr, &PageView);
-	PageView.HSplitTop(44.0f, &Row, &PageView);
-	pUi->DoLabel(&Row, "Без real-design мини-карта показывает точные collision-тайлы без склеивания проходов. С real-design обе карты используют настоящие слои и фон текущей карты; игроки остаются поверх.", 10.0f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
+	PageView.HSplitTop(4.0f, nullptr, &PageView);
+	PageView.HSplitTop(28.0f, &Row, &PageView);
+	pUi->DoLabel(&Row, "Авто-зум учитывает только активных незамороженных игроков. Real-design использует настоящие слои карты; игроки рисуются поверх.", 9.5f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
 }
