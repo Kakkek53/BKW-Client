@@ -30,15 +30,11 @@ inline void Render(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraph
 	CUIRect Inner = Mini;
 	Inner.Margin(3.0f, &Inner);
 
-	vec2 Center = BkwMiniMap::ContentCenter();
-	const int LocalId = pGameClient->m_Snap.m_LocalClientId;
-	if(LocalId >= 0 && LocalId < MAX_CLIENTS && pGameClient->m_aClients[LocalId].m_Active)
-		Center = pGameClient->m_aClients[LocalId].m_RenderPos;
-
-	// Match the exact collision minimap scale. This keeps passages readable and
-	// makes the decorative map layers align with the existing player markers.
-	const float Scale = std::max(BkwMiniMap::MINI_TILE_PIXELS / BkwMiniMap::TILE_SIZE, BkwMiniMap::CoverScaleToContent(Inner));
-	Center = BkwMiniMap::ClampCenterToContent(Center, Inner, Scale);
+	// Use exactly the same center/scale as the collision minimap, including its
+	// auto zoom that ignores frozen players.
+	vec2 Center;
+	float Scale;
+	BkwMiniMap::ComputeMiniView(pGameClient, Inner, Center, Scale);
 
 	float BaseWidth = 1.0f;
 	float BaseHeight = 1.0f;
@@ -52,30 +48,37 @@ inline void Render(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraph
 	const vec2 MiniCenter = BkwMiniMap::RectCenter(Inner);
 	const vec2 PreviewCenter = Center - (MiniCenter - ScreenCenter) / Scale;
 
-	// The regular graphics API only has rectangular scissoring. Build a circular
-	// scissor from horizontal strips. The existing schematic circle stays below,
-	// so sub-pixel strip edges never expose the game world through the minimap.
-	constexpr int Strips = 16;
-	const float Radius = BkwMiniMap::CircleRadius(Inner);
+	// Graphics scissoring is rectangular, so approximate the round mask with
+	// conservative horizontal strips. Every strip rectangle is fully INSIDE the
+	// mathematical circle: widths are calculated from the farthest strip edge,
+	// never from its midpoint, and pixel coordinates are rounded inward.
+	constexpr int Strips = 32;
 	const vec2 CircleCenter = BkwMiniMap::RectCenter(Inner);
 	const float PixelScaleX = pGraphics->ScreenWidth() / std::max(1.0f, Screen.w);
 	const float PixelScaleY = pGraphics->ScreenHeight() / std::max(1.0f, Screen.h);
+	const float PixelSafetyUi = std::max(1.0f / std::max(0.001f, PixelScaleX), 1.0f / std::max(0.001f, PixelScaleY));
+	const float SafeRadius = std::max(0.0f, BkwMiniMap::CircleRadius(Inner) - PixelSafetyUi * 1.5f);
 
 	for(int i = 0; i < Strips; ++i)
 	{
 		const float Y0 = Inner.y + Inner.h * i / Strips;
 		const float Y1 = Inner.y + Inner.h * (i + 1) / Strips;
-		const float SampleY = (Y0 + Y1) * 0.5f;
-		const float Dy = SampleY - CircleCenter.y;
-		const float HalfWidth = std::sqrt(std::max(0.0f, Radius * Radius - Dy * Dy));
+		const float FarDy = std::max(std::abs(Y0 - CircleCenter.y), std::abs(Y1 - CircleCenter.y));
+		if(FarDy >= SafeRadius)
+			continue;
+
+		const float HalfWidth = std::sqrt(std::max(0.0f, SafeRadius * SafeRadius - FarDy * FarDy));
 		const float X0 = CircleCenter.x - HalfWidth;
 		const float X1 = CircleCenter.x + HalfWidth;
 
-		const int ClipX = (int)std::floor((X0 - Screen.x) * PixelScaleX);
-		const int ClipY = (int)std::floor((Y0 - Screen.y) * PixelScaleY);
-		const int ClipW = std::max(1, (int)std::ceil((X1 - X0) * PixelScaleX));
-		const int ClipH = std::max(1, (int)std::ceil((Y1 - Y0) * PixelScaleY) + 1);
-		pGraphics->ClipEnable(ClipX, ClipY, ClipW, ClipH);
+		const int ClipX0 = (int)std::ceil((X0 - Screen.x) * PixelScaleX);
+		const int ClipX1 = (int)std::floor((X1 - Screen.x) * PixelScaleX);
+		const int ClipY0 = (int)std::ceil((Y0 - Screen.y) * PixelScaleY);
+		const int ClipY1 = (int)std::floor((Y1 - Screen.y) * PixelScaleY);
+		if(ClipX1 <= ClipX0 || ClipY1 <= ClipY0)
+			continue;
+
+		pGraphics->ClipEnable(ClipX0, ClipY0, ClipX1 - ClipX0, ClipY1 - ClipY0);
 		pGameClient->m_MapLayersBackground.RenderBkwPreview(PreviewCenter, CameraZoom);
 		pGameClient->m_MapLayersForeground.RenderBkwPreview(PreviewCenter, CameraZoom);
 		pGraphics->ClipDisable();
