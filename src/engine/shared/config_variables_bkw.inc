@@ -1,4 +1,7 @@
 // BKW-specific client settings. Included under ConfigDomain::BESTCLIENT.
+// BKW Cloud stores only its own session token here. The Discord OAuth access token is never saved by the client.
+MACRO_CONFIG_STR(BkwCloudToken, bkw_cloud_token, 192, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "BKW Cloud session token")
+
 MACRO_CONFIG_INT(BkwTfMenu, bkw_tf_menu, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable the redesigned TeeFusion menu")
 MACRO_CONFIG_INT(BkwTfMenuStyle, bkw_tf_menu_style, 0, 0, 3, CFGFLAG_CLIENT | CFGFLAG_SAVE, "TeeFusion menu style: 0 standard, 1 liquid glass, 2 neon, 3 minimal")
 MACRO_CONFIG_INT(BkwTfMenuScale, bkw_tf_menu_scale, 100, 75, 125, CFGFLAG_CLIENT | CFGFLAG_SAVE, "TeeFusion menu window scale in percent")
@@ -37,7 +40,7 @@ MACRO_CONFIG_INT(BkwLocalDuelHudRounding, bkw_local_duel_hud_rounding, 12, 0, 24
 MACRO_CONFIG_INT(BkwMiniMap, bkw_mini_map, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show BKW minimap in the top-right corner")
 MACRO_CONFIG_INT(BkwMiniMapSize, bkw_mini_map_size, 180, 120, 300, CFGFLAG_CLIENT | CFGFLAG_SAVE, "BKW minimap size")
 MACRO_CONFIG_INT(BkwMiniMapOpacity, bkw_mini_map_opacity, 90, 20, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "BKW minimap opacity")
-MACRO_CONFIG_INT(BkwMiniMapAutoZoom, bkw_mini_map_auto_zoom, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Automatically zoom the minimap out until a non-frozen player is visible")
+MACRO_CONFIG_INT(BkwMiniMapAutoZoom, bkw_mini_map_auto_zoom, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Automatically zoom the minimap out to a non-frozen player while the local player is frozen")
 MACRO_CONFIG_INT(BkwMiniMapRealDesign, bkw_mini_map_real_design, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Render the real map design layers in BKW minimap and full map")
 MACRO_CONFIG_INT(BkwMiniMapFullKey, bkw_mini_map_full_key, 0, 0, 511, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Key used to toggle the full BKW map")
 MACRO_CONFIG_INT(BkwMiniMapFullModifier, bkw_mini_map_full_modifier, 0, 0, 31, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Modifier mask used to toggle the full BKW map")
