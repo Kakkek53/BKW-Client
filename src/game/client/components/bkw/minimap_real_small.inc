@@ -30,10 +30,12 @@ inline void Render(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraph
 	CUIRect Inner = Mini;
 	Inner.Margin(3.0f, &Inner);
 
-	// Use exactly the same center/scale as the collision minimap.
+	// Use exactly the same corrected center/scale as the collision minimap. This
+	// keeps the local tee inside the circle and only enables auto zoom while the
+	// local tee is frozen.
 	vec2 Center;
 	float Scale;
-	BkwMiniMap::ComputeMiniView(pGameClient, Inner, Center, Scale);
+	BkwMiniMapFix::ComputeMiniView(pGameClient, Inner, Center, Scale);
 
 	float BaseWidth = 1.0f;
 	float BaseHeight = 1.0f;
@@ -52,9 +54,8 @@ inline void Render(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraph
 	const vec2 CircleCenter = BkwMiniMap::RectCenter(Inner);
 	const float SafeRadius = std::max(0.0f, BkwMiniMap::CircleRadius(Inner) - PixelSafetyUi * 1.5f);
 
-	// Build the circular mask from contiguous physical-pixel bands. The old
-	// ceil/floor split could leave a one-pixel hole between neighboring strips.
-	// Here every band starts exactly where the previous one ended.
+	// Build the circular mask from contiguous physical-pixel bands. Every band
+	// starts exactly where the previous one ended, so no horizontal gaps appear.
 	const int CirclePixelY0 = (int)std::ceil((CircleCenter.y - SafeRadius - Screen.y) * PixelScaleY);
 	const int CirclePixelY1 = (int)std::floor((CircleCenter.y + SafeRadius - Screen.y) * PixelScaleY);
 	const int CirclePixelHeight = std::max(0, CirclePixelY1 - CirclePixelY0);
@@ -83,9 +84,6 @@ inline void Render(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraph
 		const int ClipW = ClipX1 - ClipX0;
 		const int ClipH = ClipY1 - ClipY0;
 
-		// CMapRenderer::Render disables clipping when it finishes. Therefore the
-		// clip MUST be restored before rendering the foreground too; otherwise the
-		// foreground layer leaks outside the circular minimap.
 		pGraphics->ClipEnable(ClipX0, ClipY0, ClipW, ClipH);
 		pGameClient->m_MapLayersBackground.RenderBkwPreview(PreviewCenter, CameraZoom);
 		pGraphics->ClipEnable(ClipX0, ClipY0, ClipW, ClipH);
@@ -93,7 +91,6 @@ inline void Render(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraph
 		pGraphics->ClipDisable();
 	}
 
-	// Restore UI mapping and draw dynamic markers above the real map design.
 	pUi->MapScreen();
 	const float Alpha = std::clamp(g_Config.m_BkwMiniMapOpacity / 100.0f, 0.20f, 1.0f);
 	BkwMiniMap::RenderPlayers(pGameClient, pGraphics, pUi, Inner, Center, Scale, Alpha, false, true);
