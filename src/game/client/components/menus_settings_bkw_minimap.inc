@@ -31,7 +31,7 @@ void RenderBkwMiniMapSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient
 
 	PageView.HSplitTop(4.0f, nullptr, &PageView);
 	PageView.HSplitTop(22.0f, &Row, &PageView);
-	if(pMenus->DoButton_CheckBox(&s_AutoZoom, "Авто-зум до незамороженного игрока", g_Config.m_BkwMiniMapAutoZoom, &Row))
+	if(pMenus->DoButton_CheckBox(&s_AutoZoom, "Авто-зум при заморозке до незамороженного игрока", g_Config.m_BkwMiniMapAutoZoom, &Row))
 		g_Config.m_BkwMiniMapAutoZoom ^= 1;
 
 	PageView.HSplitTop(4.0f, nullptr, &PageView);
@@ -58,5 +58,5 @@ void RenderBkwMiniMapSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient
 
 	PageView.HSplitTop(4.0f, nullptr, &PageView);
 	PageView.HSplitTop(28.0f, &Row, &PageView);
-	pUi->DoLabel(&Row, "Авто-зум учитывает только активных незамороженных игроков. Real-design использует настоящие слои карты; игроки рисуются поверх.", 9.5f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
+	pUi->DoLabel(&Row, "Авто-зум срабатывает только когда ваш tee заморожен и ищет только активных незамороженных игроков. Real-design использует настоящие слои карты; игроки рисуются поверх.", 9.5f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
 }
