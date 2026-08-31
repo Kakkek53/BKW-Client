@@ -2799,6 +2799,11 @@ if(CLIENT)
     components/background.h
     components/binds.cpp
     components/binds.h
+    components/bkw/cloud_account.h
+    components/bkw/ddstats_hours.h
+    components/bkw/media_background_settings.h
+    components/bkw/save_store.h
+    components/bkw/save_warning.h
     components/broadcast.cpp
     components/broadcast.h
     components/camera.cpp
