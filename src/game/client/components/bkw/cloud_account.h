@@ -71,6 +71,21 @@ private:
 		return str_comp(pKey, "bkw_cloud_token") != 0 && !str_startswith(pKey, "bkw_tipo_cheat");
 	}
 
+	static bool IsValidSessionToken(const char *pToken)
+	{
+		if(!pToken)
+			return false;
+		const size_t Length = str_length(pToken);
+		if(Length < 32 || Length >= sizeof(g_Config.m_BkwCloudToken))
+			return false;
+		for(const unsigned char *p = reinterpret_cast<const unsigned char *>(pToken); *p; ++p)
+		{
+			if(!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') || (*p >= '0' && *p <= '9') || *p == '_' || *p == '-'))
+				return false;
+		}
+		return true;
+	}
+
 	static std::string JsonEscape(const char *pText)
 	{
 		std::string Result;
@@ -258,7 +273,7 @@ private:
 		pRequest->MaxResponseSize(MAX_RESPONSE_SIZE);
 		pRequest->FailOnErrorStatus(false);
 		pRequest->LogProgress(HTTPLOG::NONE);
-		if(Authenticated && g_Config.m_BkwCloudToken[0] != '\0')
+		if(Authenticated && IsValidSessionToken(g_Config.m_BkwCloudToken))
 		{
 			std::string Authorization = "Bearer ";
 			Authorization += g_Config.m_BkwCloudToken;
@@ -338,7 +353,7 @@ private:
 				m_CodeVerifier.clear();
 				m_Status = "Код входа истёк — начните вход заново";
 			}
-			else if(CompletedType == ERequest::DEVICE_POLL && m_HttpStatus == 403)
+			else if(CompletedType == ERequest::DEVICE_POLL && m_LoginWaiting && m_HttpStatus == 403)
 			{
 				m_LoginWaiting = false;
 				m_CodeVerifier.clear();
@@ -380,7 +395,7 @@ private:
 			if(str_comp(pStatus, "approved") == 0)
 			{
 				const char *pToken = JsonString((*pRoot)["token"]);
-				if(pToken[0] != '\0')
+				if(IsValidSessionToken(pToken))
 				{
 					str_copy(g_Config.m_BkwCloudToken, pToken);
 					m_LoginWaiting = false;
@@ -389,6 +404,13 @@ private:
 					m_DeviceCode.clear();
 					LoadUser(*pRoot);
 					m_Status = "Discord подключён к BKW Client через PKCE";
+				}
+				else
+				{
+					m_LoginWaiting = false;
+					m_CodeVerifier.clear();
+					m_DeviceCode.clear();
+					m_Status = "BKW Cloud вернул некорректный session token";
 				}
 			}
 			else
@@ -444,7 +466,7 @@ public:
 		if(!m_pRequest && m_LoginWaiting && !m_DeviceCode.empty() && !m_CodeVerifier.empty() && time_get() >= m_NextDevicePoll)
 			StartDevicePoll(pHttp);
 
-		if(!m_pRequest && !m_LoginWaiting && g_Config.m_BkwCloudToken[0] != '\0' && !m_ProfileLoaded && !m_ProfileRequestStarted)
+		if(!m_pRequest && !m_LoginWaiting && IsValidSessionToken(g_Config.m_BkwCloudToken) && !m_ProfileLoaded && !m_ProfileRequestStarted)
 			RequestMe(pHttp);
 	}
 
@@ -480,7 +502,7 @@ public:
 
 	void RequestMe(IHttp *pHttp)
 	{
-		if(!pHttp || m_pRequest || g_Config.m_BkwCloudToken[0] == '\0')
+		if(!pHttp || m_pRequest || !IsValidSessionToken(g_Config.m_BkwCloudToken))
 			return;
 		m_ProfileRequestStarted = true;
 		std::shared_ptr<IHttpRequest> pGet = HttpGet("https://bkw-client.onrender.com/api/me");
@@ -491,7 +513,7 @@ public:
 	{
 		if(g_Config.m_BkwCloudToken[0] == '\0')
 			return;
-		if(pHttp && !m_pRequest)
+		if(pHttp && !m_pRequest && IsValidSessionToken(g_Config.m_BkwCloudToken))
 		{
 			std::shared_ptr<IHttpRequest> pPost = HttpPostJson("https://bkw-client.onrender.com/api/logout", "{}");
 			Run(pHttp, pPost, ERequest::LOGOUT, true);
@@ -587,7 +609,7 @@ public:
 
 	bool Busy() const { return m_pRequest != nullptr; }
 	bool LoginWaiting() const { return m_LoginWaiting; }
-	bool LoggedIn() const { return g_Config.m_BkwCloudToken[0] != '\0'; }
+	bool LoggedIn() const { return IsValidSessionToken(g_Config.m_BkwCloudToken); }
 	bool ProfileLoaded() const { return m_ProfileLoaded; }
 	const char *UserName() const { return m_UserName.c_str(); }
 	const char *GlobalName() const { return m_GlobalName.empty() ? m_UserName.c_str() : m_GlobalName.c_str(); }
