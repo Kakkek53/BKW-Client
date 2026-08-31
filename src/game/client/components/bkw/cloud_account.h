@@ -1,6 +1,7 @@
 #ifndef GAME_CLIENT_COMPONENTS_BKW_CLOUD_ACCOUNT_H
 #define GAME_CLIENT_COMPONENTS_BKW_CLOUD_ACCOUNT_H
 
+#include <base/fs.h>
 #include <base/hash.h>
 #include <base/secure.h>
 #include <base/str.h>
@@ -8,13 +9,6 @@
 
 #if defined(CONF_FAMILY_WINDOWS)
 #include <base/windows.h>
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
 #endif
 
 #include <engine/client.h>
@@ -152,16 +146,11 @@ private:
 	static bool EnsureDeepLinkProtocol()
 	{
 #if defined(CONF_FAMILY_WINDOWS)
-		wchar_t aWidePath[32768];
-		const DWORD Length = GetModuleFileNameW(nullptr, aWidePath, (DWORD)(sizeof(aWidePath) / sizeof(aWidePath[0])));
-		if(Length == 0 || Length >= sizeof(aWidePath) / sizeof(aWidePath[0]))
-			return false;
-		aWidePath[Length] = L'\0';
-		const std::optional<std::string> Path = windows_wide_to_utf8(aWidePath);
-		if(!Path || Path->empty())
+		char aPath[IO_MAX_PATH_LENGTH];
+		if(fs_executable_path(aPath, sizeof(aPath)) != 0)
 			return false;
 		bool Updated = false;
-		if(!windows_shell_register_protocol("bkw-discord", Path->c_str(), &Updated))
+		if(!windows_shell_register_protocol("bkw-discord", aPath, &Updated))
 			return false;
 		if(Updated)
 			windows_shell_update();
