@@ -68,7 +68,7 @@ private:
 
 	static bool IsSharedKey(const char *pKey)
 	{
-		return str_comp(pKey, "bkw_cloud_token") != 0;
+		return str_comp(pKey, "bkw_cloud_token") != 0 && !str_startswith(pKey, "bkw_tipo_cheat");
 	}
 
 	static std::string JsonEscape(const char *pText)
@@ -457,7 +457,6 @@ public:
 		m_UserCode.clear();
 		m_VerificationUrl.clear();
 		m_CodeVerifier.clear();
-
 		char aVerifier[65];
 		secure_random_password(aVerifier, sizeof(aVerifier), 64);
 		m_CodeVerifier = aVerifier;
