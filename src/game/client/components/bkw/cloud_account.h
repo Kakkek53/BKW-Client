@@ -1,15 +1,11 @@
 #ifndef GAME_CLIENT_COMPONENTS_BKW_CLOUD_ACCOUNT_H
 #define GAME_CLIENT_COMPONENTS_BKW_CLOUD_ACCOUNT_H
 
-#include <base/fs.h>
 #include <base/hash.h>
 #include <base/secure.h>
 #include <base/str.h>
 #include <base/time.h>
 
-#if defined(CONF_FAMILY_WINDOWS)
-#include <base/windows.h>
-#endif
 
 #include <engine/client.h>
 #include <engine/http.h>
@@ -141,23 +137,6 @@ private:
 	static const char *JsonString(const json_value &Value)
 	{
 		return Value.type == json_string && Value.u.string.ptr ? Value.u.string.ptr : "";
-	}
-
-	static bool EnsureDeepLinkProtocol()
-	{
-#if defined(CONF_FAMILY_WINDOWS)
-		char aPath[IO_MAX_PATH_LENGTH];
-		if(fs_executable_path(aPath, sizeof(aPath)) != 0)
-			return false;
-		bool Updated = false;
-		if(!windows_shell_register_protocol("bkw-discord", aPath, &Updated))
-			return false;
-		if(Updated)
-			windows_shell_update();
-		return true;
-#else
-		return false;
-#endif
 	}
 
 	static std::string BuildSettingsSnapshot()
@@ -480,8 +459,7 @@ public:
 			return;
 		}
 
-		const bool DeepLinkReady = EnsureDeepLinkProtocol();
-		m_Status = DeepLinkReady ? "Запрашиваю защищённый вход Discord…" : "Запрашиваю вход Discord… (deep-link не зарегистрирован)";
+		m_Status = "Запрашиваю защищённый вход Discord…";
 		std::string Body = "{\"code_challenge\":\"";
 		Body += Challenge;
 		Body += "\"}";
