@@ -1,10 +1,15 @@
 #ifndef GAME_CLIENT_COMPONENTS_BKW_CLOUD_ACCOUNT_H
 #define GAME_CLIENT_COMPONENTS_BKW_CLOUD_ACCOUNT_H
 
+#include <base/fs.h>
 #include <base/hash.h>
 #include <base/secure.h>
 #include <base/str.h>
 #include <base/time.h>
+
+#if defined(CONF_FAMILY_WINDOWS)
+#include <base/windows.h>
+#endif
 
 
 #include <engine/client.h>
@@ -16,6 +21,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace Bkw
 {
@@ -24,6 +30,20 @@ class CCloudAccount
 public:
 	static constexpr const char *BASE_URL = "https://bkw-client.onrender.com";
 	static constexpr size_t MAX_RESPONSE_SIZE = 2 * 1024 * 1024;
+
+	struct SSave
+	{
+		std::string m_Id;
+		std::string m_Name;
+		std::string m_UpdatedAt;
+	};
+
+	struct SShare
+	{
+		std::string m_Id;
+		std::string m_Url;
+		std::string m_CreatedAt;
+	};
 
 private:
 	enum class ERequest
@@ -35,7 +55,14 @@ private:
 		LOGOUT,
 		SAVE_SETTINGS,
 		LOAD_SETTINGS,
+		LIST_SAVES,
+		CREATE_SAVE,
+		LOAD_SAVE,
+		UPDATE_SAVE,
+		DELETE_SAVE,
 		CREATE_SHARE,
+		LIST_SHARES,
+		DELETE_SHARE,
 		IMPORT_SHARE,
 	};
 
@@ -48,6 +75,9 @@ private:
 	std::string m_UserName;
 	std::string m_GlobalName;
 	std::string m_LastShareUrl;
+	std::string m_PendingId;
+	std::vector<SSave> m_vSaves;
+	std::vector<SShare> m_vShares;
 	std::string m_Status = "BKW Cloud не подключён";
 	bool m_LoginWaiting = false;
 	bool m_ProfileLoaded = false;
@@ -56,9 +86,16 @@ private:
 	int m_HttpStatus = 0;
 	int64_t m_NextDevicePoll = 0;
 
-	static bool IsSharedKey(const char *pKey)
+	static bool IsSharedKey(const char *pKey, int Flags)
 	{
-		return str_comp(pKey, "bkw_cloud_token") != 0 && !str_startswith(pKey, "bkw_tipo_cheat");
+		if((Flags & CFGFLAG_SAVE) == 0 || (Flags & CFGFLAG_CLIENT) == 0)
+			return false;
+		if(str_comp(pKey, "bkw_cloud_token") == 0 || str_comp(pKey, "bkw_pending_deep_link") == 0 || str_startswith(pKey, "bkw_tipo_cheat"))
+			return false;
+		// Never upload credentials even if another client module accidentally marks them as saved settings.
+		if(str_find(pKey, "password") || str_find(pKey, "token") || str_find(pKey, "secret") || str_find(pKey, "api_key") || str_find(pKey, "apikey"))
+			return false;
+		return true;
 	}
 
 	static bool IsValidSessionToken(const char *pToken)
@@ -141,7 +178,7 @@ private:
 
 	static std::string BuildSettingsSnapshot()
 	{
-		std::string Result = "{\"schema\":1,\"client\":\"BKW\",\"settings\":{";
+		std::string Result = "{\"schema\":2,\"client\":\"BKW\",\"settings\":{";
 		bool First = true;
 		auto AddKey = [&](const char *pKey) {
 			if(!First)
@@ -155,7 +192,7 @@ private:
 #define MACRO_CONFIG_INT(Name, ScriptName, Def, Min, Max, Flags, Desc) \
 		do \
 		{ \
-			if(IsSharedKey(#ScriptName)) \
+			if(IsSharedKey(#ScriptName, Flags)) \
 			{ \
 				AddKey(#ScriptName); \
 				Result += std::to_string(g_Config.m_##Name); \
@@ -164,7 +201,7 @@ private:
 #define MACRO_CONFIG_COL(Name, ScriptName, Def, Flags, Desc) \
 		do \
 		{ \
-			if(IsSharedKey(#ScriptName)) \
+			if(IsSharedKey(#ScriptName, Flags)) \
 			{ \
 				AddKey(#ScriptName); \
 				Result += std::to_string((uint64_t)g_Config.m_##Name); \
@@ -173,7 +210,7 @@ private:
 #define MACRO_CONFIG_STR(Name, ScriptName, Len, Def, Flags, Desc) \
 		do \
 		{ \
-			if(IsSharedKey(#ScriptName)) \
+			if(IsSharedKey(#ScriptName, Flags)) \
 			{ \
 				AddKey(#ScriptName); \
 				Result += '\"'; \
@@ -181,7 +218,9 @@ private:
 				Result += '\"'; \
 			} \
 		} while(false);
-#include <engine/shared/config_variables_bkw.inc>
+#define SET_CONFIG_DOMAIN(CONFIGDOMAIN)
+#include <engine/shared/config_includes.h>
+#undef SET_CONFIG_DOMAIN
 #undef MACRO_CONFIG_INT
 #undef MACRO_CONFIG_COL
 #undef MACRO_CONFIG_STR
@@ -201,7 +240,7 @@ private:
 #define MACRO_CONFIG_INT(Name, ScriptName, Def, Min, Max, Flags, Desc) \
 		do \
 		{ \
-			if(IsSharedKey(#ScriptName)) \
+			if(IsSharedKey(#ScriptName, Flags)) \
 			{ \
 				const json_value &Value = Settings[#ScriptName]; \
 				if(Value.type == json_integer) \
@@ -211,7 +250,7 @@ private:
 #define MACRO_CONFIG_COL(Name, ScriptName, Def, Flags, Desc) \
 		do \
 		{ \
-			if(IsSharedKey(#ScriptName)) \
+			if(IsSharedKey(#ScriptName, Flags)) \
 			{ \
 				const json_value &Value = Settings[#ScriptName]; \
 				if(Value.type == json_integer) \
@@ -221,18 +260,80 @@ private:
 #define MACRO_CONFIG_STR(Name, ScriptName, Len, Def, Flags, Desc) \
 		do \
 		{ \
-			if(IsSharedKey(#ScriptName)) \
+			if(IsSharedKey(#ScriptName, Flags)) \
 			{ \
 				const json_value &Value = Settings[#ScriptName]; \
 				if(Value.type == json_string && Value.u.string.ptr) \
 					str_copy(g_Config.m_##Name, Value.u.string.ptr); \
 			} \
 		} while(false);
-#include <engine/shared/config_variables_bkw.inc>
+#define SET_CONFIG_DOMAIN(CONFIGDOMAIN)
+#include <engine/shared/config_includes.h>
+#undef SET_CONFIG_DOMAIN
 #undef MACRO_CONFIG_INT
 #undef MACRO_CONFIG_COL
 #undef MACRO_CONFIG_STR
 		return true;
+	}
+
+	void ParseSaves(const json_value &Root)
+	{
+		m_vSaves.clear();
+		const json_value &Items = Root["saves"];
+		if(Items.type != json_array)
+			return;
+		for(unsigned i = 0; i < Items.u.array.length; ++i)
+		{
+			const json_value &Item = Items[i];
+			if(Item.type != json_object)
+				continue;
+			SSave Save;
+			Save.m_Id = JsonString(Item["id"]);
+			Save.m_Name = JsonString(Item["name"]);
+			Save.m_UpdatedAt = JsonString(Item["updated_at"]);
+			if(!Save.m_Id.empty())
+				m_vSaves.push_back(std::move(Save));
+		}
+	}
+
+	void ParseShares(const json_value &Root)
+	{
+		m_vShares.clear();
+		const json_value &Items = Root["shares"];
+		if(Items.type != json_array)
+			return;
+		for(unsigned i = 0; i < Items.u.array.length; ++i)
+		{
+			const json_value &Item = Items[i];
+			if(Item.type != json_object)
+				continue;
+			SShare Share;
+			Share.m_Id = JsonString(Item["share_id"]);
+			Share.m_Url = JsonString(Item["url"]);
+			Share.m_CreatedAt = JsonString(Item["created_at"]);
+			if(!Share.m_Id.empty() && !Share.m_Url.empty())
+				m_vShares.push_back(std::move(Share));
+		}
+	}
+
+	void HandlePendingDeepLink(IHttp *pHttp)
+	{
+		if(m_pRequest || g_Config.m_BkwPendingDeepLink[0] == '\0')
+			return;
+		std::string Link = g_Config.m_BkwPendingDeepLink;
+		g_Config.m_BkwPendingDeepLink[0] = '\0';
+		const std::string SharePrefix = "bkw://share/";
+		if(Link.rfind(SharePrefix, 0) == 0)
+		{
+			const std::string Id = Link.substr(SharePrefix.size());
+			const std::string Https = std::string(BASE_URL) + "/share/" + Id;
+			ImportShare(pHttp, Https.c_str());
+		}
+		else if(Link == "bkw://auth/complete" || Link == "bkw:auth/complete")
+		{
+			m_NextDevicePoll = 0;
+			m_Status = "Браузер подтвердил вход — завершаю подключение…";
+		}
 	}
 
 	void ConfigureRequest(const std::shared_ptr<IHttpRequest> &pRequest, bool Authenticated)
@@ -397,20 +498,62 @@ private:
 			m_Status = "Вы вышли из BKW Cloud";
 			break;
 		case ERequest::SAVE_SETTINGS:
-			m_Status = "BKW настройки сохранены в облако";
+			m_Status = "Основное сохранение обновлено";
 			break;
 		case ERequest::LOAD_SETTINGS:
+		case ERequest::LOAD_SAVE:
 		{
 			const json_value &Snapshot = (*pRoot)["settings"];
 			if(ApplySettingsSnapshot(Snapshot))
-				m_Status = "Облачные BKW настройки применены";
+				m_Status = "Настройки всего клиента применены";
 			else
-				m_Status = "В облаке пока нет совместимых настроек";
+				m_Status = "Сохранение не содержит совместимых настроек";
 			break;
 		}
+		case ERequest::LIST_SAVES:
+			ParseSaves(*pRoot);
+			m_Status = "Список сохранений обновлён";
+			break;
+		case ERequest::CREATE_SAVE:
+		{
+			const json_value &Save = (*pRoot)["save"];
+			if(Save.type == json_object)
+			{
+				SSave Item;
+				Item.m_Id = JsonString(Save["id"]);
+				Item.m_Name = JsonString(Save["name"]);
+				Item.m_UpdatedAt = JsonString(Save["updated_at"]);
+				if(!Item.m_Id.empty())
+					m_vSaves.insert(m_vSaves.begin(), std::move(Item));
+			}
+			m_Status = "Новое сохранение создано";
+			break;
+		}
+		case ERequest::UPDATE_SAVE:
+			m_Status = "Сохранение перезаписано";
+			break;
+		case ERequest::DELETE_SAVE:
+			m_vSaves.erase(std::remove_if(m_vSaves.begin(), m_vSaves.end(), [&](const SSave &Save) { return Save.m_Id == m_PendingId; }), m_vSaves.end());
+			m_Status = "Сохранение удалено";
+			m_PendingId.clear();
+			break;
 		case ERequest::CREATE_SHARE:
+		{
 			m_LastShareUrl = JsonString((*pRoot)["url"]);
-			m_Status = m_LastShareUrl.empty() ? "Не удалось получить ссылку" : "HTTPS-ссылка создана и готова к копированию";
+			const char *pId = JsonString((*pRoot)["share_id"]);
+			if(pId[0] && !m_LastShareUrl.empty())
+				m_vShares.insert(m_vShares.begin(), SShare{pId, m_LastShareUrl, ""});
+			m_Status = m_LastShareUrl.empty() ? "Не удалось получить ссылку" : "HTTPS-ссылка создана";
+			break;
+		}
+		case ERequest::LIST_SHARES:
+			ParseShares(*pRoot);
+			m_Status = "Список HTTPS-ссылок обновлён";
+			break;
+		case ERequest::DELETE_SHARE:
+			m_vShares.erase(std::remove_if(m_vShares.begin(), m_vShares.end(), [&](const SShare &Share) { return Share.m_Id == m_PendingId; }), m_vShares.end());
+			m_Status = "HTTPS-ссылка удалена";
+			m_PendingId.clear();
 			break;
 		case ERequest::IMPORT_SHARE:
 		{
@@ -430,6 +573,7 @@ public:
 	{
 		if(m_pRequest && m_pRequest->Done())
 			HandleCompleted(pClient);
+		HandlePendingDeepLink(pHttp);
 
 		if(!m_pRequest && m_LoginWaiting && !m_DeviceCode.empty() && !m_CodeVerifier.empty() && time_get() >= m_NextDevicePoll)
 			StartDevicePoll(pHttp);
@@ -505,7 +649,7 @@ public:
 		Body += '}';
 		std::shared_ptr<IHttpRequest> pPost = HttpPostJson("https://bkw-client.onrender.com/api/settings", Body.c_str());
 		Run(pHttp, pPost, ERequest::SAVE_SETTINGS, true);
-		m_Status = "Сохраняю BKW настройки…";
+		m_Status = "Сохраняю настройки всего клиента…";
 	}
 
 	void LoadSettings(IHttp *pHttp)
@@ -514,7 +658,104 @@ public:
 			return;
 		std::shared_ptr<IHttpRequest> pGet = HttpGet("https://bkw-client.onrender.com/api/settings");
 		Run(pHttp, pGet, ERequest::LOAD_SETTINGS, true);
-		m_Status = "Загружаю BKW настройки…";
+		m_Status = "Загружаю основное сохранение…";
+	}
+
+	void ListSaves(IHttp *pHttp)
+	{
+		if(!pHttp || m_pRequest || !LoggedIn())
+			return;
+		Run(pHttp, HttpGet("https://bkw-client.onrender.com/api/saves"), ERequest::LIST_SAVES, true);
+		m_Status = "Получаю список сохранений…";
+	}
+
+	void CreateSave(IHttp *pHttp)
+	{
+		if(!pHttp || m_pRequest || !LoggedIn())
+			return;
+		char aName[64];
+		str_format(aName, sizeof(aName), "Сохранение %d", (int)m_vSaves.size() + 1);
+		std::string Body = "{\"name\":\"";
+		Body += JsonEscape(aName);
+		Body += "\",\"settings\":";
+		Body += BuildSettingsSnapshot();
+		Body += '}';
+		Run(pHttp, HttpPostJson("https://bkw-client.onrender.com/api/saves", Body.c_str()), ERequest::CREATE_SAVE, true);
+		m_Status = "Создаю отдельное сохранение…";
+	}
+
+	void LoadSave(IHttp *pHttp, const char *pId)
+	{
+		if(!pHttp || m_pRequest || !LoggedIn() || !pId || !pId[0])
+			return;
+		std::string Url = std::string(BASE_URL) + "/api/saves/" + pId;
+		Run(pHttp, HttpGet(Url.c_str()), ERequest::LOAD_SAVE, true);
+		m_Status = "Загружаю выбранное сохранение…";
+	}
+
+	void UpdateSave(IHttp *pHttp, const char *pId)
+	{
+		if(!pHttp || m_pRequest || !LoggedIn() || !pId || !pId[0])
+			return;
+		std::string Url = std::string(BASE_URL) + "/api/saves/" + pId;
+		std::string Body = "{\"settings\":";
+		Body += BuildSettingsSnapshot();
+		Body += '}';
+		Run(pHttp, HttpPostJson(Url.c_str(), Body.c_str()), ERequest::UPDATE_SAVE, true);
+		m_Status = "Перезаписываю сохранение…";
+	}
+
+	void DeleteSave(IHttp *pHttp, const char *pId)
+	{
+		if(!pHttp || m_pRequest || !LoggedIn() || !pId || !pId[0])
+			return;
+		m_PendingId = pId;
+		std::string Url = std::string(BASE_URL) + "/api/saves/" + pId + "/delete";
+		Run(pHttp, HttpPostJson(Url.c_str(), "{}"), ERequest::DELETE_SAVE, true);
+		m_Status = "Удаляю сохранение…";
+	}
+
+	void ListShares(IHttp *pHttp)
+	{
+		if(!pHttp || m_pRequest || !LoggedIn())
+			return;
+		Run(pHttp, HttpGet("https://bkw-client.onrender.com/api/shares"), ERequest::LIST_SHARES, true);
+		m_Status = "Получаю мои HTTPS-ссылки…";
+	}
+
+	void DeleteShare(IHttp *pHttp, const char *pId)
+	{
+		if(!pHttp || m_pRequest || !LoggedIn() || !pId || !pId[0])
+			return;
+		m_PendingId = pId;
+		std::string Url = std::string(BASE_URL) + "/api/share/" + pId + "/delete";
+		Run(pHttp, HttpPostJson(Url.c_str(), "{}"), ERequest::DELETE_SHARE, true);
+		m_Status = "Удаляю HTTPS-ссылку…";
+	}
+
+	bool RegisterBkwProtocol()
+	{
+#if defined(CONF_FAMILY_WINDOWS)
+		char aPath[IO_MAX_PATH_LENGTH];
+		if(fs_executable_path(aPath, sizeof(aPath)) != 0)
+		{
+			m_Status = "Не удалось определить путь к BKW Client";
+			return false;
+		}
+		bool Updated = false;
+		if(!windows_shell_register_protocol("bkw", aPath, &Updated))
+		{
+			m_Status = "Windows не разрешила зарегистрировать bkw://";
+			return false;
+		}
+		if(Updated)
+			windows_shell_update();
+		m_Status = "Протокол bkw:// включён по вашему запросу";
+		return true;
+#else
+		m_Status = "Автоматическая регистрация bkw:// сейчас доступна только на Windows";
+		return false;
+#endif
 	}
 
 	void CreateShare(IHttp *pHttp)
@@ -584,6 +825,8 @@ public:
 	const char *UserCode() const { return m_UserCode.c_str(); }
 	const char *VerificationUrl() const { return m_VerificationUrl.c_str(); }
 	const char *LastShareUrl() const { return m_LastShareUrl.c_str(); }
+	const std::vector<SSave> &Saves() const { return m_vSaves; }
+	const std::vector<SShare> &Shares() const { return m_vShares; }
 	int HttpStatus() const { return m_HttpStatus; }
 	bool ImportedThisSession() const { return m_ImportedThisSession; }
 };

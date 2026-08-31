@@ -1,6 +1,7 @@
 // BKW-specific client settings. Included under ConfigDomain::BESTCLIENT.
 // BKW Cloud stores only its own session token here. The Discord OAuth access token is never saved by the client.
 MACRO_CONFIG_STR(BkwCloudToken, bkw_cloud_token, 192, "", CFGFLAG_CLIENT | CFGFLAG_SAVE, "BKW Cloud session token")
+MACRO_CONFIG_STR(BkwPendingDeepLink, bkw_pending_deep_link, 256, "", CFGFLAG_CLIENT, "Runtime-only BKW deep link pending for the cloud component")
 
 MACRO_CONFIG_INT(BkwTfMenu, bkw_tf_menu, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable the redesigned TeeFusion menu")
 MACRO_CONFIG_INT(BkwTfMenuStyle, bkw_tf_menu_style, 0, 0, 3, CFGFLAG_CLIENT | CFGFLAG_SAVE, "TeeFusion menu style: 0 standard, 1 liquid glass, 2 neon, 3 minimal")

@@ -4855,6 +4855,11 @@ void CClient::HandleMapPath(const char *pPath)
 static bool UnknownArgumentCallback(const char *pCommand, void *pUser)
 {
 	CClient *pClient = static_cast<CClient *>(pUser);
+	if(str_startswith(pCommand, "bkw:"))
+	{
+		str_copy(g_Config.m_BkwPendingDeepLink, pCommand);
+		return true;
+	}
 	if(str_startswith(pCommand, CONNECTLINK_NO_SLASH))
 	{
 		pClient->HandleConnectLink(pCommand);
