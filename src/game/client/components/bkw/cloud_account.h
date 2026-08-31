@@ -1,8 +1,21 @@
 #ifndef GAME_CLIENT_COMPONENTS_BKW_CLOUD_ACCOUNT_H
 #define GAME_CLIENT_COMPONENTS_BKW_CLOUD_ACCOUNT_H
 
+#include <base/hash.h>
+#include <base/secure.h>
 #include <base/str.h>
 #include <base/time.h>
+
+#if defined(CONF_FAMILY_WINDOWS)
+#include <base/windows.h>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 
 #include <engine/client.h>
 #include <engine/http.h>
@@ -41,6 +54,7 @@ private:
 	std::string m_DeviceCode;
 	std::string m_UserCode;
 	std::string m_VerificationUrl;
+	std::string m_CodeVerifier;
 	std::string m_UserName;
 	std::string m_GlobalName;
 	std::string m_LastShareUrl;
@@ -88,9 +102,58 @@ private:
 		return Result;
 	}
 
+	static std::string Base64Url(const unsigned char *pData, size_t Size)
+	{
+		static constexpr char ALPHABET[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+		std::string Result;
+		Result.reserve((Size * 4 + 2) / 3);
+		for(size_t i = 0; i < Size; i += 3)
+		{
+			const uint32_t A = pData[i];
+			const uint32_t B = i + 1 < Size ? pData[i + 1] : 0;
+			const uint32_t C = i + 2 < Size ? pData[i + 2] : 0;
+			const uint32_t Triple = (A << 16) | (B << 8) | C;
+			Result.push_back(ALPHABET[(Triple >> 18) & 0x3f]);
+			Result.push_back(ALPHABET[(Triple >> 12) & 0x3f]);
+			if(i + 1 < Size)
+				Result.push_back(ALPHABET[(Triple >> 6) & 0x3f]);
+			if(i + 2 < Size)
+				Result.push_back(ALPHABET[Triple & 0x3f]);
+		}
+		return Result;
+	}
+
+	static std::string PkceChallenge(const std::string &Verifier)
+	{
+		const SHA256_DIGEST Digest = sha256(Verifier.data(), Verifier.size());
+		return Base64Url(Digest.data, sizeof(Digest.data));
+	}
+
 	static const char *JsonString(const json_value &Value)
 	{
 		return Value.type == json_string && Value.u.string.ptr ? Value.u.string.ptr : "";
+	}
+
+	static bool EnsureDeepLinkProtocol()
+	{
+#if defined(CONF_FAMILY_WINDOWS)
+		wchar_t aWidePath[32768];
+		const DWORD Length = GetModuleFileNameW(nullptr, aWidePath, (DWORD)(sizeof(aWidePath) / sizeof(aWidePath[0])));
+		if(Length == 0 || Length >= sizeof(aWidePath) / sizeof(aWidePath[0]))
+			return false;
+		aWidePath[Length] = L'\0';
+		const std::optional<std::string> Path = windows_wide_to_utf8(aWidePath);
+		if(!Path || Path->empty())
+			return false;
+		bool Updated = false;
+		if(!windows_shell_register_protocol("bkw-discord", Path->c_str(), &Updated))
+			return false;
+		if(Updated)
+			windows_shell_update();
+		return true;
+#else
+		return false;
+#endif
 	}
 
 	static std::string BuildSettingsSnapshot()
@@ -229,14 +292,15 @@ private:
 
 	void StartDevicePoll(IHttp *pHttp)
 	{
-		if(!pHttp || m_DeviceCode.empty())
+		if(!pHttp || m_DeviceCode.empty() || m_CodeVerifier.empty())
 			return;
-		char aEscaped[192];
-		EscapeUrl(aEscaped, m_DeviceCode.c_str());
-		char aUrl[512];
-		str_format(aUrl, sizeof(aUrl), "%s/api/auth/device/status?device_code=%s", BASE_URL, aEscaped);
-		std::shared_ptr<IHttpRequest> pGet = HttpGet(aUrl);
-		Run(pHttp, pGet, ERequest::DEVICE_POLL, false);
+		std::string Body = "{\"device_code\":\"";
+		Body += JsonEscape(m_DeviceCode.c_str());
+		Body += "\",\"code_verifier\":\"";
+		Body += JsonEscape(m_CodeVerifier.c_str());
+		Body += "\"}";
+		std::shared_ptr<IHttpRequest> pPost = HttpPostJson("https://bkw-client.onrender.com/api/auth/device/exchange", Body.c_str());
+		Run(pHttp, pPost, ERequest::DEVICE_POLL, false);
 	}
 
 	void HandleCompleted(IClient *pClient)
@@ -271,11 +335,18 @@ private:
 			else if(CompletedType == ERequest::DEVICE_POLL && m_LoginWaiting && m_HttpStatus == 404)
 			{
 				m_LoginWaiting = false;
+				m_CodeVerifier.clear();
 				m_Status = "Код входа истёк — начните вход заново";
+			}
+			else if(CompletedType == ERequest::DEVICE_POLL && m_HttpStatus == 403)
+			{
+				m_LoginWaiting = false;
+				m_CodeVerifier.clear();
+				m_Status = "PKCE-проверка входа не пройдена";
 			}
 			else
 			{
-				char aBuf[128];
+				char aBuf[160];
 				str_format(aBuf, sizeof(aBuf), "Ошибка BKW Cloud (HTTP %d)", m_HttpStatus);
 				m_Status = aBuf;
 			}
@@ -314,8 +385,10 @@ private:
 					str_copy(g_Config.m_BkwCloudToken, pToken);
 					m_LoginWaiting = false;
 					m_ProfileRequestStarted = false;
+					m_CodeVerifier.clear();
+					m_DeviceCode.clear();
 					LoadUser(*pRoot);
-					m_Status = "Discord подключён к BKW Client";
+					m_Status = "Discord подключён к BKW Client через PKCE";
 				}
 			}
 			else
@@ -368,7 +441,7 @@ public:
 		if(m_pRequest && m_pRequest->Done())
 			HandleCompleted(pClient);
 
-		if(!m_pRequest && m_LoginWaiting && !m_DeviceCode.empty() && time_get() >= m_NextDevicePoll)
+		if(!m_pRequest && m_LoginWaiting && !m_DeviceCode.empty() && !m_CodeVerifier.empty() && time_get() >= m_NextDevicePoll)
 			StartDevicePoll(pHttp);
 
 		if(!m_pRequest && !m_LoginWaiting && g_Config.m_BkwCloudToken[0] != '\0' && !m_ProfileLoaded && !m_ProfileRequestStarted)
@@ -383,8 +456,25 @@ public:
 		m_DeviceCode.clear();
 		m_UserCode.clear();
 		m_VerificationUrl.clear();
-		m_Status = "Запрашиваю вход Discord…";
-		std::shared_ptr<IHttpRequest> pPost = HttpPostJson("https://bkw-client.onrender.com/api/auth/device/start", "{}");
+		m_CodeVerifier.clear();
+
+		char aVerifier[65];
+		secure_random_password(aVerifier, sizeof(aVerifier), 64);
+		m_CodeVerifier = aVerifier;
+		const std::string Challenge = PkceChallenge(m_CodeVerifier);
+		if(Challenge.size() != 43)
+		{
+			m_CodeVerifier.clear();
+			m_Status = "Не удалось создать PKCE challenge";
+			return;
+		}
+
+		const bool DeepLinkReady = EnsureDeepLinkProtocol();
+		m_Status = DeepLinkReady ? "Запрашиваю защищённый вход Discord…" : "Запрашиваю вход Discord… (deep-link не зарегистрирован)";
+		std::string Body = "{\"code_challenge\":\"";
+		Body += Challenge;
+		Body += "\"}";
+		std::shared_ptr<IHttpRequest> pPost = HttpPostJson("https://bkw-client.onrender.com/api/auth/device/start", Body.c_str());
 		Run(pHttp, pPost, ERequest::DEVICE_START, false);
 	}
 
@@ -412,6 +502,8 @@ public:
 		m_UserName.clear();
 		m_GlobalName.clear();
 		m_LoginWaiting = false;
+		m_CodeVerifier.clear();
+		m_DeviceCode.clear();
 		m_Status = "Вы вышли из BKW Cloud";
 	}
 
