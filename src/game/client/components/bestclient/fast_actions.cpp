@@ -12,12 +12,14 @@
 #include <game/client/gameclient.h>
 
 #include <algorithm>
+#include <cmath>
 
 // Runtime namespaces must stay at file scope. fast_actions_part1.inc and
 // part2.inc intentionally split member functions across include boundaries.
 #define HOOK_START_DISTANCE (CCharacterCore::PhysicalSize() * 1.5f)
 #include <game/client/components/bkw/feature_pack_runtime.inc>
 #undef HOOK_START_DISTANCE
+#include <game/client/components/bkw/tipo_cheat_local_visual.inc>
 #include <game/client/components/bkw/local_duel.inc>
 #include <game/client/components/bkw/minimap.inc>
 #include <game/client/components/bkw/minimap_view_fix.inc>
@@ -41,7 +43,13 @@
 	{ \
 		if(g_Config.m_BkwOptimizer && g_Config.m_BkwOptimizerScope == 1 && g_Config.m_BkwOptimizerPreset == 2) \
 			BkwFeaturePackRuntime::SaveAntiPingSettings(); \
+		/* Legacy TipoCheat used real aim/emote input. Keep it disabled while the old runtime runs, */ \
+		/* then render the replacement locally so absolutely nothing from TipoCheat reaches the server. */ \
+		const int BkwTipoCheatEnabled = g_Config.m_BkwTipoCheat; \
+		g_Config.m_BkwTipoCheat = 0; \
 		BkwFeaturePackRuntime::OnRender(GameClient(), Client(), Graphics(), Collision()); \
+		g_Config.m_BkwTipoCheat = BkwTipoCheatEnabled; \
+		BkwTipoCheatLocal::Render(GameClient(), Client(), Graphics()); \
 		BkwLocalDuel::Update(GameClient(), Client(), Graphics()); \
 		BkwMiniMapFix::Update(GameClient(), Client(), Graphics(), Input()); \
 		BkwMiniMapRealSmall::Render(GameClient(), Client(), Graphics()); \
