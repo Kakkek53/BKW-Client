@@ -5329,10 +5329,8 @@ int main(int argc, const char **argv)
 		pFutureFileLogger->Set(log_logger_noop());
 	}
 
-	// Register protocol and file extensions
-#if defined(CONF_FAMILY_WINDOWS)
-	pClient->ShellRegister();
-#endif
+	// BKW: Do not modify Windows protocol/file associations automatically on startup.
+	// Shell registration remains available in the engine for explicit installer/user-driven use.
 
 	// Do not automatically translate touch events to mouse events and vice versa.
 	SDL_SetHint("SDL_TOUCH_MOUSE_EVENTS", "0");
