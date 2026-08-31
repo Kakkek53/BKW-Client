@@ -1,0 +1,53 @@
+name: Apply BKW CMake source fix
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+      - name: Add BKW headers to GAME_CLIENT
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("CMakeLists.txt")
+          text = path.read_text(encoding="utf-8")
+          old = """    components/binds.cpp
+    components/binds.h
+    components/broadcast.cpp
+"""
+          new = """    components/binds.cpp
+    components/binds.h
+    components/bkw/cloud_account.h
+    components/bkw/ddstats_hours.h
+    components/bkw/media_background_settings.h
+    components/bkw/save_store.h
+    components/bkw/save_warning.h
+    components/broadcast.cpp
+"""
+          if old not in text:
+              raise SystemExit("Expected GAME_CLIENT insertion point not found")
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
+      - name: Commit source list fix
+        run: |
+          if git diff --quiet -- CMakeLists.txt; then
+            echo "CMake source list already fixed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CMakeLists.txt
+          git commit -m "List BKW headers in CMake"
+          git push origin HEAD:dev
