@@ -3387,6 +3387,9 @@ void CClient::Run()
 	GameClient()->OnInit();
 
 	m_Fifo.Init(m_pConsole, g_Config.m_ClInputFifo, CFGFLAG_CLIENT);
+#if defined(CONF_FAMILY_WINDOWS)
+	m_BkwDeepLinkFifo.Init(m_pConsole, "bkw-client-deeplink", CFGFLAG_CLIENT);
+#endif
 
 	m_pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "client", "version " GAME_RELEASE_VERSION " on " CONF_PLATFORM_STRING " " CONF_ARCH_STRING, ColorRGBA(0.7f, 0.7f, 1.0f, 1.0f));
 	if(GIT_SHORTREV_HASH)
@@ -3581,6 +3584,9 @@ void CClient::Run()
 		AutoCSV_Cleanup();
 
 		m_Fifo.Update();
+#if defined(CONF_FAMILY_WINDOWS)
+	m_BkwDeepLinkFifo.Update();
+#endif
 
 		if(State() == IClient::STATE_QUITTING || State() == IClient::STATE_RESTARTING)
 			break;
@@ -3655,6 +3661,9 @@ void CClient::Run()
 	}
 
 	m_Fifo.Shutdown();
+#if defined(CONF_FAMILY_WINDOWS)
+	m_BkwDeepLinkFifo.Shutdown();
+#endif
 	m_pHttp->Shutdown();
 	Engine()->ShutdownJobs();
 
@@ -4731,6 +4740,16 @@ void CClient::ConchainStdoutOutputLevel(IConsole::IResult *pResult, void *pUserD
 
 void CClient::RegisterCommands()
 {
+#if defined(CONF_FAMILY_WINDOWS)
+	m_pConsole->Register("bkw_deep_link", "s[uri]", CFGFLAG_CLIENT, [](IConsole::IResult *pResult, void *pUserData) {
+		CClient *pSelf = static_cast<CClient *>(pUserData);
+		const char *pUri = pResult->GetString(0);
+		if(!pUri || !str_startswith(pUri, "bkw:") || str_length(pUri) >= (int)sizeof(g_Config.m_BkwPendingDeepLink))
+			return;
+		str_copy(g_Config.m_BkwPendingDeepLink, pUri);
+		windows_activate_current_process_window();
+	}, this, "Handle a trusted local BKW deep link");
+#endif
 	m_pConsole = Kernel()->RequestInterface<IConsole>();
 
 	m_pConsole->Register("dummy_connect", "", CFGFLAG_CLIENT, Con_DummyConnect, this, "Connect dummy");
@@ -4918,6 +4937,18 @@ int SDL_main(int argc, char *argv2[])
 int main(int argc, const char **argv)
 #endif
 {
+#if defined(CONF_FAMILY_WINDOWS) && !defined(CONF_PLATFORM_ANDROID)
+	for(int i = 1; i < argc; ++i)
+	{
+		const char *pArg = argv[i];
+		if(!pArg || !str_startswith(pArg, "bkw:") || str_length(pArg) >= 240 || str_find(pArg, "\"") || str_find(pArg, "\n") || str_find(pArg, "\r"))
+			continue;
+		char aCommand[320];
+		str_format(aCommand, sizeof(aCommand), "bkw_deep_link \"%s\"\n", pArg);
+		if(windows_named_pipe_send("bkw-client-deeplink", aCommand))
+			return 0;
+	}
+#endif
 	const int64_t MainStart = time_get();
 
 #if defined(CONF_PLATFORM_ANDROID)

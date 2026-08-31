@@ -467,4 +467,39 @@ void windows_shell_update()
 	SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 }
 
+bool windows_named_pipe_send(const char *pipe_name, const char *message)
+{
+	if(!pipe_name || !pipe_name[0] || !message)
+		return false;
+	std::string full_name = "\\\\.\\pipe\\";
+	full_name += pipe_name;
+	const std::wstring wide_name = windows_utf8_to_wide(full_name.c_str());
+	HANDLE pipe = CreateFileW(wide_name.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+	if(pipe == INVALID_HANDLE_VALUE)
+		return false;
+	const DWORD size = (DWORD)str_length(message);
+	DWORD written = 0;
+	const bool success = WriteFile(pipe, message, size, &written, nullptr) != FALSE && written == size;
+	CloseHandle(pipe);
+	return success;
+}
+
+static BOOL CALLBACK windows_activate_current_process_window_callback(HWND window, LPARAM parameter)
+{
+	DWORD process_id = 0;
+	GetWindowThreadProcessId(window, &process_id);
+	if(process_id != GetCurrentProcessId() || !IsWindowVisible(window) || GetWindow(window, GW_OWNER) != nullptr)
+		return TRUE;
+	ShowWindowAsync(window, SW_RESTORE);
+	SetForegroundWindow(window);
+	*reinterpret_cast<bool *>(parameter) = true;
+	return FALSE;
+}
+
+void windows_activate_current_process_window()
+{
+	bool found = false;
+	EnumWindows(windows_activate_current_process_window_callback, reinterpret_cast<LPARAM>(&found));
+}
+
 #endif

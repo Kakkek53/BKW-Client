@@ -175,6 +175,12 @@ bool windows_shell_unregister_application(const char *executable, bool *updated)
  */
 void windows_shell_update();
 
+/** Send one UTF-8 message to a local Windows named pipe. */
+bool windows_named_pipe_send(const char *pipe_name, const char *message);
+
+/** Restore and focus the visible top-level window owned by this process. */
+void windows_activate_current_process_window();
+
 #endif
 
 #endif

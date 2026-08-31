@@ -249,6 +249,7 @@ class CClient : public IClient, public CDemoPlayer::IListener
 	std::vector<SWarning> m_vQuittingWarnings;
 
 	CFifo m_Fifo;
+	CFifo m_BkwDeepLinkFifo;
 
 	IOHANDLE m_BenchmarkFile = nullptr;
 	int64_t m_BenchmarkStopTime = 0;
