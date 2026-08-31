@@ -9,37 +9,14 @@ permissions:
 
 jobs:
   patch:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: dev
       - name: Add BKW headers to GAME_CLIENT
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("CMakeLists.txt")
-          text = path.read_text(encoding="utf-8")
-          old = """    components/binds.cpp
-    components/binds.h
-    components/broadcast.cpp
-"""
-          new = """    components/binds.cpp
-    components/binds.h
-    components/bkw/cloud_account.h
-    components/bkw/ddstats_hours.h
-    components/bkw/media_background_settings.h
-    components/bkw/save_store.h
-    components/bkw/save_warning.h
-    components/broadcast.cpp
-"""
-          if old not in text:
-              raise SystemExit("Expected GAME_CLIENT insertion point not found")
-          text = text.replace(old, new, 1)
-          path.write_text(text, encoding="utf-8")
-          PY
+        run: >-
+          python3 -c 'from pathlib import Path; p=Path("CMakeLists.txt"); t=p.read_text(encoding="utf-8"); old="    components/binds.cpp\n    components/binds.h\n    components/broadcast.cpp\n"; new="    components/binds.cpp\n    components/binds.h\n    components/bkw/cloud_account.h\n    components/bkw/ddstats_hours.h\n    components/bkw/media_background_settings.h\n    components/bkw/save_store.h\n    components/bkw/save_warning.h\n    components/broadcast.cpp\n"; assert old in t, "Expected GAME_CLIENT insertion point not found"; p.write_text(t.replace(old,new,1), encoding="utf-8")'
       - name: Commit source list fix
         run: |
           if git diff --quiet -- CMakeLists.txt; then
