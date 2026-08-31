@@ -1,0 +1,33 @@
+name: Remove BKW runtime protocol registration
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+      - name: Remove runtime protocol registration
+        run: >-
+          python3 -c 'from pathlib import Path; p=Path("src/game/client/components/bkw/cloud_account.h"); t=p.read_text(encoding="utf-8"); t=t.replace("#include <base/fs.h>\n", "", 1); t=t.replace("\n#if defined(CONF_FAMILY_WINDOWS)\n#include <base/windows.h>\n#endif\n", "\n", 1); old="\tstatic bool EnsureDeepLinkProtocol()\n\t{\n#if defined(CONF_FAMILY_WINDOWS)\n\t\tchar aPath[IO_MAX_PATH_LENGTH];\n\t\tif(fs_executable_path(aPath, sizeof(aPath)) != 0)\n\t\t\treturn false;\n\t\tbool Updated = false;\n\t\tif(!windows_shell_register_protocol(\"bkw-discord\", aPath, &Updated))\n\t\t\treturn false;\n\t\tif(Updated)\n\t\t\twindows_shell_update();\n\t\treturn true;\n#else\n\t\treturn false;\n#endif\n\t}\n\n"; assert old in t, "EnsureDeepLinkProtocol block not found"; t=t.replace(old, "", 1); old2="\t\tconst bool DeepLinkReady = EnsureDeepLinkProtocol();\n\t\tm_Status = DeepLinkReady ? \"Запрашиваю защищённый вход Discord…\" : \"Запрашиваю вход Discord… (deep-link не зарегистрирован)\";\n"; assert old2 in t, "StartLogin deep-link call not found"; t=t.replace(old2, "\t\tm_Status = \"Запрашиваю защищённый вход Discord…\";\n", 1); p.write_text(t, encoding="utf-8")'
+      - name: Verify BKW protocol code is gone
+        run: |
+          if grep -R -n -E 'bkw-discord|windows_shell_register_protocol' src/game/client src/engine; then
+            echo "Unexpected BKW runtime protocol-registration reference remains"
+            exit 1
+          fi
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/game/client/components/bkw/cloud_account.h
+          git commit -m "Remove runtime protocol registration from BKW cloud"
+          git push origin HEAD:dev
