@@ -457,6 +457,7 @@ public:
 		m_UserCode.clear();
 		m_VerificationUrl.clear();
 		m_CodeVerifier.clear();
+
 		char aVerifier[65];
 		secure_random_password(aVerifier, sizeof(aVerifier), 64);
 		m_CodeVerifier = aVerifier;
