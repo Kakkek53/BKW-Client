@@ -4740,6 +4740,8 @@ void CClient::ConchainStdoutOutputLevel(IConsole::IResult *pResult, void *pUserD
 
 void CClient::RegisterCommands()
 {
+	m_pConsole = Kernel()->RequestInterface<IConsole>();
+
 #if defined(CONF_FAMILY_WINDOWS)
 	m_pConsole->Register("bkw_deep_link", "s[uri]", CFGFLAG_CLIENT, [](IConsole::IResult *pResult, void *pUserData) {
 		CClient *pSelf = static_cast<CClient *>(pUserData);
@@ -4750,7 +4752,6 @@ void CClient::RegisterCommands()
 		windows_activate_current_process_window();
 	}, this, "Handle a trusted local BKW deep link");
 #endif
-	m_pConsole = Kernel()->RequestInterface<IConsole>();
 
 	m_pConsole->Register("dummy_connect", "", CFGFLAG_CLIENT, Con_DummyConnect, this, "Connect dummy");
 	m_pConsole->Register("dummy_disconnect", "", CFGFLAG_CLIENT, Con_DummyDisconnect, this, "Disconnect dummy");
