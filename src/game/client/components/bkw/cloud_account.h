@@ -244,7 +244,7 @@ private:
 			{ \
 				const json_value &Value = Settings[#ScriptName]; \
 				if(Value.type == json_integer) \
-					g_Config.m_##Name = std::clamp((int)Value.u.integer, Min, Max); \
+					g_Config.m_##Name = std::clamp((int)Value.u.integer, (int)(Min), (int)(Max)); \
 			} \
 		} while(false);
 #define MACRO_CONFIG_COL(Name, ScriptName, Def, Flags, Desc) \
