@@ -1502,8 +1502,8 @@ void CCommandProcessorFragment_OpenGL3_3::Cmd_BlurMenuBackground(const CCommandB
 		BlitLevel(i, i - 1);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, DrawFramebuffer);
 	glViewport(0, 0, m_CanvasWidth, m_CanvasHeight);
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	// The captured alpha may be zero even where the scene is visible.
+	glDisable(GL_BLEND);
 	// Textured primitive program with identity gPos (vertices in NDC)
 	UseProgram(m_pPrimitiveProgramTextured);
 	const float aIdentityPos[8] = {1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
@@ -1553,6 +1553,8 @@ void CCommandProcessorFragment_OpenGL3_3::Cmd_BlurMenuBackground(const CCommandB
 	glViewport(aViewport[0], aViewport[1], aViewport[2], aViewport[3]);
 	if(ClipEnabled)
 		glEnable(GL_SCISSOR_TEST);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	m_LastBlendMode = EBlendMode::ALPHA;
 }
 

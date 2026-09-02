@@ -7328,7 +7328,7 @@ public:
 		}
 
 		CCommandBuffer::SState State{};
-		State.m_BlendMode = EBlendMode::ALPHA;
+		State.m_BlendMode = FullCanvas ? EBlendMode::NONE : EBlendMode::ALPHA;
 		State.m_WrapMode = EWrapMode::CLAMP;
 		State.m_Texture = 0;
 		State.m_ScreenTL = vec2(0.0f, 0.0f);
