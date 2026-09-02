@@ -31,6 +31,8 @@ protected:
 		m_pKernel->RegisterInterface<IConfigManager>(m_pConfig.get(), false);
 		m_pConsole->Init();
 		m_pConfig->Init();
+		// Match the live client after startup has finished executing stored commands.
+		m_pConsole->StoreCommands(false);
 	}
 
 	void TearDown() override
