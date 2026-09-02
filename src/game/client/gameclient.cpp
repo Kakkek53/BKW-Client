@@ -1076,7 +1076,7 @@ void CGameClient::OnRender()
 
 	// Cloud imports can complete in any menu or during gameplay.
 	// Keep a background completion visible for four seconds after returning to the game.
-	if(Graphics()->WindowActive() && Graphics()->WindowOpen())
+	if(pGraphics && pGraphics->WindowActive() && pGraphics->WindowOpen())
 	{
 		auto &Cloud = Bkw::CloudAccountState();
 		const char *pNotification = Cloud.ImportNotification();
