@@ -3388,7 +3388,7 @@ void CClient::Run()
 
 	m_Fifo.Init(m_pConsole, g_Config.m_ClInputFifo, CFGFLAG_CLIENT);
 #if defined(CONF_FAMILY_WINDOWS)
-	m_BkwDeepLinkFifo.Init(m_pConsole, "bkw-client-deeplink", CFGFLAG_CLIENT);
+	m_BkwDeepLinkFifo.Init(m_pConsole, "bkw-client-deeplink", CFGFLAG_CLIENT, true);
 #endif
 
 	m_pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "client", "version " GAME_RELEASE_VERSION " on " CONF_PLATFORM_STRING " " CONF_ARCH_STRING, ColorRGBA(0.7f, 0.7f, 1.0f, 1.0f));
@@ -3585,7 +3585,7 @@ void CClient::Run()
 
 		m_Fifo.Update();
 #if defined(CONF_FAMILY_WINDOWS)
-	m_BkwDeepLinkFifo.Update();
+		m_BkwDeepLinkFifo.Update();
 #endif
 
 		if(State() == IClient::STATE_QUITTING || State() == IClient::STATE_RESTARTING)
@@ -4743,8 +4743,7 @@ void CClient::RegisterCommands()
 	m_pConsole = Kernel()->RequestInterface<IConsole>();
 
 #if defined(CONF_FAMILY_WINDOWS)
-	m_pConsole->Register("bkw_deep_link", "s[uri]", CFGFLAG_CLIENT, [](IConsole::IResult *pResult, void *pUserData) {
-		CClient *pSelf = static_cast<CClient *>(pUserData);
+	m_pConsole->Register("bkw_deep_link", "s[uri]", CFGFLAG_CLIENT, [](IConsole::IResult *pResult, void *) {
 		const char *pUri = pResult->GetString(0);
 		if(!pUri || !str_startswith(pUri, "bkw:") || str_length(pUri) >= (int)sizeof(g_Config.m_BkwPendingDeepLink))
 			return;

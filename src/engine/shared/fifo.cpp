@@ -12,8 +12,9 @@
 
 #include <cstdlib>
 
-void CFifo::Init(IConsole *pConsole, const char *pFifoFile, int Flag)
+void CFifo::Init(IConsole *pConsole, const char *pFifoFile, int Flag, bool Acknowledge)
 {
+	m_Acknowledge = Acknowledge;
 	m_File = -1;
 
 	m_pConsole = pConsole;
@@ -124,8 +125,9 @@ void CFifo::Update()
 
 #include <windows.h>
 
-void CFifo::Init(IConsole *pConsole, const char *pFifoFile, int Flag)
+void CFifo::Init(IConsole *pConsole, const char *pFifoFile, int Flag, bool Acknowledge)
 {
+	m_Acknowledge = Acknowledge;
 	m_pConsole = pConsole;
 	m_IsInit = true;
 	if(pFifoFile[0] == '\0')
@@ -248,6 +250,11 @@ void CFifo::Update()
 		}
 
 		free(pBuf);
+		if(m_Acknowledge)
+		{
+			DWORD Written;
+			WriteFile(m_pPipe, "OK", 2, &Written, nullptr);
+		}
 	}
 }
 #endif

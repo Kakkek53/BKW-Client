@@ -124,6 +124,21 @@ bool windows_shell_register_protocol(const char *protocol_name, const char *exec
 	const std::wstring protocol_name_wide = windows_utf8_to_wide(protocol_name);
 	const std::wstring executable_wide = windows_utf8_to_wide(executable);
 
+	// Normal launches only read an existing registration. Write once on first use
+	// or when the executable moves, instead of rewriting the registry every launch.
+	const std::wstring protocol_key = L"SOFTWARE\\Classes\\" + protocol_name_wide;
+	const auto matches_value = [](const std::wstring &key, const wchar_t *name, const std::wstring &expected) {
+		std::wstring value(expected.size() + 1, L'\0');
+		DWORD size = static_cast<DWORD>(value.size() * sizeof(wchar_t));
+		return RegGetValueW(HKEY_CURRENT_USER, key.c_str(), name, RRF_RT_REG_SZ, nullptr, value.data(), &size) == ERROR_SUCCESS &&
+			wcscmp(value.c_str(), expected.c_str()) == 0;
+	};
+	if(matches_value(protocol_key, L"", L"URL:" + protocol_name_wide + L" Protocol") &&
+		matches_value(protocol_key, L"URL Protocol", L"") &&
+		matches_value(protocol_key + L"\\DefaultIcon", L"", L"\"" + executable_wide + L"\",0") &&
+		matches_value(protocol_key + L"\\shell\\open\\command", L"", L"\"" + executable_wide + L"\" \"%1\""))
+		return true;
+
 	// Open registry key for protocol associations of the current user
 	HKEY handle_subkey_classes;
 	const LRESULT result_subkey_classes = RegOpenKeyExW(HKEY_CURRENT_USER, L"SOFTWARE\\Classes", 0, KEY_ALL_ACCESS, &handle_subkey_classes);
@@ -474,12 +489,34 @@ bool windows_named_pipe_send(const char *pipe_name, const char *message)
 	std::string full_name = "\\\\.\\pipe\\";
 	full_name += pipe_name;
 	const std::wstring wide_name = windows_utf8_to_wide(full_name.c_str());
-	HANDLE pipe = CreateFileW(wide_name.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+	HANDLE pipe = CreateFileW(wide_name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+	if(pipe == INVALID_HANDLE_VALUE && GetLastError() == ERROR_PIPE_BUSY && WaitNamedPipeW(wide_name.c_str(), 1000))
+		pipe = CreateFileW(wide_name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
 	if(pipe == INVALID_HANDLE_VALUE)
 		return false;
+	// The browser starts this process with foreground rights. Pass them to the
+	// existing client before it handles the URI, using that pipe's exact owner PID.
+	ULONG server_process_id = 0;
+	if(GetNamedPipeServerProcessId(pipe, &server_process_id))
+		AllowSetForegroundWindow(server_process_id);
 	const DWORD size = (DWORD)str_length(message);
 	DWORD written = 0;
 	const bool success = WriteFile(pipe, message, size, &written, nullptr) != FALSE && written == size;
+	if(success)
+	{
+		// Keep the connection alive until the running client consumes the message.
+		// Closing immediately can lose it before a minimized client's next update.
+		const ULONGLONG deadline = GetTickCount64() + 3000;
+		while(GetTickCount64() < deadline)
+		{
+			DWORD available = 0;
+			if(!PeekNamedPipe(pipe, nullptr, 0, nullptr, &available, nullptr))
+				break;
+			if(available > 0)
+				break;
+			Sleep(10);
+		}
+	}
 	CloseHandle(pipe);
 	return success;
 }
@@ -490,7 +527,8 @@ static BOOL CALLBACK windows_activate_current_process_window_callback(HWND windo
 	GetWindowThreadProcessId(window, &process_id);
 	if(process_id != GetCurrentProcessId() || !IsWindowVisible(window) || GetWindow(window, GW_OWNER) != nullptr)
 		return TRUE;
-	ShowWindowAsync(window, SW_RESTORE);
+	if(IsIconic(window))
+		ShowWindow(window, SW_RESTORE);
 	SetForegroundWindow(window);
 	*reinterpret_cast<bool *>(parameter) = true;
 	return FALSE;

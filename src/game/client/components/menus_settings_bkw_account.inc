@@ -16,11 +16,8 @@ void RenderBkwAccountSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient
 	static CButtonContainer s_ShareOpenButtons[3];
 	static CButtonContainer s_ShareDeleteButtons[3];
 	static CButtonContainer s_ImportClipboardButton;
-	static CButtonContainer s_RegisterProtocolButton;
-	static CButtonContainer s_CheckServerButton;
 
 	auto &Cloud = Bkw::CloudAccountState();
-	Cloud.Poll(pHttp, pClient);
 
 	PageView.VMargin(8.0f, &PageView);
 	PageView.HSplitTop(8.0f, nullptr, &PageView);
@@ -82,21 +79,6 @@ void RenderBkwAccountSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient
 	Row.Draw(ColorRGBA(0.035f, 0.04f, 0.055f, 0.8f), IGraphics::CORNER_ALL, 7.0f);
 	Row.Margin(7.0f, &Row);
 	pUi->DoLabel(&Row, Cloud.Status(), 10.0f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
-	Left.HSplitTop(5.0f, nullptr, &Left);
-	Left.HSplitTop(26.0f, &Row, &Left);
-	if(pMenus->DoButton_Menu(&s_CheckServerButton, "Проверить версию Cloud", 0, &Row) && !Cloud.Busy() && !Cloud.LoginWaiting())
-		Cloud.CheckServer(pHttp);
-
-	Left.HSplitTop(14.0f, nullptr, &Left);
-	Left.HSplitTop(22.0f, &Row, &Left);
-	pUi->DoLabel(&Row, "Ссылки bkw://", 13.0f, TEXTALIGN_ML);
-	Left.HSplitTop(4.0f, nullptr, &Left);
-	Left.HSplitTop(42.0f, &Row, &Left);
-	pUi->DoLabel(&Row, "Регистрация протокола выполняется только после нажатия кнопки — не при запуске клиента и не при входе в Discord.", 9.5f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
-	Left.HSplitTop(5.0f, nullptr, &Left);
-	Left.HSplitTop(28.0f, &Row, &Left);
-	if(pMenus->DoButton_Menu(&s_RegisterProtocolButton, "Включить bkw:// в Windows", 0, &Row) && !Cloud.Busy())
-		Cloud.RegisterBkwProtocol();
 
 	Right.HSplitTop(25.0f, &Row, &Right);
 	pUi->DoLabel(&Row, "Сохранения всего клиента", 18.0f, TEXTALIGN_ML);

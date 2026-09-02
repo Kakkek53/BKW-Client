@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -49,7 +50,6 @@ private:
 	enum class ERequest
 	{
 		NONE,
-		SERVER_INFO,
 		DEVICE_START,
 		DEVICE_POLL,
 		ME,
@@ -84,6 +84,8 @@ private:
 	bool m_ProfileLoaded = false;
 	bool m_ProfileRequestStarted = false;
 	bool m_ImportedThisSession = false;
+	std::string m_ImportNotification;
+	int64_t m_ImportNotificationUntil = 0;
 	int m_HttpStatus = 0;
 	int64_t m_NextDevicePoll = 0;
 
@@ -230,6 +232,20 @@ private:
 		return Result;
 	}
 
+	static int ConfigIntValue(int64_t Value, int Min, int Max)
+	{
+		Value = std::clamp<int64_t>(Value, std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
+		// Match the config manager: Max == 0 means no upper bound and
+		// Min == Max means unrestricted, not a constant value.
+		if(Min != Max)
+		{
+			Value = std::max<int64_t>(Value, Min);
+			if(Max != 0)
+				Value = std::min<int64_t>(Value, Max);
+		}
+		return (int)Value;
+	}
+
 	static bool ApplySettingsSnapshot(const json_value &Snapshot)
 	{
 		if(Snapshot.type != json_object)
@@ -237,6 +253,7 @@ private:
 		const json_value &Settings = Snapshot["settings"];
 		if(Settings.type != json_object)
 			return false;
+		bool Applied = false;
 
 #define MACRO_CONFIG_INT(Name, ScriptName, Def, Min, Max, Flags, Desc) \
 		do \
@@ -245,7 +262,10 @@ private:
 			{ \
 				const json_value &Value = Settings[#ScriptName]; \
 				if(Value.type == json_integer) \
-					g_Config.m_##Name = std::clamp((int)Value.u.integer, (int)(Min), (int)(Max)); \
+				{ \
+					g_Config.m_##Name = ConfigIntValue(Value.u.integer, (int)(Min), (int)(Max)); \
+					Applied = true; \
+				} \
 			} \
 		} while(false);
 #define MACRO_CONFIG_COL(Name, ScriptName, Def, Flags, Desc) \
@@ -254,8 +274,11 @@ private:
 			if(IsSharedKey(#ScriptName, Flags)) \
 			{ \
 				const json_value &Value = Settings[#ScriptName]; \
-				if(Value.type == json_integer) \
+				if(Value.type == json_integer && Value.u.integer >= 0 && (uint64_t)Value.u.integer <= std::numeric_limits<unsigned>::max()) \
+				{ \
 					g_Config.m_##Name = (unsigned)Value.u.integer; \
+					Applied = true; \
+				} \
 			} \
 		} while(false);
 #define MACRO_CONFIG_STR(Name, ScriptName, Len, Def, Flags, Desc) \
@@ -265,7 +288,10 @@ private:
 			{ \
 				const json_value &Value = Settings[#ScriptName]; \
 				if(Value.type == json_string && Value.u.string.ptr) \
+				{ \
 					str_copy(g_Config.m_##Name, Value.u.string.ptr); \
+					Applied = true; \
+				} \
 			} \
 		} while(false);
 #define SET_CONFIG_DOMAIN(CONFIGDOMAIN)
@@ -274,7 +300,7 @@ private:
 #undef MACRO_CONFIG_INT
 #undef MACRO_CONFIG_COL
 #undef MACRO_CONFIG_STR
-		return true;
+		return Applied;
 	}
 
 	void ParseSaves(const json_value &Root)
@@ -423,7 +449,7 @@ private:
 					m_DeviceCode.clear();
 				}
 			}
-			if(m_HttpStatus == 401 && CompletedType != ERequest::SERVER_INFO && CompletedType != ERequest::DEVICE_START && CompletedType != ERequest::DEVICE_POLL && CompletedType != ERequest::IMPORT_SHARE)
+			if(m_HttpStatus == 401 && CompletedType != ERequest::DEVICE_START && CompletedType != ERequest::DEVICE_POLL && CompletedType != ERequest::IMPORT_SHARE)
 			{
 				g_Config.m_BkwCloudToken[0] = '\0';
 				m_ProfileLoaded = false;
@@ -469,6 +495,12 @@ private:
 				str_format(aBuf, sizeof(aBuf), "Ошибка BKW Cloud (HTTP %d%s%s)", m_HttpStatus, SafeError ? ": " : "", SafeError ? pError : "");
 				m_Status = aBuf;
 			}
+			if(CompletedType == ERequest::IMPORT_SHARE)
+			{
+				m_ImportedThisSession = false;
+				m_ImportNotification = "Не удалось импортировать конфиг";
+				m_ImportNotificationUntil = 0;
+			}
 			if(pRoot)
 				json_value_free(pRoot);
 			return;
@@ -476,19 +508,6 @@ private:
 
 		switch(CompletedType)
 		{
-		case ERequest::SERVER_INFO:
-		{
-			const char *pVersion = JsonString((*pRoot)["version"]);
-			if(str_comp(JsonString((*pRoot)["service"]), "bkw-cloud") != 0 || !pVersion[0])
-				m_Status = "Не удалось определить версию BKW Cloud";
-			else
-			{
-				char aBuf[256];
-				str_format(aBuf, sizeof(aBuf), "BKW Cloud: %.32s. Для всех функций аккаунта нужен сервер 0.5.1 или новее.", pVersion);
-				m_Status = aBuf;
-			}
-			break;
-		}
 		case ERequest::DEVICE_START:
 		{
 			m_DeviceCode = JsonString((*pRoot)["device_code"]);
@@ -608,6 +627,8 @@ private:
 			const json_value &Snapshot = (*pRoot)["settings"];
 			m_ImportedThisSession = ApplySettingsSnapshot(Snapshot);
 			m_Status = m_ImportedThisSession ? "Настройки из ссылки применены" : "Ссылка не содержит совместимых BKW настроек";
+			m_ImportNotification = m_ImportedThisSession ? "Конфиг успешно импортирован" : "В конфиге нет совместимых настроек";
+			m_ImportNotificationUntil = 0;
 			break;
 		}
 		case ERequest::NONE:
@@ -617,13 +638,16 @@ private:
 	}
 
 public:
-	void CheckServer(IHttp *pHttp)
+	const char *ImportNotification()
 	{
-		if(!pHttp || m_pRequest || m_LoginWaiting)
-			return;
-		const std::string Url = std::string(BASE_URL) + "/healthz";
-		Run(pHttp, HttpGet(Url.c_str()), ERequest::SERVER_INFO);
-		m_Status = "Проверяю версию BKW Cloud…";
+		if(m_ImportNotification.empty())
+			return "";
+		// Start the display timer only when the window actually renders the toast.
+		if(m_ImportNotificationUntil == 0)
+			m_ImportNotificationUntil = time_get() + 4 * time_freq();
+		if(time_get() >= m_ImportNotificationUntil)
+			m_ImportNotification.clear();
+		return m_ImportNotification.c_str();
 	}
 
 	void Poll(IHttp *pHttp, IClient *pClient)
@@ -811,10 +835,8 @@ public:
 		}
 		if(Updated)
 			windows_shell_update();
-		m_Status = "Протокол bkw:// включён по вашему запросу";
 		return true;
 #else
-		m_Status = "Автоматическая регистрация bkw:// сейчас доступна только на Windows";
 		return false;
 #endif
 	}

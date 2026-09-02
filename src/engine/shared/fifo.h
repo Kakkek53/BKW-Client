@@ -11,6 +11,7 @@ class CFifo
 	char m_aFilename[IO_MAX_PATH_LENGTH];
 	int m_Flag;
 	bool m_IsInit = false;
+	bool m_Acknowledge = false;
 #if defined(CONF_FAMILY_UNIX)
 	int m_File;
 #elif defined(CONF_FAMILY_WINDOWS)
@@ -18,7 +19,7 @@ class CFifo
 #endif
 
 public:
-	void Init(IConsole *pConsole, const char *pFifoFile, int Flag);
+	void Init(IConsole *pConsole, const char *pFifoFile, int Flag, bool Acknowledge = false);
 	void Update();
 	void Shutdown();
 	bool IsInit() const { return m_IsInit; }

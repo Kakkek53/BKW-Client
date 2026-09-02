@@ -7,6 +7,7 @@
 #include "components/bestclient/inputs.h"
 #include "components/bestclient/r_jelly.h"
 #include "components/binds.h"
+#include "components/bkw/cloud_account.h"
 #include "components/broadcast.h"
 #include "components/camera.h"
 #include "components/chat.h"
@@ -476,6 +477,7 @@ void CGameClient::ForceUpdateConsoleRemoteCompletionSuggestions()
 void CGameClient::OnInit()
 {
 	const int64_t OnInitStart = time_get();
+	Bkw::CloudAccountState().RegisterBkwProtocol();
 
 	Client()->SetLoadingCallback([this](IClient::ELoadingCallbackDetail Detail) {
 		const char *pTitle;
@@ -622,6 +624,7 @@ void CGameClient::OnInit()
 
 void CGameClient::OnUpdate()
 {
+	Bkw::CloudAccountState().Poll(Http(), Client());
 	HandleLanguageChanged();
 
 	CUIElementBase::Init(Ui()); // update static pointer because game and editor use separate UI
@@ -1070,6 +1073,31 @@ void CGameClient::OnRender()
 
 	CLineInput::RenderCandidates();
 	RenderEyeComfortOverlay(); // BestClient
+
+	// Cloud imports can complete in any menu or during gameplay.
+	// Keep a background completion visible for four seconds after returning to the game.
+	if(Graphics()->WindowActive() && Graphics()->WindowOpen())
+	{
+		auto &Cloud = Bkw::CloudAccountState();
+		const char *pNotification = Cloud.ImportNotification();
+		if(pNotification[0])
+		{
+			const CScreenRect PreviousScreen = Graphics()->GetScreen();
+			Ui()->MapScreen();
+			const CUIRect Screen = *Ui()->Screen();
+			constexpr float FontSize = 14.0f;
+			const float TextWidth = TextRender()->TextWidth(FontSize, pNotification);
+			const float Width = std::min(TextWidth + 36.0f, Screen.w - 24.0f);
+			const float X = Screen.x + (Screen.w - Width) * 0.5f;
+			const float Y = Screen.y + Screen.h - 64.0f;
+			Graphics()->TextureClear();
+			Graphics()->DrawRect(X, Y, Width, 36.0f, ColorRGBA(0.035f, 0.055f, 0.075f, 0.94f), IGraphics::CORNER_ALL, 8.0f);
+			TextRender()->TextColor(Cloud.ImportedThisSession() ? ColorRGBA(0.55f, 1.0f, 0.73f, 1.0f) : ColorRGBA(1.0f, 0.65f, 0.55f, 1.0f));
+			TextRender()->Text(Screen.x + (Screen.w - TextWidth) * 0.5f, Y + 10.0f, FontSize, pNotification, -1.0f);
+			TextRender()->TextColor(TextRender()->DefaultTextColor());
+			Graphics()->MapScreen(PreviousScreen);
+		}
+	}
 
 	const bool WasNewTick = m_NewTick;
 
