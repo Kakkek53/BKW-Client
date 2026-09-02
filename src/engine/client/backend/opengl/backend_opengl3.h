@@ -79,6 +79,13 @@ protected:
 	void UploadStreamBufferData(EPrimitiveType PrimitiveType, const void *pVertices, size_t VertSize, unsigned int PrimitiveCount, bool AsTex3D = false);
 	void RenderText(const CCommandBuffer::SState &State, int DrawNum, int TextTextureIndex, int TextOutlineTextureIndex, int TextureSize, const ColorRGBA &TextColor, const ColorRGBA &TextOutlineColor);
 
+	TWGLuint m_aGlassTextures[5] = {};
+	TWGLuint m_aGlassFramebuffers[5] = {};
+	uint32_t m_GlassWidth = 0;
+	uint32_t m_GlassHeight = 0;
+	void DestroyGlassTextures();
+	void Cmd_BlurMenuBackground(const CCommandBuffer::SCommand_BlurMenuBackground *pCommand) override;
+
 	TWGLuint m_MotionBlurTexture = 0;
 	uint32_t m_MotionBlurTexWidth = 0;
 	uint32_t m_MotionBlurTexHeight = 0;

@@ -17,6 +17,7 @@
 #include <engine/client/backend_sdl.h>
 #include <engine/gfx/image_manipulation.h>
 
+#include <algorithm>
 #include <cmath>
 
 #if defined(CONF_PLATFORM_EMSCRIPTEN)
@@ -519,6 +520,7 @@ void CCommandProcessorFragment_OpenGL3_3::Cmd_Shutdown(const SCommand_Shutdown *
 	glDeleteBuffers(1, &m_PrimitiveDrawBufferIdTex3D);
 	glDeleteVertexArrays(1, &m_PrimitiveDrawVertexIdTex3D);
 	DestroyMotionBlurTexture();
+	DestroyGlassTextures();
 
 	for(int i = 0; i < (int)m_vTextures.size(); ++i)
 	{
@@ -1428,6 +1430,127 @@ void CCommandProcessorFragment_OpenGL3_3::Cmd_RenderQuadContainerAsSpriteMultipl
 		RenderOffset += RSPCount;
 		DrawCount -= RSPCount;
 	}
+}
+
+void CCommandProcessorFragment_OpenGL3_3::DestroyGlassTextures()
+{
+	glDeleteTextures(5, m_aGlassTextures);
+	glDeleteFramebuffers(5, m_aGlassFramebuffers);
+	for(int i = 0; i < 5; ++i)
+	{
+		m_aGlassTextures[i] = 0;
+		m_aGlassFramebuffers[i] = 0;
+	}
+	m_GlassWidth = m_GlassHeight = 0;
+}
+
+void CCommandProcessorFragment_OpenGL3_3::Cmd_BlurMenuBackground(const CCommandBuffer::SCommand_BlurMenuBackground *pCommand)
+{
+	if(m_CanvasWidth < 16 || m_CanvasHeight < 16)
+		return;
+	GLint ReadFramebuffer, DrawFramebuffer, aViewport[4];
+	glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &ReadFramebuffer);
+	glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &DrawFramebuffer);
+	glGetIntegerv(GL_VIEWPORT, aViewport);
+	const bool ClipEnabled = glIsEnabled(GL_SCISSOR_TEST);
+	glDisable(GL_SCISSOR_TEST);
+	glActiveTexture(GL_TEXTURE0);
+	if(m_GlassWidth != m_CanvasWidth || m_GlassHeight != m_CanvasHeight)
+	{
+		DestroyGlassTextures();
+		m_GlassWidth = m_CanvasWidth;
+		m_GlassHeight = m_CanvasHeight;
+		glGenTextures(5, m_aGlassTextures);
+		glGenFramebuffers(5, m_aGlassFramebuffers);
+		for(int i = 0; i < 5; ++i)
+		{
+			glBindTexture(GL_TEXTURE_2D, m_aGlassTextures[i]);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_GlassWidth >> i, m_GlassHeight >> i, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+			glBindFramebuffer(GL_FRAMEBUFFER, m_aGlassFramebuffers[i]);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_aGlassTextures[i], 0);
+			if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+			{
+				DestroyGlassTextures();
+				glBindFramebuffer(GL_READ_FRAMEBUFFER, ReadFramebuffer);
+				glBindFramebuffer(GL_DRAW_FRAMEBUFFER, DrawFramebuffer);
+				if(ClipEnabled)
+					glEnable(GL_SCISSOR_TEST);
+				return;
+			}
+		}
+	}
+	// Resolve MSAA before scaling. A downsample/upsample pyramid gives a spatial
+	// blur of this frame, with no CPU readback and no previous-menu feedback.
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, DrawFramebuffer);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_aGlassFramebuffers[0]);
+	glBlitFramebuffer(0, 0, m_CanvasWidth, m_CanvasHeight, 0, 0, m_CanvasWidth, m_CanvasHeight, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	const int Level = std::clamp(pCommand->m_Level, 1, 4);
+	auto BlitLevel = [&](int From, int To) {
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, m_aGlassFramebuffers[From]);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_aGlassFramebuffers[To]);
+		glBlitFramebuffer(0, 0, m_GlassWidth >> From, m_GlassHeight >> From, 0, 0, m_GlassWidth >> To, m_GlassHeight >> To, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	};
+	for(int i = 1; i <= Level; ++i)
+		BlitLevel(i - 1, i);
+	for(int i = Level; i > 0; --i)
+		BlitLevel(i, i - 1);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, DrawFramebuffer);
+	glViewport(0, 0, m_CanvasWidth, m_CanvasHeight);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	// Textured primitive program with identity gPos (vertices in NDC)
+	UseProgram(m_pPrimitiveProgramTextured);
+	const float aIdentityPos[8] = {1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+	glUniformMatrix4x2fv(m_pPrimitiveProgramTextured->m_LocPos, 1, GL_FALSE, aIdentityPos);
+	// Invalidate program cache so next SetState re-uploads the correct matrix
+	m_pPrimitiveProgramTextured->m_LastScreenTL = vec2(0.0f, 0.0f);
+	m_pPrimitiveProgramTextured->m_LastScreenBR = vec2(0.0f, 0.0f);
+
+	// Bind the filtered background directly (no sampler object)
+	glBindSampler(0, 0);
+	glBindTexture(GL_TEXTURE_2D, m_aGlassTextures[0]);
+	glUniform1i(m_pPrimitiveProgramTextured->m_LocTextureSampler, 0);
+	m_pPrimitiveProgramTextured->m_LastTextureSampler = -1;
+
+	// Opaque redraw also works when the window framebuffer uses MSAA.
+	constexpr uint8_t Alpha = 255;
+	CCommandBuffer::SVertex aVertices[4];
+	aVertices[0].m_Pos = vec2(-1.0f, -1.0f);
+	aVertices[0].m_Tex = vec2(0.0f, 0.0f);
+	aVertices[1].m_Pos = vec2(1.0f, -1.0f);
+	aVertices[1].m_Tex = vec2(1.0f, 0.0f);
+	aVertices[2].m_Pos = vec2(1.0f, 1.0f);
+	aVertices[2].m_Tex = vec2(1.0f, 1.0f);
+	aVertices[3].m_Pos = vec2(-1.0f, 1.0f);
+	aVertices[3].m_Tex = vec2(0.0f, 1.0f);
+	for(auto &Vertex : aVertices)
+	{
+		Vertex.m_Color.r = 255;
+		Vertex.m_Color.g = 255;
+		Vertex.m_Color.b = 255;
+		Vertex.m_Color.a = Alpha;
+	}
+
+	UploadStreamBufferData(EPrimitiveType::QUADS, aVertices, sizeof(CCommandBuffer::SVertex), 1);
+	glBindVertexArray(m_aPrimitiveDrawVertexId[m_LastStreamBuffer]);
+	if(m_aLastIndexBufferBound[m_LastStreamBuffer] != m_QuadDrawIndexBufferId)
+	{
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_QuadDrawIndexBufferId);
+		m_aLastIndexBufferBound[m_LastStreamBuffer] = m_QuadDrawIndexBufferId;
+	}
+	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+	m_LastStreamBuffer = (m_LastStreamBuffer + 1 >= MAX_STREAM_BUFFER_COUNT ? 0 : m_LastStreamBuffer + 1);
+
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, ReadFramebuffer);
+	glViewport(aViewport[0], aViewport[1], aViewport[2], aViewport[3]);
+	if(ClipEnabled)
+		glEnable(GL_SCISSOR_TEST);
+	m_LastBlendMode = EBlendMode::ALPHA;
 }
 
 void CCommandProcessorFragment_OpenGL3_3::EnsureMotionBlurTexture()

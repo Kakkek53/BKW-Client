@@ -13,6 +13,8 @@
 #include <engine/shared/protocol.h>
 #include <engine/storage.h>
 
+#include <string>
+
 CConfig g_Config;
 
 // ----------------------- Config Variables
@@ -20,6 +22,29 @@ CConfig g_Config;
 static void EscapeParam(char *pDst, const char *pSrc, int Size)
 {
 	str_escape(&pDst, pSrc, pDst + Size);
+}
+
+bool SConfigVariable::MatchesScriptName(const char *pName) const
+{
+	return str_comp(pName, m_pScriptName) == 0 || (m_pBkwAlias && str_comp(pName, m_pBkwAlias) == 0);
+}
+
+void SConfigVariable::BkwAliasCallback(IConsole::IResult *pResult, void *pUserData)
+{
+	const auto *pVariable = static_cast<const SConfigVariable *>(pUserData);
+	std::string Command = pVariable->m_pScriptName;
+	for(int i = 0; i < pResult->NumArguments(); ++i)
+	{
+		Command += " \"";
+		for(const char *pChar = pResult->GetString(i); *pChar; ++pChar)
+		{
+			if(*pChar == '\\' || *pChar == '"')
+				Command += '\\';
+			Command += *pChar;
+		}
+		Command += '"';
+	}
+	pVariable->m_pConsole->ExecuteLine(Command.c_str(), pResult->m_ClientId);
 }
 
 void SConfigVariable::ExecuteLine(const char *pLine) const
@@ -332,6 +357,18 @@ void CConfigManager::Init()
 #undef MACRO_CONFIG_COL
 #undef MACRO_CONFIG_STR
 
+	for(SConfigVariable *pVariable : m_vpAllVariables)
+	{
+		if((pVariable->m_Flags & CFGFLAG_CLIENT) == 0 || str_startswith(pVariable->m_pScriptName, "bkw_"))
+			continue;
+		const std::string Alias = std::string("bkw_") + pVariable->m_pScriptName;
+		if(m_pConsole->GetCommandInfo(Alias.c_str(), CFGFLAG_CLIENT, false))
+			continue;
+		pVariable->m_pBkwAlias = m_ConfigHeap.StoreString(Alias.c_str());
+		const char *pParams = pVariable->m_Type == SConfigVariable::VAR_INT ? "?i" : (pVariable->m_Type == SConfigVariable::VAR_COLOR ? "?c" : "?r");
+		m_pConsole->Register(pVariable->m_pBkwAlias, pParams, pVariable->m_Flags, SConfigVariable::BkwAliasCallback, pVariable, pVariable->m_pHelp);
+	}
+
 	m_pConsole->Register("reset", "s[config-name]", CFGFLAG_SERVER | CFGFLAG_CLIENT | CFGFLAG_STORE, Con_Reset, this, "Reset a config to its default value");
 	m_pConsole->Register("toggle", "s[config-option] s[value 1] s[value 2]", CFGFLAG_SERVER | CFGFLAG_CLIENT, Con_Toggle, this, "Toggle config value");
 	m_pConsole->Register("+toggle", "s[config-option] s[value 1] s[value 2]", CFGFLAG_CLIENT, Con_ToggleStroke, this, "Toggle config value via keypress");
@@ -341,7 +378,7 @@ void CConfigManager::Reset(const char *pScriptName)
 {
 	for(SConfigVariable *pVariable : m_vpAllVariables)
 	{
-		if((pVariable->m_Flags & m_pConsole->FlagMask()) != 0 && str_comp(pScriptName, pVariable->m_pScriptName) == 0)
+		if((pVariable->m_Flags & m_pConsole->FlagMask()) != 0 && pVariable->MatchesScriptName(pScriptName))
 		{
 			pVariable->ResetToDefault();
 			return;
@@ -363,7 +400,7 @@ void CConfigManager::SetReadOnly(const char *pScriptName, bool ReadOnly)
 {
 	for(SConfigVariable *pVariable : m_vpAllVariables)
 	{
-		if(str_comp(pScriptName, pVariable->m_pScriptName) == 0)
+		if(pVariable->MatchesScriptName(pScriptName))
 		{
 			pVariable->m_ReadOnly = ReadOnly;
 			return;
@@ -529,7 +566,7 @@ void CConfigManager::Con_Toggle(IConsole::IResult *pResult, void *pUserData)
 	for(SConfigVariable *pVariable : pConfigManager->m_vpAllVariables)
 	{
 		if((pVariable->m_Flags & pConsole->FlagMask()) == 0 ||
-			str_comp(pScriptName, pVariable->m_pScriptName) != 0)
+			!pVariable->MatchesScriptName(pScriptName))
 		{
 			continue;
 		}
@@ -569,7 +606,7 @@ void CConfigManager::Con_ToggleStroke(IConsole::IResult *pResult, void *pUserDat
 	{
 		if((pVariable->m_Flags & pConsole->FlagMask()) == 0 ||
 			pVariable->m_Type != SConfigVariable::VAR_INT ||
-			str_comp(pScriptName, pVariable->m_pScriptName) != 0)
+			!pVariable->MatchesScriptName(pScriptName))
 		{
 			continue;
 		}

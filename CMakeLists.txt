@@ -3792,6 +3792,7 @@ if((GTEST_FOUND OR DOWNLOAD_GTEST) AND SERVER)
     chunk_header_test.cpp
     color_test.cpp
     compression_test.cpp
+    config_test.cpp
     csv_test.cpp
     datafile_test.cpp
     dbg_test.cpp

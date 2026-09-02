@@ -2836,6 +2836,16 @@ void CGraphics_Threaded::ReadPixelDirect(bool *pSwapped)
 	m_pReadPixelColor = nullptr;
 }
 
+void CGraphics_Threaded::BlurMenuBackground(int Level)
+{
+	if(Level <= 0 || !IsQuadBufferingEnabled())
+		return;
+	FlushVertices();
+	CCommandBuffer::SCommand_BlurMenuBackground Cmd;
+	Cmd.m_Level = std::clamp(Level, 1, 4);
+	AddCmd(Cmd);
+}
+
 void CGraphics_Threaded::TakeScreenshot(const char *pFilename)
 {
 	// TODO: screenshot support

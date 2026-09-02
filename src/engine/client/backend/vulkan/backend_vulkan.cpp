@@ -979,6 +979,8 @@ private:
 	std::vector<VkImageView> m_vSwapChainImageViewList;
 	std::vector<SSwapChainMultiSampleImage> m_vSwapChainMultiSamplingImages;
 	std::vector<SFrameBlendImage> m_vFrameBlendImages;
+	std::vector<SFrameBlendImage> m_vGlassImages;
+	bool m_GlassPassActive = false;
 	std::vector<VkFramebuffer> m_vFramebufferList;
 	std::vector<VkCommandBuffer> m_vMainDrawCommandBuffers;
 
@@ -1361,6 +1363,7 @@ protected:
 		m_aCommandCallbacks[CommandBufferCMDOff(CCommandBuffer::CMD_VSYNC)] = {false, [](SRenderCommandExecuteBuffer &ExecBuffer, const CCommandBuffer::SCommand *pBaseCommand) {}, [this](const CCommandBuffer::SCommand *pBaseCommand, SRenderCommandExecuteBuffer &ExecBuffer) { return Cmd_VSync(static_cast<const CCommandBuffer::SCommand_VSync *>(pBaseCommand)); }};
 		m_aCommandCallbacks[CommandBufferCMDOff(CCommandBuffer::CMD_MULTISAMPLING)] = {false, [](SRenderCommandExecuteBuffer &ExecBuffer, const CCommandBuffer::SCommand *pBaseCommand) {}, [this](const CCommandBuffer::SCommand *pBaseCommand, SRenderCommandExecuteBuffer &ExecBuffer) { return Cmd_MultiSampling(static_cast<const CCommandBuffer::SCommand_MultiSampling *>(pBaseCommand)); }};
 		m_aCommandCallbacks[CommandBufferCMDOff(CCommandBuffer::CMD_TRY_SWAP_AND_READ_PIXEL)] = {false, [](SRenderCommandExecuteBuffer &ExecBuffer, const CCommandBuffer::SCommand *pBaseCommand) {}, [this](const CCommandBuffer::SCommand *pBaseCommand, SRenderCommandExecuteBuffer &ExecBuffer) { return Cmd_ReadPixel(static_cast<const CCommandBuffer::SCommand_TrySwapAndReadPixel *>(pBaseCommand)); }};
+		m_aCommandCallbacks[CommandBufferCMDOff(CCommandBuffer::CMD_BLUR_MENU_BACKGROUND)] = {false, [](SRenderCommandExecuteBuffer &, const CCommandBuffer::SCommand *) {}, [this](const CCommandBuffer::SCommand *pCommand, SRenderCommandExecuteBuffer &) { return Cmd_BlurMenuBackground(static_cast<const CCommandBuffer::SCommand_BlurMenuBackground *>(pCommand)); }};
 		m_aCommandCallbacks[CommandBufferCMDOff(CCommandBuffer::CMD_TRY_SWAP_AND_SCREENSHOT)] = {false, [](SRenderCommandExecuteBuffer &ExecBuffer, const CCommandBuffer::SCommand *pBaseCommand) {}, [this](const CCommandBuffer::SCommand *pBaseCommand, SRenderCommandExecuteBuffer &ExecBuffer) { return Cmd_Screenshot(static_cast<const CCommandBuffer::SCommand_TrySwapAndScreenshot *>(pBaseCommand)); }};
 
 		m_aCommandCallbacks[CommandBufferCMDOff(CCommandBuffer::CMD_UPDATE_VIEWPORT)] = {false, [this](SRenderCommandExecuteBuffer &ExecBuffer, const CCommandBuffer::SCommand *pBaseCommand) { Cmd_Update_Viewport_FillExecuteBuffer(ExecBuffer, static_cast<const CCommandBuffer::SCommand_Update_Viewport *>(pBaseCommand)); }, [this](const CCommandBuffer::SCommand *pBaseCommand, SRenderCommandExecuteBuffer &ExecBuffer) { return Cmd_Update_Viewport(static_cast<const CCommandBuffer::SCommand_Update_Viewport *>(pBaseCommand)); }};
@@ -2521,6 +2524,7 @@ protected:
 				FrameBlendImageBarrier(CommandBuffer, HistoryImage.m_Image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		}
 
+		m_GlassPassActive = false;
 		VkRenderPassBeginInfo RenderPassInfo{};
 		RenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		RenderPassInfo.renderPass = m_VKRenderPass;
@@ -4586,6 +4590,7 @@ public:
 	[[nodiscard]] bool CreateFrameBlendImages()
 	{
 		m_vFrameBlendImages.resize(m_SwapChainImageCount);
+		m_vGlassImages.resize(m_SwapChainImageCount);
 
 		for(auto &FrameBlendImage : m_vFrameBlendImages)
 		{
@@ -4619,6 +4624,19 @@ public:
 				FreeImageMemBlock(FrameBlendImage.m_ImgMem);
 		}
 
+		for(auto &FrameBlendImage : m_vGlassImages)
+		{
+			if(FrameBlendImage.m_DescriptorSet.m_Descriptor != VK_NULL_HANDLE)
+				FreeDescriptorSetFromPool(FrameBlendImage.m_DescriptorSet);
+			if(FrameBlendImage.m_ImgView != VK_NULL_HANDLE)
+				vkDestroyImageView(m_VKDevice, FrameBlendImage.m_ImgView, nullptr);
+			if(FrameBlendImage.m_Image != VK_NULL_HANDLE)
+				vkDestroyImage(m_VKDevice, FrameBlendImage.m_Image, nullptr);
+			if(FrameBlendImage.m_ImgMem.m_BufferMem.m_Mem != VK_NULL_HANDLE)
+				FreeImageMemBlock(FrameBlendImage.m_ImgMem);
+		}
+
+		m_vGlassImages.clear();
 		m_vFrameBlendImages.clear();
 		m_FrameBlendEnabledLastFrame = false;
 	}
@@ -6587,7 +6605,7 @@ public:
 
 	[[nodiscard]] bool GetGraphicCommandBuffer(VkCommandBuffer *&pDrawCommandBuffer, size_t RenderThreadIndex)
 	{
-		if(m_ThreadCount < 2)
+		if(m_ThreadCount < 2 || m_GlassPassActive)
 		{
 			pDrawCommandBuffer = &m_vMainDrawCommandBuffers[m_CurImageIndex];
 			return true;
@@ -6819,7 +6837,7 @@ public:
 			bool CanStartThread = false;
 			if(CallbackObj.m_IsRenderCommand)
 			{
-				bool ForceSingleThread = m_LastCommandsInPipeThreadIndex == std::numeric_limits<decltype(m_LastCommandsInPipeThreadIndex)>::max();
+				bool ForceSingleThread = m_GlassPassActive || m_LastCommandsInPipeThreadIndex == std::numeric_limits<decltype(m_LastCommandsInPipeThreadIndex)>::max();
 
 				size_t PotentiallyNextThread = (((m_CurCommandInPipe * (m_ThreadCount - 1)) / m_CommandsInPipe) + 1);
 				if(PotentiallyNextThread - 1 > m_LastCommandsInPipeThreadIndex)
@@ -7134,6 +7152,129 @@ public:
 		return RenderStandard<CCommandBuffer::SVertex, false>(ExecBuffer, pCommand->m_State, pCommand->m_PrimType, pCommand->m_pVertices, pCommand->m_PrimCount);
 	}
 
+	[[nodiscard]] bool Cmd_BlurMenuBackground(const CCommandBuffer::SCommand_BlurMenuBackground *pCommand)
+	{
+		const auto Extent = m_VKSwapImgAndViewportExtent.m_SwapImageViewport;
+		if(m_RenderingPaused || m_GlassPassActive || Extent.width < 16 || Extent.height < 16 || m_vGlassImages.empty())
+			return true;
+		VkFormatProperties Properties;
+		vkGetPhysicalDeviceFormatProperties(m_VKGPU, m_VKSurfFormat.format, &Properties);
+		constexpr VkFormatFeatureFlags Required = VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+		if((Properties.optimalTilingFeatures & Required) != Required)
+			return true;
+		auto &Image = m_vGlassImages[m_CurImageIndex];
+		if(Image.m_Image == VK_NULL_HANDLE)
+		{
+			if(!CreateImage(Extent.width, Extent.height, 1, 5, m_VKSurfFormat.format, VK_IMAGE_TILING_OPTIMAL, Image.m_Image, Image.m_ImgMem))
+				return false;
+			Image.m_ImgView = CreateImageView(Image.m_Image, m_VKSurfFormat.format, VK_IMAGE_VIEW_TYPE_2D, 1, 1);
+			if(Image.m_ImgView == VK_NULL_HANDLE || !CreateFrameBlendDescriptorSet(Image))
+				return false;
+		}
+		FinishRenderThreads();
+		m_LastCommandsInPipeThreadIndex = 0;
+
+		auto &CommandBuffer = GetMainGraphicCommandBuffer();
+
+		// render threads
+		if(m_ThreadCount > 1)
+		{
+			size_t ThreadedCommandsUsedCount = 0;
+			size_t RenderThreadCount = m_ThreadCount - 1;
+			for(size_t i = 0; i < RenderThreadCount; ++i)
+			{
+				if(m_vvUsedThreadDrawCommandBuffer[i + 1][m_CurImageIndex])
+				{
+					const auto &GraphicThreadCommandBuffer = m_vvThreadDrawCommandBuffers[i + 1][m_CurImageIndex];
+					m_vHelperThreadDrawCommandBuffers[ThreadedCommandsUsedCount++] = GraphicThreadCommandBuffer;
+
+					m_vvUsedThreadDrawCommandBuffer[i + 1][m_CurImageIndex] = false;
+				}
+			}
+			if(ThreadedCommandsUsedCount > 0)
+			{
+				vkCmdExecuteCommands(CommandBuffer, ThreadedCommandsUsedCount, m_vHelperThreadDrawCommandBuffers.data());
+			}
+
+			// special case if swap chain was not completed in one runbuffer call
+
+			if(m_vvUsedThreadDrawCommandBuffer[0][m_CurImageIndex])
+			{
+				auto &GraphicThreadCommandBuffer = m_vvThreadDrawCommandBuffers[0][m_CurImageIndex];
+				vkEndCommandBuffer(GraphicThreadCommandBuffer);
+
+				vkCmdExecuteCommands(CommandBuffer, 1, &GraphicThreadCommandBuffer);
+
+				m_vvUsedThreadDrawCommandBuffer[0][m_CurImageIndex] = false;
+			}
+		}
+
+		vkCmdEndRenderPass(CommandBuffer);
+		// All mip levels are overwritten each use. GENERAL permits both blit directions.
+		VkImageMemoryBarrier Barrier{};
+		Barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		Barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		Barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		Barrier.image = Image.m_Image;
+		Barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 5, 0, 1};
+		Barrier.srcAccessMask = 0;
+		Barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		vkCmdPipelineBarrier(CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &Barrier);
+
+		auto &SwapImage = m_vSwapChainImages[m_CurImageIndex];
+		FrameBlendImageBarrier(CommandBuffer, SwapImage, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+		VkImageCopy Copy{};
+		Copy.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+		Copy.dstSubresource = Copy.srcSubresource;
+		Copy.extent = {Extent.width, Extent.height, 1};
+		vkCmdCopyImage(CommandBuffer, SwapImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, Image.m_Image, VK_IMAGE_LAYOUT_GENERAL, 1, &Copy);
+		FrameBlendImageBarrier(CommandBuffer, SwapImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+		auto TransferBarrier = [&]() {
+			Barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			Barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			Barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+			Barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+			vkCmdPipelineBarrier(CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &Barrier);
+		};
+		auto BlitLevel = [&](uint32_t From, uint32_t To) {
+			TransferBarrier();
+			VkImageBlit Blit{};
+			Blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, From, 0, 1};
+			Blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, To, 0, 1};
+			Blit.srcOffsets[1] = {(int32_t)(Extent.width >> From), (int32_t)(Extent.height >> From), 1};
+			Blit.dstOffsets[1] = {(int32_t)(Extent.width >> To), (int32_t)(Extent.height >> To), 1};
+			vkCmdBlitImage(CommandBuffer, Image.m_Image, VK_IMAGE_LAYOUT_GENERAL, Image.m_Image, VK_IMAGE_LAYOUT_GENERAL, 1, &Blit, VK_FILTER_LINEAR);
+		};
+		const int Level = std::clamp(pCommand->m_Level, 1, 4);
+		for(int i = 1; i <= Level; ++i)
+			BlitLevel(i - 1, i);
+		for(int i = Level; i > 0; --i)
+			BlitLevel(i, i - 1);
+		Barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+		Barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		Barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		Barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		vkCmdPipelineBarrier(CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &Barrier);
+
+		// Resolve-and-restart also works with MSAA: the opaque background fills all samples.
+		VkRenderPassBeginInfo Begin{};
+		Begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		Begin.renderPass = m_VKRenderPass;
+		Begin.framebuffer = m_vFramebufferList[m_CurImageIndex];
+		Begin.renderArea.extent = Extent;
+		VkClearValue Clear{};
+		Begin.clearValueCount = 1;
+		Begin.pClearValues = &Clear;
+		vkCmdBeginRenderPass(CommandBuffer, &Begin, VK_SUBPASS_CONTENTS_INLINE);
+		m_GlassPassActive = true;
+		if(!RenderFrameTexture(CommandBuffer, Image, 1.0f, 1))
+			return false;
+		m_vLastPipeline[0] = VK_NULL_HANDLE;
+		return true;
+	}
+
 	[[nodiscard]] bool RenderFrameBlend(VkCommandBuffer &MainCommandBuffer)
 	{
 		if(m_vFrameBlendImages.empty() || m_LastPresentedSwapChainImageIndex == std::numeric_limits<decltype(m_LastPresentedSwapChainImageIndex)>::max())
@@ -7151,11 +7292,16 @@ public:
 		const int BlendPassCount = std::max(1, (int)std::ceil(TotalBlendStrength / MaxBlendAlphaPerPass));
 		const float BlendAlphaPerPass = TotalBlendStrength / (float)BlendPassCount;
 
+		return RenderFrameTexture(MainCommandBuffer, FrameBlendImage, BlendAlphaPerPass, BlendPassCount);
+	}
+
+	[[nodiscard]] bool RenderFrameTexture(VkCommandBuffer &MainCommandBuffer, const SFrameBlendImage &FrameBlendImage, float BlendAlphaPerPass, int BlendPassCount)
+	{
 		// With multiple render threads the render pass was begun with
 		// VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS — inline draws into the primary
 		// command buffer are invalid there, so record the blend quad into a dedicated
 		// secondary command buffer and execute it.
-		const bool UseSecondaryCommandBuffer = m_ThreadCount > 1;
+		const bool UseSecondaryCommandBuffer = m_ThreadCount > 1 && !m_GlassPassActive;
 		VkCommandBuffer CommandBuffer = MainCommandBuffer;
 		if(UseSecondaryCommandBuffer)
 		{

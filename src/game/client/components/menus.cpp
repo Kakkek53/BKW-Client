@@ -424,7 +424,10 @@ ColorHSLA CMenus::DoLine_ColorPicker(CButtonContainer *pResetId, const float Lin
 		ResetButton.HMargin(2.0f, &ResetButton);
 		if(DoButton_Menu(pResetId, Localize("Reset"), 0, &ResetButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 4.0f, 0.1f, ColorRGBA(1.0f, 1.0f, 1.0f, 0.25f)))
 		{
+			const unsigned SavedAlpha = *pColorValue & 0xff000000U;
 			*pColorValue = color_cast<ColorHSLA>(DefaultColor).Pack(Alpha);
+			if(!Alpha && pColorValue == &g_Config.m_UiColor)
+				*pColorValue |= SavedAlpha;
 		}
 	}
 
@@ -451,6 +454,9 @@ ColorHSLA CMenus::DoButton_ColorPicker(const CUIRect *pRect, unsigned int *pHsla
 		m_ColorPickerPopupContext.m_HsvaColor = color_cast<ColorHSVA>(HslaColor);
 		m_ColorPickerPopupContext.m_RgbaColor = color_cast<ColorRGBA>(m_ColorPickerPopupContext.m_HsvaColor);
 		m_ColorPickerPopupContext.m_Alpha = Alpha;
+		m_ColorPickerPopupContext.m_KeepAlpha = !Alpha && pHslaColor == &g_Config.m_UiColor;
+		if(m_ColorPickerPopupContext.m_KeepAlpha)
+			m_ColorPickerPopupContext.m_ColorMode = CUi::SColorPickerPopupContext::MODE_RGBA;
 		Ui()->ShowPopupColorPicker(Ui()->MouseX(), Ui()->MouseY(), &m_ColorPickerPopupContext);
 	}
 	else if(Ui()->IsPopupOpen(&m_ColorPickerPopupContext) && m_ColorPickerPopupContext.m_pHslaColor == pHslaColor)
@@ -1124,6 +1130,7 @@ bool CMenus::CanDisplayWarning() const
 
 void CMenus::Render()
 {
+	CUIRect::SetGlassOpacity(-1.0f);
 	Ui()->MapScreen();
 	Ui()->SetMouseSlow(false);
 
@@ -1223,6 +1230,12 @@ void CMenus::Render()
 		ms_ColorTabbarInactive = ms_ColorTabbarInactiveOutgame;
 		ms_ColorTabbarActive = ms_ColorTabbarActiveOutgame;
 		ms_ColorTabbarHover = ms_ColorTabbarHoverOutgame;
+	}
+
+	if(g_Config.m_BkwUiGlass && IsActive())
+	{
+		Graphics()->BlurMenuBackground(g_Config.m_BkwUiGlassBlur);
+		CUIRect::SetGlassOpacity(1.0f - g_Config.m_BkwUiGlassTransparency / 100.0f);
 	}
 
 	CUIRect Screen = *Ui()->Screen();
@@ -2887,6 +2900,7 @@ void CMenus::OnRender()
 		Ui()->DoBackButton();
 
 	Render();
+	CUIRect::SetGlassOpacity(-1.0f);
 
 	// After Render: discard buttons that became active, and suppress hot item next frame
 	if(ShowAspectConfirmOverlay && IsActive())
@@ -2989,6 +3003,8 @@ void CMenus::OnRender()
 void CMenus::UpdateColors()
 {
 	ms_GuiColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_UiColor, true));
+	if(g_Config.m_BkwUiGlass)
+		ms_GuiColor.a = 0.5f;
 
 	ms_ColorTabbarInactiveOutgame = ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f);
 	ms_ColorTabbarActiveOutgame = ColorRGBA(0.0f, 0.0f, 0.0f, 0.5f);

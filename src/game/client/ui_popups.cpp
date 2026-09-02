@@ -626,10 +626,15 @@ CUi::EPopupMenuFunctionResult CUi::PopupColorPicker(void *pContext, CUIRect View
 	pColorPicker->m_RgbaColor = PickerColorRGB;
 	pColorPicker->m_HslaColor = PickerColorHSL;
 	if(pColorPicker->m_pHslaColor != nullptr)
+	{
+		const unsigned SavedAlpha = *pColorPicker->m_pHslaColor & 0xff000000U;
 		*pColorPicker->m_pHslaColor = PickerColorHSL.Pack(pColorPicker->m_Alpha);
+		if(pColorPicker->m_KeepAlpha)
+			*pColorPicker->m_pHslaColor |= SavedAlpha;
+	}
 
 	static constexpr SColorPickerPopupContext::EColorPickerMode PICKER_MODES[] = {SColorPickerPopupContext::MODE_HSVA, SColorPickerPopupContext::MODE_RGBA, SColorPickerPopupContext::MODE_HSLA};
-	static constexpr const char *PICKER_MODE_LABELS[] = {"HSVA", "RGBA", "HSLA"};
+	const char *PICKER_MODE_LABELS[] = {pColorPicker->m_Alpha ? "HSVA" : "HSV", pColorPicker->m_Alpha ? "RGBA" : "RGB", pColorPicker->m_Alpha ? "HSLA" : "HSL"};
 	static_assert(std::size(PICKER_MODES) == std::size(PICKER_MODE_LABELS));
 	for(SColorPickerPopupContext::EColorPickerMode Mode : PICKER_MODES)
 	{

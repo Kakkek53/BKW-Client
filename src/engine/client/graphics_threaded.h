@@ -131,6 +131,7 @@ public:
 		CMD_CLEAR,
 		CMD_RENDER,
 		CMD_RENDER_TEX3D,
+		CMD_BLUR_MENU_BACKGROUND,
 
 		// opengl 2.0+ commands (some are just emulated and only exist in opengl 3.3+)
 		CMD_CREATE_BUFFER_OBJECT, // create vbo
@@ -449,6 +450,12 @@ public:
 		unsigned int m_DrawNum;
 		unsigned int m_DrawCount;
 		void *m_pOffset;
+	};
+
+	struct SCommand_BlurMenuBackground : public SCommand
+	{
+		SCommand_BlurMenuBackground() : SCommand(CMD_BLUR_MENU_BACKGROUND) {}
+		int m_Level;
 	};
 
 	struct SCommand_TrySwapAndReadPixel : public SCommand
@@ -1236,6 +1243,7 @@ public:
 	void Shutdown() override;
 
 	void ReadPixel(ivec2 Position, ColorRGBA *pColor) override;
+	void BlurMenuBackground(int Level) override;
 	void TakeScreenshot(const char *pFilename) override;
 	void TakeCustomScreenshot(const char *pFilename) override;
 	void Swap() override;

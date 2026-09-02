@@ -134,6 +134,9 @@ struct SConfigVariable
 	};
 	IConsole *m_pConsole;
 	const char *m_pScriptName;
+	const char *m_pBkwAlias = nullptr;
+	bool MatchesScriptName(const char *pName) const;
+	static void BkwAliasCallback(IConsole::IResult *pResult, void *pUserData);
 	EVariableType m_Type;
 	int m_Flags;
 	const char *m_pHelp;

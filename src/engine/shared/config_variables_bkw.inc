@@ -74,3 +74,8 @@ MACRO_CONFIG_STR(BkwVideoMapOutput, bkw_video_map_output, 128, "bkw_video.map", 
 MACRO_CONFIG_INT(BkwVideoMapFps, bkw_video_map_fps, 15, 5, 30, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Requested FPS for MP4 to map conversion")
 MACRO_CONFIG_INT(BkwVideoMapDimension, bkw_video_map_dimension, 256, 128, 512, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Maximum decoded video frame dimension for MP4 to map conversion")
 MACRO_CONFIG_INT(BkwVideoMapMaxSeconds, bkw_video_map_max_seconds, 15, 1, 60, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Maximum video duration in seconds for MP4 to map conversion")
+
+// Liquid glass menu appearance. All three are also console commands.
+MACRO_CONFIG_INT(BkwUiGlass, bkw_ui_glass, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable liquid glass menus")
+MACRO_CONFIG_INT(BkwUiGlassTransparency, bkw_ui_glass_transparency, 65, 0, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Glass transparency in percent (0 opaque, 100 transparent)")
+MACRO_CONFIG_INT(BkwUiGlassBlur, bkw_ui_glass_blur, 2, 0, 4, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Glass background blur radius level (0 off, 4 strongest)")

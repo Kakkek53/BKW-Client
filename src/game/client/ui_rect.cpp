@@ -5,6 +5,7 @@
 #include <engine/graphics.h>
 
 IGraphics *CUIRect::ms_pGraphics = nullptr;
+float CUIRect::ms_GlassOpacity = -1.0f;
 
 void CUIRect::HSplitMid(CUIRect *pTop, CUIRect *pBottom, float Spacing) const
 {
@@ -168,6 +169,17 @@ bool CUIRect::Inside(vec2 Point) const
 
 void CUIRect::Draw(ColorRGBA Color, int Corners, float Rounding) const
 {
+	if(ms_GlassOpacity >= 0.0f && Color.a > 0.0f && Color.a < 1.0f && Rounding > 0.0f)
+	{
+		Color.a = ms_GlassOpacity * minimum(1.0f, Color.a * 2.0f);
+		ms_pGraphics->DrawRect(x, y, w, h, Color, Corners, Rounding);
+		const ColorRGBA Shine(1.0f, 1.0f, 1.0f, Color.a * 0.22f);
+		const ColorRGBA Clear(1.0f, 1.0f, 1.0f, 0.0f);
+		ms_pGraphics->DrawRect4(x, y, w, h, Shine, Shine, Clear, Clear, Corners, Rounding);
+		if(w > Rounding * 2.0f && h > 2.0f)
+			ms_pGraphics->DrawRect(x + Rounding, y, w - Rounding * 2.0f, 0.7f, Shine, 0, 0.0f);
+		return;
+	}
 	ms_pGraphics->DrawRect(x, y, w, h, Color, Corners, Rounding);
 }
 

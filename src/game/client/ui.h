@@ -838,6 +838,7 @@ public:
 		CUi *m_pUI; // set by CUi when popup is shown
 		EColorPickerMode m_ColorMode = MODE_UNSET;
 		bool m_Alpha = false;
+		bool m_KeepAlpha = false; // Hide alpha controls without changing the stored alpha byte.
 		unsigned int *m_pHslaColor = nullptr; // may be nullptr
 		ColorHSVA m_HsvaColor;
 		ColorRGBA m_RgbaColor;
