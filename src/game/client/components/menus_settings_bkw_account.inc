@@ -17,6 +17,7 @@ void RenderBkwAccountSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient
 	static CButtonContainer s_ShareDeleteButtons[3];
 	static CButtonContainer s_ImportClipboardButton;
 	static CButtonContainer s_RegisterProtocolButton;
+	static CButtonContainer s_CheckServerButton;
 
 	auto &Cloud = Bkw::CloudAccountState();
 	Cloud.Poll(pHttp, pClient);
@@ -81,6 +82,10 @@ void RenderBkwAccountSettings(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient
 	Row.Draw(ColorRGBA(0.035f, 0.04f, 0.055f, 0.8f), IGraphics::CORNER_ALL, 7.0f);
 	Row.Margin(7.0f, &Row);
 	pUi->DoLabel(&Row, Cloud.Status(), 10.0f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
+	Left.HSplitTop(5.0f, nullptr, &Left);
+	Left.HSplitTop(26.0f, &Row, &Left);
+	if(pMenus->DoButton_Menu(&s_CheckServerButton, "Проверить версию Cloud", 0, &Row) && !Cloud.Busy() && !Cloud.LoginWaiting())
+		Cloud.CheckServer(pHttp);
 
 	Left.HSplitTop(14.0f, nullptr, &Left);
 	Left.HSplitTop(22.0f, &Row, &Left);

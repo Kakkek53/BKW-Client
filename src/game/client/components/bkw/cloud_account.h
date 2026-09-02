@@ -49,6 +49,7 @@ private:
 	enum class ERequest
 	{
 		NONE,
+		SERVER_INFO,
 		DEVICE_START,
 		DEVICE_POLL,
 		ME,
@@ -409,29 +410,63 @@ private:
 
 		if(!Done || m_HttpStatus < 200 || m_HttpStatus >= 300 || !pRoot || pRoot->type != json_object)
 		{
-			if(m_HttpStatus == 401)
+			const char *pError = pRoot && pRoot->type == json_object ? JsonString((*pRoot)["error"]) : "";
+			const char *pStatus = pRoot && pRoot->type == json_object ? JsonString((*pRoot)["status"]) : "";
+			if(CompletedType == ERequest::DEVICE_POLL)
+			{
+				// A failed poll must not be retried on every rendered frame.
+				m_NextDevicePoll = time_get() + time_freq() * (m_HttpStatus == 429 ? 30 : 10);
+				if(m_HttpStatus >= 400 && m_HttpStatus < 500 && m_HttpStatus != 408 && m_HttpStatus != 429)
+				{
+					m_LoginWaiting = false;
+					m_CodeVerifier.clear();
+					m_DeviceCode.clear();
+				}
+			}
+			if(m_HttpStatus == 401 && CompletedType != ERequest::SERVER_INFO && CompletedType != ERequest::DEVICE_START && CompletedType != ERequest::DEVICE_POLL && CompletedType != ERequest::IMPORT_SHARE)
 			{
 				g_Config.m_BkwCloudToken[0] = '\0';
 				m_ProfileLoaded = false;
 				m_ProfileRequestStarted = false;
+				m_vSaves.clear();
+				m_vShares.clear();
+				m_LastShareUrl.clear();
+				m_PendingId.clear();
 				m_Status = "Сессия BKW Cloud истекла — войдите снова";
 			}
-			else if(CompletedType == ERequest::DEVICE_POLL && m_LoginWaiting && m_HttpStatus == 404)
+			else if(CompletedType == ERequest::DEVICE_POLL && m_HttpStatus == 404 && str_comp(pStatus, "expired") == 0)
 			{
 				m_LoginWaiting = false;
 				m_CodeVerifier.clear();
 				m_Status = "Код входа истёк — начните вход заново";
 			}
-			else if(CompletedType == ERequest::DEVICE_POLL && m_LoginWaiting && m_HttpStatus == 403)
+			else if(CompletedType == ERequest::DEVICE_POLL && m_HttpStatus == 403 && str_comp(pError, "pkce_verification_failed") == 0)
 			{
 				m_LoginWaiting = false;
 				m_CodeVerifier.clear();
 				m_Status = "PKCE-проверка входа не пройдена";
 			}
+			else if(m_HttpStatus == 404 && str_comp(pError, "not_found") == 0)
+				m_Status = "Маршрут Cloud не найден (404). Обновите BKW-CLOUD на Render и проверьте версию сервера.";
+			else if(m_HttpStatus == 404 && str_comp(pError, "save_not_found") == 0)
+				m_Status = "Сохранение не найдено (404). Обновите список сохранений.";
+			else if(m_HttpStatus == 404 && str_comp(pError, "share_not_found") == 0)
+				m_Status = "Ссылка удалена или не найдена (404). Обновите список ссылок.";
+			else if(m_HttpStatus == 400 && str_comp(pError, "invalid_settings") == 0)
+				m_Status = "Cloud отклонил настройки (400: invalid_settings). Проверьте версию сервера.";
+			else if(m_HttpStatus == 429)
+				m_Status = "Слишком много запросов к Cloud (429). Подождите и повторите позже.";
+			else if(!Done)
+				m_Status = "Нет ответа BKW Cloud. Проверьте соединение и повторите запрос.";
 			else
 			{
-				char aBuf[160];
-				str_format(aBuf, sizeof(aBuf), "Ошибка BKW Cloud (HTTP %d)", m_HttpStatus);
+				// Only show a bounded machine-readable code, never a response body or credentials.
+				const size_t ErrorLength = str_length(pError);
+				bool SafeError = ErrorLength > 0 && ErrorLength <= 64;
+				for(size_t i = 0; SafeError && i < ErrorLength; ++i)
+					SafeError = (pError[i] >= 'a' && pError[i] <= 'z') || (pError[i] >= '0' && pError[i] <= '9') || pError[i] == '_';
+				char aBuf[256];
+				str_format(aBuf, sizeof(aBuf), "Ошибка BKW Cloud (HTTP %d%s%s)", m_HttpStatus, SafeError ? ": " : "", SafeError ? pError : "");
 				m_Status = aBuf;
 			}
 			if(pRoot)
@@ -441,6 +476,19 @@ private:
 
 		switch(CompletedType)
 		{
+		case ERequest::SERVER_INFO:
+		{
+			const char *pVersion = JsonString((*pRoot)["version"]);
+			if(str_comp(JsonString((*pRoot)["service"]), "bkw-cloud") != 0 || !pVersion[0])
+				m_Status = "Не удалось определить версию BKW Cloud";
+			else
+			{
+				char aBuf[256];
+				str_format(aBuf, sizeof(aBuf), "BKW Cloud: %.32s. Для всех функций аккаунта нужен сервер 0.5.1 или новее.", pVersion);
+				m_Status = aBuf;
+			}
+			break;
+		}
 		case ERequest::DEVICE_START:
 		{
 			m_DeviceCode = JsonString((*pRoot)["device_code"]);
@@ -569,6 +617,15 @@ private:
 	}
 
 public:
+	void CheckServer(IHttp *pHttp)
+	{
+		if(!pHttp || m_pRequest || m_LoginWaiting)
+			return;
+		const std::string Url = std::string(BASE_URL) + "/healthz";
+		Run(pHttp, HttpGet(Url.c_str()), ERequest::SERVER_INFO);
+		m_Status = "Проверяю версию BKW Cloud…";
+	}
+
 	void Poll(IHttp *pHttp, IClient *pClient)
 	{
 		if(m_pRequest && m_pRequest->Done())
@@ -634,6 +691,10 @@ public:
 		m_ProfileRequestStarted = false;
 		m_UserName.clear();
 		m_GlobalName.clear();
+		m_vSaves.clear();
+		m_vShares.clear();
+		m_LastShareUrl.clear();
+		m_PendingId.clear();
 		m_LoginWaiting = false;
 		m_CodeVerifier.clear();
 		m_DeviceCode.clear();
