@@ -27,11 +27,11 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build pkg-config libcurl4-openssl-dev libssl-dev libsqlite3-dev libpng-dev libopus-dev zlib1g-dev libgtest-dev
+          sudo apt-get install -y cmake ninja-build pkg-config libcurl4-openssl-dev libssl-dev libsqlite3-dev libpng-dev libopus-dev zlib1g-dev
       - uses: Swatinem/rust-cache@v2
       - name: Build console regression tests
         run: |
-          cmake -S . -B build-config -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCLIENT=OFF -DTOOLS=OFF -DDOWNLOAD_GTEST=OFF
+          cmake -S . -B build-config -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCLIENT=OFF -DTOOLS=OFF -DDOWNLOAD_GTEST=ON -DCMAKE_DISABLE_FIND_PACKAGE_GTest=ON
           cmake --build build-config --target testrunner --parallel 2
       - name: Test BKW settings and aliases
         run: ./build-config/testrunner --gtest_filter=CBkwConfigTest.*
