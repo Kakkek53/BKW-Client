@@ -6,6 +6,8 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
 class CBkwConfigTest : public ::testing::Test
 {
 protected:

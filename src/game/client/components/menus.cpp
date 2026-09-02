@@ -445,7 +445,7 @@ ColorHSLA CMenus::DoButton_ColorPicker(const CUIRect *pRect, unsigned int *pHsla
 	pRect->Margin(3.0f, &Rect);
 
 	pRect->Draw(Outline, IGraphics::CORNER_ALL, 4.0f);
-	Rect.Draw(color_cast<ColorRGBA>(HslaColor), IGraphics::CORNER_ALL, 4.0f);
+	Graphics()->DrawRect(Rect.x, Rect.y, Rect.w, Rect.h, color_cast<ColorRGBA>(HslaColor), IGraphics::CORNER_ALL, 4.0f);
 
 	if(Ui()->DoButtonLogic(pHslaColor, 0, pRect, BUTTONFLAG_LEFT))
 	{

@@ -7269,7 +7269,7 @@ public:
 		Begin.pClearValues = &Clear;
 		vkCmdBeginRenderPass(CommandBuffer, &Begin, VK_SUBPASS_CONTENTS_INLINE);
 		m_GlassPassActive = true;
-		if(!RenderFrameTexture(CommandBuffer, Image, 1.0f, 1))
+		if(!RenderFrameTexture(CommandBuffer, Image, 1.0f, 1, true))
 			return false;
 		m_vLastPipeline[0] = VK_NULL_HANDLE;
 		return true;
@@ -7295,7 +7295,7 @@ public:
 		return RenderFrameTexture(MainCommandBuffer, FrameBlendImage, BlendAlphaPerPass, BlendPassCount);
 	}
 
-	[[nodiscard]] bool RenderFrameTexture(VkCommandBuffer &MainCommandBuffer, const SFrameBlendImage &FrameBlendImage, float BlendAlphaPerPass, int BlendPassCount)
+	[[nodiscard]] bool RenderFrameTexture(VkCommandBuffer &MainCommandBuffer, const SFrameBlendImage &FrameBlendImage, float BlendAlphaPerPass, int BlendPassCount, bool FullCanvas = false)
 	{
 		// With multiple render threads the render pass was begun with
 		// VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS — inline draws into the primary
@@ -7332,7 +7332,7 @@ public:
 		State.m_WrapMode = EWrapMode::CLAMP;
 		State.m_Texture = 0;
 		State.m_ScreenTL = vec2(0.0f, 0.0f);
-		auto Viewport = m_VKSwapImgAndViewportExtent.GetPresentedImageViewport();
+		auto Viewport = FullCanvas ? m_VKSwapImgAndViewportExtent.m_SwapImageViewport : m_VKSwapImgAndViewportExtent.GetPresentedImageViewport();
 		State.m_ScreenBR = vec2((float)Viewport.width, (float)Viewport.height);
 		State.m_ClipEnable = false;
 
@@ -7340,6 +7340,13 @@ public:
 		ExecBuffer.m_ThreadIndex = MAIN_THREAD_INDEX;
 		ExecBuffer.m_IndexBuffer = m_IndexBuffer;
 		ExecBufferFillDynamicStates(State, ExecBuffer);
+		if(FullCanvas)
+		{
+			// Preserve letterboxing and custom aspect ratios captured in the full image.
+			ExecBuffer.m_HasDynamicState = true;
+			ExecBuffer.m_Viewport = {0.0f, 0.0f, (float)Viewport.width, (float)Viewport.height, 0.0f, 1.0f};
+			ExecBuffer.m_Scissor = {{0, 0}, Viewport};
+		}
 
 		bool IsTextured;
 		size_t BlendModeIndex;

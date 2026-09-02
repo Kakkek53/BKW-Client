@@ -1448,9 +1448,10 @@ void CCommandProcessorFragment_OpenGL3_3::Cmd_BlurMenuBackground(const CCommandB
 {
 	if(m_CanvasWidth < 16 || m_CanvasHeight < 16)
 		return;
-	GLint ReadFramebuffer, DrawFramebuffer, aViewport[4];
+	GLint ReadFramebuffer, DrawFramebuffer, ReadBuffer, aViewport[4];
 	glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &ReadFramebuffer);
 	glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &DrawFramebuffer);
+	glGetIntegerv(GL_READ_BUFFER, &ReadBuffer);
 	glGetIntegerv(GL_VIEWPORT, aViewport);
 	const bool ClipEnabled = glIsEnabled(GL_SCISSOR_TEST);
 	glDisable(GL_SCISSOR_TEST);
@@ -1486,6 +1487,7 @@ void CCommandProcessorFragment_OpenGL3_3::Cmd_BlurMenuBackground(const CCommandB
 	// Resolve MSAA before scaling. A downsample/upsample pyramid gives a spatial
 	// blur of this frame, with no CPU readback and no previous-menu feedback.
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, DrawFramebuffer);
+	glReadBuffer(DrawFramebuffer == 0 ? GL_BACK : GL_COLOR_ATTACHMENT0);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_aGlassFramebuffers[0]);
 	glBlitFramebuffer(0, 0, m_CanvasWidth, m_CanvasHeight, 0, 0, m_CanvasWidth, m_CanvasHeight, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 	const int Level = std::clamp(pCommand->m_Level, 1, 4);
@@ -1547,6 +1549,7 @@ void CCommandProcessorFragment_OpenGL3_3::Cmd_BlurMenuBackground(const CCommandB
 
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, ReadFramebuffer);
+	glReadBuffer(ReadBuffer);
 	glViewport(aViewport[0], aViewport[1], aViewport[2], aViewport[3]);
 	if(ClipEnabled)
 		glEnable(GL_SCISSOR_TEST);

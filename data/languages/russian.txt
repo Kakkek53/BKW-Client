@@ -2776,3 +2776,15 @@ Freeze input while peeking
 
 Peek return time
 == Время возврата камеры
+
+Liquid glass
+== Жидкое стекло
+
+Transparency
+== Прозрачность
+
+Blur
+== Размытие
+
+Background blur uses Vulkan or OpenGL 3.3+. Text stays sharp.
+== Для размытия нужен Vulkan или OpenGL 3.3+. Текст остаётся чётким.
