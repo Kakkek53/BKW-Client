@@ -2950,13 +2950,14 @@ protected:
 		return m_aSamplers[SamplerType];
 	}
 
-	VkImageView CreateImageView(VkImage Image, VkFormat Format, VkImageViewType ViewType, size_t Depth, size_t MipMapLevelCount)
+	VkImageView CreateImageView(VkImage Image, VkFormat Format, VkImageViewType ViewType, size_t Depth, size_t MipMapLevelCount, bool OpaqueAlpha = false)
 	{
 		VkImageViewCreateInfo ViewCreateInfo{};
 		ViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		ViewCreateInfo.image = Image;
 		ViewCreateInfo.viewType = ViewType;
 		ViewCreateInfo.format = Format;
+		ViewCreateInfo.components.a = OpaqueAlpha ? VK_COMPONENT_SWIZZLE_ONE : VK_COMPONENT_SWIZZLE_IDENTITY;
 		ViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		ViewCreateInfo.subresourceRange.baseMipLevel = 0;
 		ViewCreateInfo.subresourceRange.levelCount = MipMapLevelCount;
@@ -7167,7 +7168,7 @@ public:
 		{
 			if(!CreateImage(Extent.width, Extent.height, 1, 5, m_VKSurfFormat.format, VK_IMAGE_TILING_OPTIMAL, Image.m_Image, Image.m_ImgMem))
 				return false;
-			Image.m_ImgView = CreateImageView(Image.m_Image, m_VKSurfFormat.format, VK_IMAGE_VIEW_TYPE_2D, 1, 1);
+			Image.m_ImgView = CreateImageView(Image.m_Image, m_VKSurfFormat.format, VK_IMAGE_VIEW_TYPE_2D, 1, 1, true);
 			if(Image.m_ImgView == VK_NULL_HANDLE || !CreateFrameBlendDescriptorSet(Image))
 				return false;
 		}
@@ -7328,7 +7329,7 @@ public:
 		}
 
 		CCommandBuffer::SState State{};
-		State.m_BlendMode = FullCanvas ? EBlendMode::NONE : EBlendMode::ALPHA;
+		State.m_BlendMode = EBlendMode::ALPHA;
 		State.m_WrapMode = EWrapMode::CLAMP;
 		State.m_Texture = 0;
 		State.m_ScreenTL = vec2(0.0f, 0.0f);
