@@ -5,7 +5,9 @@
 #include <engine/console.h>
 #include <engine/shared/config.h>
 
-#include <game/client/ui_listbox.h>
+#include <game/client/ui_scrollregion.h>
+#include <engine/image.h>
+#include <engine/gfx/image_manipulation.h>
 #include <game/localization.h>
 
 #include <algorithm>
@@ -33,7 +35,8 @@ void ExecuteAssetCommand(IConsole *pConsole, ESkinShopCategory Category, const c
 {
 	char aCommand[IConsole::CMDLINE_LENGTH];
 	str_format(aCommand, sizeof(aCommand), "%s \"%s\"", CSkinShop::CategoryConfigCommand(Category), pAssetName);
-	pConsole->ExecuteLine(aCommand, IConsole::CLIENT_ID_GAME);
+	// This is a trusted local settings action, not a map command.
+	pConsole->ExecuteLine(aCommand, IConsole::CLIENT_ID_NO_GAME);
 }
 
 bool MatchesSearch(const SSkinShopItem &Item, const char *pSearch)
@@ -58,7 +61,7 @@ void CMenus::RenderSettingsAssetsShop(CUIRect MainView)
 	if(!m_SkinShop.Loading() && m_SkinShop.HasMore())
 		m_SkinShop.LoadNextPage();
 
-	CUIRect Header, SourceBar, CategoryBar, SearchBar, ListView, Details;
+	CUIRect Header, SourceBar, CategoryBar, SearchBar;
 	MainView.HSplitTop(24.0f, &Header, &MainView);
 	Ui()->DoLabel(&Header, Localize("Texture shop"), 18.0f, TEXTALIGN_ML);
 	MainView.HSplitTop(5.0f, nullptr, &MainView);
@@ -114,217 +117,147 @@ void CMenus::RenderSettingsAssetsShop(CUIRect MainView)
 	Ui()->DoClearableEditBox(&s_SearchInput, &SearchBox, 12.0f);
 
 	MainView.HSplitTop(8.0f, nullptr, &MainView);
-	MainView.HSplitBottom(210.0f, &ListView, &Details);
-	Details.HSplitTop(8.0f, nullptr, &Details);
 
-	const auto &vItems = m_SkinShop.Items();
-	std::vector<const SSkinShopItem *> vpFilteredItems;
-	vpFilteredItems.reserve(vItems.size());
-	const char *pSearch = s_SearchInput.GetString();
-	for(const SSkinShopItem &Item : vItems)
+	CUIRect Footer;
+	MainView.HSplitBottom(22.0f, &MainView, &Footer);
+	static CButtonContainer s_RefreshButton;
+	CUIRect Refresh;
+	Footer.VSplitRight(90.0f, &Footer, &Refresh);
+	if(DoButton_Menu(&s_RefreshButton, Localize("Refresh"), 0, &Refresh))
+		m_SkinShop.Refresh();
+
+	std::vector<const SSkinShopItem *> vpItems;
+	for(const auto &Item : m_SkinShop.Items())
+		if(MatchesSearch(Item, s_SearchInput.GetString()))
+			vpItems.push_back(&Item);
+
+	char aCount[128];
+	str_format(aCount, sizeof(aCount), "%zu textures%s", vpItems.size(), m_SkinShop.Loading() ? " • loading..." : "");
+	Ui()->DoLabel(&Footer, aCount, 11.0f, TEXTALIGN_ML);
+	static CScrollRegion s_Scroll;
+	static std::string s_Filter;
+	const std::string Filter = std::to_string((int)m_SkinShop.Category()) + ":" +
+		std::to_string(m_SkinShop.SourceEnabled(ESkinShopSource::CHERYDATA)) +
+		std::to_string(m_SkinShop.SourceEnabled(ESkinShopSource::TEEDATA)) + s_SearchInput.GetString();
+	if(Filter != s_Filter)
 	{
-		if(MatchesSearch(Item, pSearch))
-			vpFilteredItems.push_back(&Item);
+		s_Filter = Filter;
+		s_Scroll.Reset();
+		Ui()->SetActiveItem(nullptr);
 	}
+	for(auto &[Key, Card] : m_ShopCards)
+		Card.m_Visible = false;
 
-	static CListBox s_ShopListBox;
-	static int s_Selected = -1;
-	static ESkinShopCategory s_SelectedCategory = ESkinShopCategory::NUM_CATEGORIES;
-	static int s_SourceMask = -1;
-	static std::string s_LastSearch;
-	static IGraphics::CTextureHandle s_PreviewTexture;
-	static std::string s_PreviewPath;
-
-	auto ClearPreview = [&]() {
-		if(s_PreviewTexture.IsValid() && !s_PreviewTexture.IsNullTexture())
-			Graphics()->UnloadTexture(&s_PreviewTexture);
-		s_PreviewTexture.Invalidate();
-		s_PreviewPath.clear();
-	};
-
-	const int SourceMask =
-		(m_SkinShop.SourceEnabled(ESkinShopSource::CHERYDATA) ? 1 : 0) |
-		(m_SkinShop.SourceEnabled(ESkinShopSource::TEEDATA) ? 2 : 0);
-	if(s_SelectedCategory != m_SkinShop.Category() || s_SourceMask != SourceMask || s_LastSearch != pSearch)
+	CScrollRegionParams Params;
+	Params.m_ScrollUnit = 220.0f;
+	Params.m_ScrollbarThickness = 12.0f;
+	s_Scroll.Begin(&MainView, &Params);
+	const int Columns = std::clamp((int)(MainView.w / 185.0f), 1, 5);
+	const float Width = MainView.w / Columns;
+	for(size_t i = 0; i < vpItems.size(); ++i)
 	{
-		s_SelectedCategory = m_SkinShop.Category();
-		s_SourceMask = SourceMask;
-		s_LastSearch = pSearch;
-		s_Selected = -1;
-		ClearPreview();
-	}
+		const auto &Item = *vpItems[i];
+		CUIRect CardRect{MainView.x + (i % Columns) * Width, MainView.y + (i / Columns) * 220.0f, Width, 220.0f};
+		if(!s_Scroll.AddRect(CardRect))
+			continue;
+		auto &Card = m_ShopCards[std::to_string((int)m_SkinShop.Category()) + ":" + Item.m_Id];
+		Card.m_Visible = true;
+		CardRect.Margin(4.0f, &CardRect);
+		CardRect.Draw(ColorRGBA(0.08f, 0.09f, 0.12f, 0.75f), IGraphics::CORNER_ALL, 9.0f);
+		CardRect.Margin(8.0f, &CardRect);
+		CUIRect Preview, Name, Author, Status, Buttons;
+		CardRect.HSplitTop(112.0f, &Preview, &CardRect);
+		CardRect.HSplitTop(25.0f, &Name, &CardRect);
+		CardRect.HSplitTop(18.0f, &Author, &CardRect);
+		CardRect.HSplitTop(18.0f, &Status, &Buttons);
+		Ui()->DoLabel(&Name, Item.m_Name.c_str(), 13.0f, TEXTALIGN_ML, {.m_MaxWidth = Name.w});
+		const std::string Meta = std::string(CSkinShop::SourceName(Item.m_Source)) + " • " + Item.m_Author;
+		Ui()->DoLabel(&Author, Meta.c_str(), 10.0f, TEXTALIGN_ML, {.m_MaxWidth = Author.w});
 
-	if(s_Selected >= (int)vpFilteredItems.size())
-		s_Selected = -1;
-
-	if(vpFilteredItems.empty())
-	{
-		ClearPreview();
-		const char *pMessage;
-		if(m_SkinShop.Loading())
-			pMessage = Localize("Loading shop items...");
-		else if(m_SkinShop.Error())
-			pMessage = Localize("Could not load the shop. Try opening the tab again.");
-		else if(pSearch[0] != '\0')
-			pMessage = Localize("No textures match your search.");
+		m_SkinShop.RequestPreview(Item);
+		const std::string Path = m_SkinShop.PreviewPath(Item);
+		if(m_SkinShop.PreviewReady(Item) && Card.m_Path != Path)
+		{
+			if(Card.m_Texture.IsValid())
+				Graphics()->UnloadTexture(&Card.m_Texture);
+			Card.m_Path = Path;
+			CImageInfo Image;
+			if(Graphics()->LoadPng(Image, Path.c_str(), IStorage::TYPE_SAVE))
+			{
+				Card.m_Aspect = (float)Image.m_Width / maximum(1.0f, (float)Image.m_Height);
+				const float Scale = minimum(1.0f, 384.0f / maximum((float)Image.m_Width, (float)Image.m_Height));
+				if(Scale < 1.0f)
+					ResizeImage(Image, maximum(1, (int)(Image.m_Width * Scale)), maximum(1, (int)(Image.m_Height * Scale)));
+				Card.m_Texture = Graphics()->LoadTextureRawMove(Image, 0, Path.c_str());
+			}
+		}
+		// A neutral checkerboard makes transparent parts of the actual texture visible.
+		{
+			const CUIRect::CScopedGlass NoGlass(-1.0f);
+			Preview.Draw(ColorRGBA(0.16f, 0.16f, 0.16f, 1.0f), 0, 0);
+			for(float y = 0; y < Preview.h; y += 12.0f)
+				for(float x = 0; x < Preview.w; x += 12.0f)
+					if(((int)(x / 12) + (int)(y / 12)) % 2 == 0)
+						CUIRect{Preview.x + x, Preview.y + y, minimum(12.0f, Preview.w - x), minimum(12.0f, Preview.h - y)}.Draw(ColorRGBA(0.23f, 0.23f, 0.23f, 1), 0, 0);
+		}
+		if(Card.m_Texture.IsValid() && !Card.m_Texture.IsNullTexture())
+		{
+			const float W = minimum(Preview.w, Preview.h * Card.m_Aspect);
+			const float H = W / Card.m_Aspect;
+			Graphics()->WrapClamp();
+			Graphics()->TextureSet(Card.m_Texture);
+			Graphics()->QuadsBegin();
+			Graphics()->SetColor(1, 1, 1, 1);
+			IGraphics::CQuadItem Quad(Preview.x + (Preview.w - W) / 2, Preview.y + (Preview.h - H) / 2, W, H);
+			Graphics()->QuadsDrawTL(&Quad, 1);
+			Graphics()->QuadsEnd();
+			Graphics()->WrapNormal();
+		}
 		else
-			pMessage = Localize("No textures found.");
-		Ui()->DoLabel(&ListView, pMessage, 16.0f, TEXTALIGN_MC);
-	}
-	else
-	{
-		s_ShopListBox.DoStart(48.0f, vpFilteredItems.size(), 1, 1, s_Selected, &ListView, false);
-		int Hovered = -1;
-		for(size_t i = 0; i < vpFilteredItems.size(); ++i)
+			Ui()->DoLabel(&Preview, m_SkinShop.PreviewError(Item) || !Card.m_Path.empty() ? Localize("Preview unavailable") : Localize("Loading preview..."), 11.0f, TEXTALIGN_MC);
+
+		const bool Installed = m_SkinShop.Installed(Item);
+		const std::string AssetName = CSkinShop::AssetName(Item);
+		const bool Applied = Installed && str_comp(CurrentAssetName(m_SkinShop.Category()), AssetName.c_str()) == 0;
+		char aStatus[96];
+		if(m_SkinShop.DownloadLoading(Item))
+			str_format(aStatus, sizeof(aStatus), Localize("Downloading... %d%%"), m_SkinShop.DownloadProgress(Item));
+		else
+			str_copy(aStatus, m_SkinShop.DownloadError(Item) ? Localize("Download failed") : Applied ? Localize("Applied") : Installed ? Localize("Downloaded") : "");
+		Ui()->DoLabel(&Status, aStatus, 10.0f, TEXTALIGN_ML, {.m_MaxWidth = Status.w});
+		if(Installed)
 		{
-			const SSkinShopItem &ItemData = *vpFilteredItems[i];
-			const CListboxItem Item = s_ShopListBox.DoNextItem(&ItemData, s_Selected == (int)i);
-			if(!Item.m_Visible)
-				continue;
-
-			if(Ui()->MouseInside(&Item.m_Rect))
-				Hovered = (int)i;
-
-			CUIRect Row = Item.m_Rect;
-			Row.Margin(5.0f, &Row);
-			CUIRect Name, Meta;
-			Row.HSplitTop(20.0f, &Name, &Meta);
-			Ui()->DoLabel(&Name, ItemData.m_Name.c_str(), 15.0f, TEXTALIGN_ML);
-
-			char aMeta[320];
-			const char *pSourceName = CSkinShop::SourceName(ItemData.m_Source);
-			if(!ItemData.m_Author.empty())
-				str_format(aMeta, sizeof(aMeta), "%s  |  %s  |  %dx%d  |  %s", pSourceName, ItemData.m_Author.c_str(), ItemData.m_Width, ItemData.m_Height, ItemData.m_Type.c_str());
-			else
-				str_format(aMeta, sizeof(aMeta), "%s  |  %dx%d  |  %s", pSourceName, ItemData.m_Width, ItemData.m_Height, ItemData.m_Type.c_str());
-			Ui()->DoLabel(&Meta, aMeta, 12.0f, TEXTALIGN_ML);
+			CUIRect Apply, Delete;
+			Buttons.VSplitRight(30.0f, &Apply, &Delete);
+			Apply.VSplitRight(4.0f, &Apply, nullptr);
+			if(DoButton_Menu(&Card.m_ApplyButton, Applied ? Localize("Applied") : Localize("Apply"), Applied, &Apply) && !Applied)
+				ExecuteAssetCommand(Console(), m_SkinShop.Category(), AssetName.c_str());
+			if(DoButton_Menu(&Card.m_DeleteButton, "×", 0, &Delete))
+			{
+				if(Applied)
+					ExecuteAssetCommand(Console(), m_SkinShop.Category(), "default");
+				m_SkinShop.DeleteInstalled(Item);
+				if(Card.m_Texture.IsValid())
+					Graphics()->UnloadTexture(&Card.m_Texture);
+				Card.m_Path.clear();
+			}
 		}
-
-		const int ClickedSelected = s_ShopListBox.DoEnd();
-		if(ClickedSelected >= 0)
-			s_Selected = ClickedSelected;
-		if(Hovered >= 0)
-			s_Selected = Hovered;
-		if(s_Selected < 0)
-			s_Selected = 0;
+		else if(m_SkinShop.DownloadLoading(Item))
+			Ui()->DoLabel(&Buttons, Localize("Downloading..."), 11.0f, TEXTALIGN_MC);
+		else if(m_SkinShop.DownloadBusy())
+			Ui()->DoLabel(&Buttons, Localize("Please wait..."), 11.0f, TEXTALIGN_MC);
+		else if(DoButton_Menu(&Card.m_DownloadButton, Localize("Download"), 0, &Buttons))
+			m_SkinShop.Download(Item);
 	}
-
-	if(s_Selected < 0 || s_Selected >= (int)vpFilteredItems.size())
-	{
-		char aStatus[192];
-		str_format(aStatus, sizeof(aStatus), "%zu / %zu items%s", vpFilteredItems.size(), vItems.size(), m_SkinShop.Loading() ? "  |  loading more..." : "");
-		Ui()->DoLabel(&Details, aStatus, 13.0f, TEXTALIGN_ML);
-		return;
-	}
-
-	const SSkinShopItem &Selected = *vpFilteredItems[s_Selected];
-	m_SkinShop.RequestPreview(Selected);
-
-	const bool PreviewReady = m_SkinShop.PreviewReady(Selected);
-	if(PreviewReady)
-	{
-		const std::string PreviewPath = m_SkinShop.PreviewPath(Selected);
-		if(PreviewPath != s_PreviewPath || !s_PreviewTexture.IsValid() || s_PreviewTexture.IsNullTexture())
+	if(vpItems.empty())
+		Ui()->DoLabel(&MainView, m_SkinShop.Loading() ? Localize("Loading shop items...") : m_SkinShop.Error() ? Localize("Could not load the shop. Try refreshing.") : Localize("No textures found."), 14.0f, TEXTALIGN_MC);
+	s_Scroll.End();
+	// Keep GPU memory bounded to visible cards, not the entire marketplace.
+	for(auto &[Key, Card] : m_ShopCards)
+		if(!Card.m_Visible)
 		{
-			ClearPreview();
-			s_PreviewPath = PreviewPath;
-			s_PreviewTexture = Graphics()->LoadTexture(s_PreviewPath.c_str(), IStorage::TYPE_SAVE);
+			if(Card.m_Texture.IsValid())
+				Graphics()->UnloadTexture(&Card.m_Texture);
+			Card.m_Path.clear();
 		}
-	}
-	else if(!s_PreviewPath.empty())
-	{
-		ClearPreview();
-	}
-
-	CUIRect PreviewColumn, InfoColumn;
-	Details.VSplitLeft(std::min(300.0f, Details.w * 0.42f), &PreviewColumn, &InfoColumn);
-	PreviewColumn.VSplitRight(10.0f, &PreviewColumn, nullptr);
-	InfoColumn.VSplitLeft(10.0f, nullptr, &InfoColumn);
-
-	PreviewColumn.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 0.28f), IGraphics::CORNER_ALL, 6.0f);
-	CUIRect PreviewRect = PreviewColumn;
-	PreviewRect.Margin(8.0f, &PreviewRect);
-	if(s_PreviewTexture.IsValid() && !s_PreviewTexture.IsNullTexture())
-	{
-		float ImageW = Selected.m_Width > 0 ? (float)Selected.m_Width : PreviewRect.w;
-		float ImageH = Selected.m_Height > 0 ? (float)Selected.m_Height : PreviewRect.h;
-		const float Scale = std::min(PreviewRect.w / ImageW, PreviewRect.h / ImageH);
-		ImageW *= Scale;
-		ImageH *= Scale;
-
-		Graphics()->WrapClamp();
-		Graphics()->TextureSet(s_PreviewTexture);
-		Graphics()->QuadsBegin();
-		Graphics()->SetColor(1, 1, 1, 1);
-		IGraphics::CQuadItem Quad(PreviewRect.x + (PreviewRect.w - ImageW) / 2.0f, PreviewRect.y + (PreviewRect.h - ImageH) / 2.0f, ImageW, ImageH);
-		Graphics()->QuadsDrawTL(&Quad, 1);
-		Graphics()->QuadsEnd();
-		Graphics()->WrapNormal();
-	}
-	else
-	{
-		const char *pPreviewStatus = m_SkinShop.PreviewError(Selected) ? Localize("Preview unavailable") : Localize("Loading preview...");
-		Ui()->DoLabel(&PreviewRect, pPreviewStatus, 14.0f, TEXTALIGN_MC);
-	}
-
-	CUIRect Name, Meta, LocalName, Status, ButtonRow;
-	InfoColumn.HSplitTop(28.0f, &Name, &InfoColumn);
-	Ui()->DoLabel(&Name, Selected.m_Name.c_str(), 18.0f, TEXTALIGN_ML);
-	InfoColumn.HSplitTop(22.0f, &Meta, &InfoColumn);
-	char aMeta[320];
-	str_format(aMeta, sizeof(aMeta), "%s  |  %s%s%s  |  %dx%d",
-		CSkinShop::SourceName(Selected.m_Source),
-		Selected.m_Author.empty() ? "" : Selected.m_Author.c_str(),
-		Selected.m_Author.empty() ? "" : "  |  ",
-		Selected.m_Type.c_str(), Selected.m_Width, Selected.m_Height);
-	Ui()->DoLabel(&Meta, aMeta, 13.0f, TEXTALIGN_ML);
-
-	InfoColumn.HSplitTop(22.0f, &LocalName, &InfoColumn);
-	const std::string AssetName = CSkinShop::AssetName(Selected);
-	char aLocalName[160];
-	str_format(aLocalName, sizeof(aLocalName), "Local: %s", AssetName.c_str());
-	Ui()->DoLabel(&LocalName, aLocalName, 12.0f, TEXTALIGN_ML);
-
-	InfoColumn.HSplitTop(22.0f, &Status, &InfoColumn);
-	const bool IsInstalled = m_SkinShop.Installed(Selected);
-	const bool IsSelected = IsInstalled && str_comp(CurrentAssetName(m_SkinShop.Category()), AssetName.c_str()) == 0;
-	char aStatus[224];
-	if(m_SkinShop.DownloadLoading(Selected))
-		str_format(aStatus, sizeof(aStatus), Localize("Downloading... %d%%"), m_SkinShop.DownloadProgress(Selected));
-	else if(m_SkinShop.DownloadError(Selected))
-		str_copy(aStatus, Localize("Download failed. You can try again."));
-	else if(IsSelected)
-		str_copy(aStatus, Localize("Downloaded and selected"));
-	else if(IsInstalled)
-		str_copy(aStatus, Localize("Downloaded"));
-	else
-		str_format(aStatus, sizeof(aStatus), "%s  |  %s%s", Selected.m_FileName.c_str(), CSkinShop::SourceName(Selected.m_Source), m_SkinShop.Loading() ? "  |  loading more..." : "");
-	Ui()->DoLabel(&Status, aStatus, 12.0f, TEXTALIGN_ML);
-
-	InfoColumn.HSplitBottom(34.0f, &InfoColumn, &ButtonRow);
-	static CButtonContainer s_DownloadButton;
-	static CButtonContainer s_DeleteButton;
-	static CButtonContainer s_SelectButton;
-
-	if(!IsInstalled)
-	{
-		const bool Downloading = m_SkinShop.DownloadLoading(Selected);
-		const char *pLabel = Downloading ? Localize("Downloading...") : Localize("Download");
-		if(DoButton_Menu(&s_DownloadButton, pLabel, 0, &ButtonRow) && !Downloading)
-			m_SkinShop.Download(Selected);
-	}
-	else
-	{
-		CUIRect DeleteButton, SelectButton;
-		ButtonRow.VSplitMid(&DeleteButton, &SelectButton, 8.0f);
-		if(DoButton_Menu(&s_DeleteButton, Localize("Delete"), 0, &DeleteButton, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 5.0f, 0.0f, ColorRGBA(0.8f, 0.25f, 0.25f, 0.65f)))
-		{
-			if(IsSelected)
-				ExecuteAssetCommand(Console(), m_SkinShop.Category(), "default");
-			m_SkinShop.DeleteInstalled(Selected);
-		}
-
-		if(DoButton_Menu(&s_SelectButton, IsSelected ? Localize("Selected") : Localize("Select texture"), IsSelected, &SelectButton) && !IsSelected)
-			ExecuteAssetCommand(Console(), m_SkinShop.Category(), AssetName.c_str());
-	}
 }

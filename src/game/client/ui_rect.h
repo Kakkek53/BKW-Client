@@ -18,7 +18,19 @@ public:
 	static void Init(IGraphics *pGraphics) { ms_pGraphics = pGraphics; }
 	// Negative opacity restores normal rendering. Scoped to menu rendering.
 	static void SetGlassOpacity(float Opacity) { ms_GlassOpacity = Opacity; }
+	static float GlassOpacity() { return ms_GlassOpacity; }
 	static void SetGlassColor(ColorRGBA Color) { ms_GlassColor = Color; }
+
+	// Restore the enclosing menu's material even when an overlay returns early.
+	class CScopedGlass
+	{
+		float m_Previous;
+	public:
+		explicit CScopedGlass(float Opacity) : m_Previous(GlassOpacity()) { SetGlassOpacity(Opacity); }
+		~CScopedGlass() { SetGlassOpacity(m_Previous); }
+		CScopedGlass(const CScopedGlass &) = delete;
+		CScopedGlass &operator=(const CScopedGlass &) = delete;
+	};
 
 	float x, y, w, h;
 

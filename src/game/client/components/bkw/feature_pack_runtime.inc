@@ -304,9 +304,7 @@ inline void RenderHookTargetIndicator(CGameClient *pGameClient, IClient *pClient
 
 inline void OnRender(CGameClient *pGameClient, IClient *pClient, IGraphics *pGraphics, CCollision *pCollision)
 {
-	ApplyOptimizerProfile();
 	UpdateTipoCheat(pGameClient, pClient);
-	UpdateAdaptiveAntiPing(pClient);
 	RenderHookTargetIndicator(pGameClient, pClient, pGraphics, pCollision);
 }
 

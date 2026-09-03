@@ -2680,6 +2680,11 @@ void CMenus::OnReset()
 
 void CMenus::OnShutdown()
 {
+	m_SkinShop.Abort();
+	for(auto &[Key, Card] : m_ShopCards)
+		if(Card.m_Texture.IsValid())
+			Graphics()->UnloadTexture(&Card.m_Texture);
+	m_ShopCards.clear();
 	m_MenuMediaBackground.Shutdown();
 	m_CommunityIcons.Shutdown();
 }

@@ -345,7 +345,8 @@ std::string CSkinShop::AssetName(const SSkinShopItem &Item)
 	if(Id.size() > 16)
 		Id.erase(0, Id.size() - 16);
 	const std::string Suffix = "_" + Id;
-	const size_t MaxBaseLength = 56 > Suffix.size() ? 56 - Suffix.size() : 1;
+	// cl_asset_* buffers contain 50 bytes including the terminator.
+	const size_t MaxBaseLength = 49 - Suffix.size();
 	if(Base.size() > MaxBaseLength)
 		Base.resize(MaxBaseLength);
 	return Base + Suffix;
@@ -390,7 +391,7 @@ bool CSkinShop::PreviewLoading(const SSkinShopItem &Item) const
 
 bool CSkinShop::PreviewError(const SSkinShopItem &Item) const
 {
-	return m_PreviewError && m_PreviewItemId == Item.m_Id;
+	return m_FailedPreviews.count(Item.m_Id) != 0;
 }
 
 bool CSkinShop::DownloadLoading(const SSkinShopItem &Item) const
@@ -416,13 +417,9 @@ void CSkinShop::RequestPreview(const SSkinShopItem &Item)
 	if(m_pHttp == nullptr || m_pStorage == nullptr || PreviewUrl.empty() || PreviewReady(Item))
 		return;
 
-	if(m_pPreviewRequest != nullptr)
-	{
-		if(m_PreviewItemId == Item.m_Id)
-			return;
-		m_pPreviewRequest->Abort();
-		m_pPreviewRequest.reset();
-	}
+	// Visible cards request previews each frame. Finish one before starting another.
+	if(m_pPreviewRequest != nullptr || PreviewError(Item))
+		return;
 
 	m_PreviewItemId = Item.m_Id;
 	m_PreviewRequestPath = CachedPreviewPath(Item);
@@ -439,12 +436,7 @@ void CSkinShop::Download(const SSkinShopItem &Item)
 		return;
 
 	if(m_pDownloadRequest != nullptr)
-	{
-		if(m_DownloadItemId == Item.m_Id)
-			return;
-		m_pDownloadRequest->Abort();
-		m_pDownloadRequest.reset();
-	}
+		return;
 
 	PrepareStorage();
 	const std::string Folder = std::string("assets/") + CategoryAssetFolder(m_Category);
@@ -558,6 +550,7 @@ void CSkinShop::Abort()
 		m_aRequestPage[i] = 0;
 	m_PreviewError = false;
 	m_DownloadError = false;
+	m_FailedPreviews.clear();
 }
 
 void CSkinShop::StartPage(ESkinShopSource Source, int Page)
@@ -663,6 +656,8 @@ void CSkinShop::Update()
 		const bool Success = m_pPreviewRequest->State() == EHttpState::DONE && m_pStorage != nullptr && m_pStorage->FileExists(m_PreviewRequestPath.c_str(), IStorage::TYPE_SAVE);
 		m_pPreviewRequest.reset();
 		m_PreviewError = !Success;
+		if(!Success)
+			m_FailedPreviews.insert(m_PreviewItemId);
 	}
 
 	if(m_pDownloadRequest != nullptr && m_pDownloadRequest->Done())

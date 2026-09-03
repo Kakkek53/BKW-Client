@@ -43,23 +43,16 @@
 		constexpr float LocalDuelHeight = 735.0f;
 		constexpr float DdnetMenuHeight = 280.0f;
 		constexpr float EgoDetailsHeight = 135.0f;
-		constexpr float OptimizerHeight = 245.0f;
 		constexpr float TipoCheatHeight = 250.0f;
 		constexpr float HookTargetHeight = 220.0f;
-		constexpr float AntiPingHeight = 170.0f;
 		constexpr float MiniMapHeight = 300.0f;
-		constexpr float AnimatedBackgroundHeight = 510.0f;
 		constexpr float CameraDriftHeight = 320.0f;
-		constexpr float HudHeight = 800.0f;
-		constexpr float BackgroundHeight = 470.0f;
 
 		static SBkwCompactToggleState s_LocalDuelToggle;
 		static SBkwCompactToggleState s_DdnetMenuToggle;
 		static SBkwCompactToggleState s_EgoDetailsToggle;
-		static SBkwCompactToggleState s_OptimizerToggle;
 		static SBkwCompactToggleState s_TipoCheatToggle;
 		static SBkwCompactToggleState s_HookTargetToggle;
-		static SBkwCompactToggleState s_AntiPingToggle;
 		static SBkwCompactToggleState s_CameraDriftToggle;
 		static SBkwCompactToggleState s_MiniMapToggle;
 
@@ -141,15 +134,6 @@
 			RenderBkwCompactToggleRow(pMenus, pUi, Module, "Дрифт камеры", &g_Config.m_BcCameraDrift, s_CameraDriftToggle);
 		AddGap(LeftColumn);
 
-		AddRect(LeftColumn, g_Config.m_BkwOptimizer ? OptimizerHeight : CompactHeight, Module);
-		if(g_Config.m_BkwOptimizer)
-			RenderBkwOptimizerSettings(pMenus, pUi, Module);
-		else
-			RenderBkwCompactToggleRow(pMenus, pUi, Module, "BKW Оптимизация", &g_Config.m_BkwOptimizer, s_OptimizerToggle);
-		AddGap(LeftColumn);
-
-		AddRect(LeftColumn, HudHeight, Module);
-		RenderLegacySection(LEGACY_HUD, Module);
 
 		// ----- Right column -----
 		AddRect(RightColumn, g_Config.m_BkwDdnetVoteMenu ? DdnetMenuHeight : CompactHeight, Module);
@@ -166,12 +150,6 @@
 			RenderBkwCompactToggleRow(pMenus, pUi, Module, "BKW Local Duel", &g_Config.m_BkwLocalDuel, s_LocalDuelToggle);
 		AddGap(RightColumn);
 
-		AddRect(RightColumn, g_Config.m_BkwAdaptiveAntiPing ? AntiPingHeight : CompactHeight, Module);
-		if(g_Config.m_BkwAdaptiveAntiPing)
-			RenderBkwAdaptiveAntiPingSettings(pMenus, pUi, pClient, Module);
-		else
-			RenderBkwCompactToggleRow(pMenus, pUi, Module, "BKW Adaptive AntiPing", &g_Config.m_BkwAdaptiveAntiPing, s_AntiPingToggle);
-		AddGap(RightColumn);
 
 		AddRect(RightColumn, g_Config.m_BkwTipoCheat ? TipoCheatHeight : CompactHeight, Module);
 		if(g_Config.m_BkwTipoCheat)
@@ -180,12 +158,6 @@
 			RenderBkwCompactToggleRow(pMenus, pUi, Module, "ТипоЧит", &g_Config.m_BkwTipoCheat, s_TipoCheatToggle);
 		AddGap(RightColumn);
 
-		AddRect(RightColumn, AnimatedBackgroundHeight, Module);
-		RenderBkwAnimatedBackgroundSettings(pMenus, pUi, pGameClient, Module);
-		AddGap(RightColumn);
-
-		AddRect(RightColumn, BackgroundHeight, Module);
-		RenderLegacySection(LEGACY_BACKGROUND, Module);
 
 		s_PersonalizationScrollRegion.End();
 		LegacyTab = LEGACY_HUD;

@@ -77,6 +77,7 @@ public:
 	std::string PreviewPath(const SSkinShopItem &Item) const;
 
 	void Download(const SSkinShopItem &Item);
+	bool DownloadBusy() const { return m_pDownloadRequest != nullptr; }
 	bool Installed(const SSkinShopItem &Item) const;
 	bool DownloadLoading(const SSkinShopItem &Item) const;
 	bool DownloadError(const SSkinShopItem &Item) const;
@@ -111,6 +112,7 @@ private:
 	ESkinShopSource m_RequestSource = ESkinShopSource::CHERYDATA;
 	std::vector<SSkinShopItem> m_vItems;
 	std::unordered_set<std::string> m_ItemIds;
+	std::unordered_set<std::string> m_FailedPreviews;
 	std::string m_PreviewItemId;
 	std::string m_PreviewRequestPath;
 	std::string m_DownloadItemId;

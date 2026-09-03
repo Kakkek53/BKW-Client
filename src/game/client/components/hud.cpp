@@ -4430,7 +4430,6 @@ void CHud::OnRender()
 		GameClient()->m_TClient.RenderCenterLines();
 		if(!(FocusModeActive && HideUIInFocusMode))
 			RenderLocalTime();
-	RenderBkwMinimalHud();
 		if(Client()->State() != IClient::STATE_DEMOPLAYBACK)
 			RenderConnectionWarning();
 		RenderTeambalanceWarning();

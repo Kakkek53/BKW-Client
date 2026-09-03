@@ -22,9 +22,11 @@
 	const float MenuScale = std::clamp(g_Config.m_BkwTfMenuScale / 100.0f, 0.75f, 1.25f);
 	const float MenuOpacity = std::clamp(g_Config.m_BkwTfMenuOpacity / 100.0f, 0.45f, 1.0f);
 	const float Rounding = std::clamp((float)g_Config.m_BkwTfMenuRounding, 0.0f, 28.0f);
-	int MenuStyle = std::clamp(g_Config.m_BkwTfMenuStyle, 0, 3);
-	if(g_Config.m_BkwOptimizer && g_Config.m_BkwOptimizerScope == 0 && g_Config.m_BkwOptimizerPreset == 1)
-		MenuStyle = 3;
+	const int MenuStyle = std::clamp(g_Config.m_BkwTfMenuStyle, 0, 3);
+	if(MenuStyle == 1)
+		pUi->Graphics()->BlurMenuBackground(g_Config.m_BkwUiGlassBlur);
+	CUIRect::SetGlassColor(color_cast<ColorRGBA>(ColorHSLA(g_Config.m_BkwUiGlassColor)));
+	const CUIRect::CScopedGlass Material(MenuStyle == 1 ? 1.0f - g_Config.m_BkwUiGlassTransparency / 100.0f : -1.0f);
 	const float CardW = minimum(Screen.w - 18.0f, 820.0f * MenuScale);
 	const float CardH = minimum(Screen.h - 14.0f, 480.0f * MenuScale);
 	CUIRect Card{Screen.x + (Screen.w - CardW) * 0.5f, Screen.y + (Screen.h - CardH) * 0.5f, CardW, CardH};

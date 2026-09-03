@@ -47,6 +47,29 @@ protected:
 	}
 };
 
+TEST_F(CBkwConfigTest, TextureShopUsesLocalCommandContextAndRunsReloadChain)
+{
+	const char *apCommands[] = {"cl_asset_game", "cl_asset_particles", "cl_assets_entities", "cl_asset_emoticons", "cl_asset_hud", "cl_asset_cursor"};
+	const char *apValues[] = {g_Config.m_ClAssetGame, g_Config.m_ClAssetParticles, g_Config.m_ClAssetsEntities, g_Config.m_ClAssetEmoticons, g_Config.m_ClAssetHud, g_Config.m_ClAssetCursor};
+	for(size_t i = 0; i < std::size(apCommands); ++i)
+	{
+		int Calls = 0;
+		m_pConsole->Chain(apCommands[i], [](IConsole::IResult *pResult, void *pUser, IConsole::FCommandCallback pfnCallback, void *pCallbackUser) {
+			++*static_cast<int *>(pUser);
+			pfnCallback(pResult, pCallbackUser);
+		}, &Calls);
+		char aCommand[128];
+		str_format(aCommand, sizeof(aCommand), "%s shop_regression", apCommands[i]);
+		const std::string Previous = apValues[i];
+		m_pConsole->ExecuteLine(aCommand, IConsole::CLIENT_ID_GAME);
+		EXPECT_EQ(Calls, 0);
+		EXPECT_STREQ(apValues[i], Previous.c_str());
+		m_pConsole->ExecuteLine(aCommand, IConsole::CLIENT_ID_NO_GAME);
+		EXPECT_EQ(Calls, 1);
+		EXPECT_STREQ(apValues[i], "shop_regression");
+	}
+}
+
 TEST_F(CBkwConfigTest, AliasUsesOriginalChainAndClamp)
 {
 	int Calls = 0;

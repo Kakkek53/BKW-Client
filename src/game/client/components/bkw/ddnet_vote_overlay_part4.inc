@@ -104,6 +104,10 @@ inline void RenderBkwDdnetVoteOverlay(CUi *pUi, CGameClient *pGameClient, const 
 	const float MenuOpacity = std::clamp(g_Config.m_BkwDdnetMenuOpacity / 100.0f, 0.45f, 1.0f);
 	const float Rounding = std::clamp((float)g_Config.m_BkwDdnetMenuRounding, 0.0f, 28.0f);
 	const int MenuStyle = std::clamp(g_Config.m_BkwDdnetMenuStyle, 0, 3);
+	if(MenuStyle == 1)
+		pUi->Graphics()->BlurMenuBackground(g_Config.m_BkwUiGlassBlur);
+	CUIRect::SetGlassColor(color_cast<ColorRGBA>(ColorHSLA(g_Config.m_BkwUiGlassColor)));
+	const CUIRect::CScopedGlass Material(MenuStyle == 1 ? 1.0f - g_Config.m_BkwUiGlassTransparency / 100.0f : -1.0f);
 	const float CardW = minimum(Screen.w - 18.0f, 820.0f * MenuScale);
 	const float CardH = minimum(Screen.h - 14.0f, 480.0f * MenuScale);
 	CUIRect Card{Screen.x + (Screen.w - CardW) * 0.5f, Screen.y + (Screen.h - CardH) * 0.5f, CardW, CardH};
@@ -192,4 +196,3 @@ inline void RenderBkwDdnetVoteOverlay(CUi *pUi, CGameClient *pGameClient, const 
 		BkwDdnetRenderPlayers(pUi, pGameClient, Voting, Body, Interactive, BkwDdnetVoteState::SelectedTab == 2);
 	}
 }
-

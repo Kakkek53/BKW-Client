@@ -41,8 +41,6 @@
 #define BkwRenderCheckpoints() \
 	do \
 	{ \
-		if(g_Config.m_BkwOptimizer && g_Config.m_BkwOptimizerScope == 1 && g_Config.m_BkwOptimizerPreset == 2) \
-			BkwFeaturePackRuntime::SaveAntiPingSettings(); \
 		/* Legacy TipoCheat used real aim/emote input. Keep it disabled while the old runtime runs, */ \
 		/* then render the replacement locally so absolutely nothing from TipoCheat reaches the server. */ \
 		const int BkwTipoCheatEnabled = g_Config.m_BkwTipoCheat; \

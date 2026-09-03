@@ -32,6 +32,7 @@
 #include <array>
 #include <chrono>
 #include <deque>
+#include <map>
 #include <optional>
 #include <set>
 #include <string>
@@ -159,6 +160,15 @@ protected:
 	std::vector<SCustomAudioPack> m_vAudioPackList;
 
 	CSkinShop m_SkinShop;
+	struct SShopCard
+	{
+		CButtonContainer m_DownloadButton, m_ApplyButton, m_DeleteButton;
+		IGraphics::CTextureHandle m_Texture;
+		std::string m_Path;
+		float m_Aspect = 1.0f;
+		bool m_Visible = false;
+	};
+	std::map<std::string, SShopCard> m_ShopCards;
 	bool m_IsInit = false;
 
 	static void LoadEntities(struct SCustomEntities *pEntitiesItem, void *pUser);
