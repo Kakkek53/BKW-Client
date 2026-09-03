@@ -7,6 +7,51 @@
 IGraphics *CUIRect::ms_pGraphics = nullptr;
 float CUIRect::ms_GlassOpacity = -1.0f;
 
+namespace
+{
+// An inset ring leaves the filtered center untouched. Match DrawRectExt's
+// eight segments per corner so the rim never protrudes beyond the panel.
+void DrawGlassRim(IGraphics *pGraphics, const CUIRect &Rect, int Corners, float Radius, float Strength)
+{
+	const float Width = minimum(0.65f, Radius, minimum(Rect.w, Rect.h) * 0.25f);
+	const float InnerRadius = maximum(0.0f, Radius - Width);
+	vec2 aOuter[36], aInner[36];
+	const int aCorners[] = {IGraphics::CORNER_TL, IGraphics::CORNER_TR, IGraphics::CORNER_BR, IGraphics::CORNER_BL};
+	int Count = 0;
+	for(int Corner = 0; Corner < 4; ++Corner)
+	{
+		const bool Right = Corner == 1 || Corner == 2;
+		const bool Bottom = Corner >= 2;
+		if(!(Corners & aCorners[Corner]))
+		{
+			aOuter[Count] = vec2(Rect.x + (Right ? Rect.w : 0.0f), Rect.y + (Bottom ? Rect.h : 0.0f));
+			aInner[Count] = aOuter[Count] + vec2(Right ? -Width : Width, Bottom ? -Width : Width);
+			++Count;
+			continue;
+		}
+		const vec2 Center(Rect.x + (Right ? Rect.w - Radius : Radius), Rect.y + (Bottom ? Rect.h - Radius : Radius));
+		for(int Segment = 0; Segment <= 8; ++Segment)
+		{
+			const float Angle = pi + (Corner + Segment / 8.0f) * pi * 0.5f;
+			const vec2 Direction(std::cos(Angle), std::sin(Angle));
+			aOuter[Count] = Center + Direction * Radius;
+			aInner[Count++] = Center + Direction * InnerRadius;
+		}
+	}
+	pGraphics->TextureClear();
+	pGraphics->QuadsBegin();
+	for(int i = 0; i < Count; ++i)
+	{
+		const int Next = (i + 1) % Count;
+		const float Height = std::clamp(((aOuter[i].y + aOuter[Next].y) * 0.5f - Rect.y) / Rect.h, 0.0f, 1.0f);
+		pGraphics->SetColor(1.0f, 1.0f, 1.0f, Strength * mix(0.22f, 0.04f, Height));
+		const IGraphics::CFreeformItem Quad(aOuter[i], aOuter[Next], aInner[i], aInner[Next]);
+		pGraphics->QuadsDrawFreeform(&Quad, 1);
+	}
+	pGraphics->QuadsEnd();
+}
+}
+
 void CUIRect::HSplitMid(CUIRect *pTop, CUIRect *pBottom, float Spacing) const
 {
 	CUIRect r = *this;
@@ -169,17 +214,21 @@ bool CUIRect::Inside(vec2 Point) const
 
 void CUIRect::Draw(ColorRGBA Color, int Corners, float Rounding) const
 {
-	if(ms_GlassOpacity >= 0.0f && Color.a > 0.0f && Color.a < 1.0f && Rounding > 0.0f)
+	if(ms_GlassOpacity >= 0.0f && Color.a > 0.0f && Color.a < 1.0f && Rounding > 0.0f && w > 0.0f && h > 0.0f)
 	{
 		Rounding = minimum(Rounding, minimum(w, h) * 0.5f);
 		ms_pGraphics->DrawMenuGlassRect(x, y, w, h, Corners, Rounding);
-		Color.a = ms_GlassOpacity * minimum(1.0f, Color.a * 2.0f);
+		const float Strength = minimum(1.0f, Color.a * 2.0f);
+		// BKW-CLOUD's config card uses a faint diagonal white wash, a clear
+		// center and a stronger upper rim. Keep tint separate from reflections.
+		Color.a = ms_GlassOpacity * ms_GlassOpacity * Strength;
 		ms_pGraphics->DrawRect(x, y, w, h, Color, Corners, Rounding);
-		const ColorRGBA Shine(1.0f, 1.0f, 1.0f, Color.a * 0.22f);
-		const ColorRGBA Clear(1.0f, 1.0f, 1.0f, 0.0f);
-		ms_pGraphics->DrawRect4(x, y, w, h, Shine, Shine, Clear, Clear, Corners, Rounding);
-		if(w > Rounding * 2.0f && h > 2.0f)
-			ms_pGraphics->DrawRect(x + Rounding, y, w - Rounding * 2.0f, 0.7f, Shine, 0, 0.0f);
+		ms_pGraphics->DrawRect4(x, y, w, h,
+			ColorRGBA(1.0f, 1.0f, 1.0f, 0.07f * Strength),
+			ColorRGBA(1.0f, 1.0f, 1.0f, 0.025f * Strength),
+			ColorRGBA(1.0f, 1.0f, 1.0f, 0.015f * Strength),
+			ColorRGBA(1.0f, 1.0f, 1.0f, 0.03f * Strength), Corners, Rounding);
+		DrawGlassRim(ms_pGraphics, *this, Corners, Rounding, Strength);
 		return;
 	}
 	ms_pGraphics->DrawRect(x, y, w, h, Color, Corners, Rounding);

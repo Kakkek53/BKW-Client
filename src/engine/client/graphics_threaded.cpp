@@ -2318,6 +2318,7 @@ void CGraphics_Threaded::AdjustViewport(bool SendViewportChangeToBackend)
 
 void CGraphics_Threaded::UpdateViewport(int X, int Y, int W, int H, bool ByResize)
 {
+	m_vMenuGlassPanels.clear();
 	CCommandBuffer::SCommand_Update_Viewport Cmd;
 	Cmd.m_X = X;
 	Cmd.m_Y = Y;
@@ -2838,6 +2839,7 @@ void CGraphics_Threaded::ReadPixelDirect(bool *pSwapped)
 
 void CGraphics_Threaded::BlurMenuBackground(int Level)
 {
+	m_vMenuGlassPanels.clear();
 	m_MenuGlassReady = Level > 0 && IsQuadBufferingEnabled();
 	if(!m_MenuGlassReady)
 		return;
@@ -2852,6 +2854,22 @@ void CGraphics_Threaded::DrawMenuGlassRect(float x, float y, float w, float h, i
 	const vec2 ScreenSize = m_State.m_ScreenBR - m_State.m_ScreenTL;
 	if(!m_MenuGlassReady || w <= 0.0f || h <= 0.0f || ScreenSize.x <= 0.0f || ScreenSize.y <= 0.0f)
 		return;
+
+	// A child control already sits on its parent's filtered backdrop. Sampling
+	// the pre-menu scene again would punch a hole through the parent's tint.
+	// Only reuse a fully covered interior with compatible mapping and clipping.
+	for(const auto &Panel : m_vMenuGlassPanels)
+	{
+		const auto &State = Panel.m_State;
+		const bool SameClip = !State.m_ClipEnable || (m_State.m_ClipEnable &&
+			State.m_ClipX == m_State.m_ClipX && State.m_ClipY == m_State.m_ClipY &&
+			State.m_ClipW == m_State.m_ClipW && State.m_ClipH == m_State.m_ClipH);
+		if(SameClip && State.m_ScreenTL == m_State.m_ScreenTL && State.m_ScreenBR == m_State.m_ScreenBR &&
+			x >= Panel.m_InnerTL.x && y >= Panel.m_InnerTL.y &&
+			x + w <= Panel.m_InnerBR.x && y + h <= Panel.m_InnerBR.y)
+			return;
+	}
+	Rounding = std::clamp(Rounding, 0.0f, minimum(w, h) * 0.5f);
 
 	// Use exactly the same rounded geometry as the panel's tint. The backdrop
 	// is sampled in screen space, never stretched independently into each panel.
@@ -2869,7 +2887,10 @@ void CGraphics_Threaded::DrawMenuGlassRect(float x, float y, float w, float h, i
 	size_t PrimCount, NumVerts;
 	FlushVerticesImpl(false, PrimType, PrimCount, NumVerts, Cmd, sizeof(CCommandBuffer::SVertex));
 	if(Cmd.m_pVertices != nullptr)
+	{
 		mem_copy(Cmd.m_pVertices, m_aVertices, sizeof(CCommandBuffer::SVertex) * NumVerts);
+		m_vMenuGlassPanels.push_back({m_State, vec2(x + Rounding, y + Rounding), vec2(x + w - Rounding, y + h - Rounding)});
+	}
 	QuadsEnd();
 }
 

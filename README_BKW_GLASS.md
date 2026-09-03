@@ -4,6 +4,14 @@ Open **Settings → BKW → Personalization**. Enable **Liquid glass**, choose *
 (0–100%) and **Blur** (0–4). Changes apply immediately. Blur 0 keeps the glass
 surfaces without background filtering. Higher levels soften a wider area.
 
+The material follows the BKW-CLOUD config card: a faint diagonal white wash,
+a brighter upper rim and a subtle lower rim around the complete rounded edge.
+Transparency controls the color tint independently of these reflections, with
+a lighter tint at intermediate values. Fully covered child controls reuse the
+parent's blurred backdrop instead of replacing its tint with the raw scene.
+Backdrop coverage resets each frame and whenever the viewport changes; clipped
+panels are reused only under the same clip, and rounded edges remain separate.
+
 The UI color picker in Graphics uses RGB while glass is enabled. Its previous alpha is
 preserved and used again after glass is disabled. Text and color swatches stay
 sharp. Glass applies to the menu, both over the game and over menu backgrounds.

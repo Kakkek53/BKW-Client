@@ -772,6 +772,13 @@ class CGraphics_Threaded : public IEngineGraphics
 	bool m_GLHasTextureArraysSupport;
 	bool m_GLUseTrianglesAsQuad;
 	bool m_MenuGlassReady = false;
+	struct SMenuGlassPanel
+	{
+		CCommandBuffer::SState m_State;
+		vec2 m_InnerTL;
+		vec2 m_InnerBR;
+	};
+	std::vector<SMenuGlassPanel> m_vMenuGlassPanels;
 
 	CCommandBuffer *m_apCommandBuffers[2];
 	CCommandBuffer *m_pCommandBuffer;
