@@ -7,6 +7,7 @@ including a return to blur 0 so cached backdrop images cannot mask a failure.
 
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -47,17 +48,17 @@ def check_pair(sharp, blurred):
     print(f"Inside change={inside:.2f}, outside change={outside:.3f}", flush=True)
 
 
-def run_case(binary, output, backend, samples):
-    case = output / f"{backend.lower()}-msaa{samples}"
+def run_case(binary, output, backend, samples, glass=True):
+    case = output / f"{backend.lower()}-msaa{samples}{'' if glass else '-control'}"
     case.mkdir(parents=True, exist_ok=True)
-    backdrop = Image.new("RGB", (1280, 720))
+    backdrop = Image.new("RGBA", (1280, 720))
     draw = ImageDraw.Draw(backdrop)
     for y in range(0, 720, 8):
         for x in range(0, 1280, 8):
             color = (225, 240, 255) if (x // 8 + y // 8) % 2 else (25, 45, 65)
             draw.rectangle((x, y, x + 7, y + 7), fill=color)
     backdrop.save(case / "backdrop.png")
-    (case / "storage.cfg").write_text(f"add_path {case}\nadd_path {binary.parent / 'data'}\n")
+    (case / "storage.cfg").write_text(f"add_path {case}\nadd_path {binary.parent / 'data'}\nadd_path {binary.parent}\n")
     fifo = case / "console.fifo"
     commands = [
         "cl_show_welcome 0", "cl_skip_start_menu 1", "ui_page 6",
@@ -67,11 +68,12 @@ def run_case(binary, output, backend, samples):
         "gfx_gl_major 3", "gfx_gl_minor 3", "gfx_render_thread_count 2",
         "bc_motion_blur 0", "bkw_tf_menu 0", "bc_menu_media_background 1",
         f'bc_menu_media_background_path "{case / "backdrop.png"}"',
-        "bkw_ui_glass 1", "bkw_ui_glass_transparency 100", "bkw_ui_glass_blur 0",
+        f"bkw_ui_glass {int(glass)}", "bkw_ui_glass_transparency 100", "bkw_ui_glass_blur 0",
         f'cl_input_fifo "{fifo}"',
     ]
     with (case / "client.log").open("w") as log:
-        process = subprocess.Popen([str(binary), *commands], cwd=case, stdout=log, stderr=log)
+        process = subprocess.Popen(["gdb", "-q", "-batch", "-ex", "run", "-ex", "thread apply all bt",
+                                    "--args", str(binary), *commands], cwd=case, stdout=log, stderr=log)
         try:
             wait_for(fifo.exists, process, "console FIFO")
 
@@ -100,17 +102,22 @@ def run_case(binary, output, backend, samples):
                 image.save(case / f"{name}.png")
                 return image
 
-            sharp = snapshot(0, "sharp")
-            blurred = snapshot(4, "blurred")
-            restored = snapshot(0, "restored")
-            check_pair(sharp, blurred)
-            check_pair(restored, blurred)
+            if glass:
+                sharp = snapshot(0, "sharp")
+                blurred = snapshot(4, "blurred")
+                restored = snapshot(0, "restored")
+                check_pair(sharp, blurred)
+                check_pair(restored, blurred)
+            else:
+                snapshot(0, "control")
             # Confirm the requested backend wasn't silently replaced at startup.
             text = (case / "client.log").read_text(errors="replace").lower()
-            assert backend.lower() in text, f"Requested backend {backend} absent from log"
+            assert f"created {backend.lower()} " in text, f"Requested backend {backend} absent from log"
             send("quit")
-            process.wait(timeout=10)
+            process.wait(timeout=20)
             assert process.returncode == 0, f"Unclean exit: {process.returncode}"
+            text = (case / "client.log").read_text(errors="replace")
+            assert not re.search(r"received signal SIG(?:SEGV|ABRT|BUS|ILL|FPE)", text), "Client crashed; see debugger backtrace"
         finally:
             if process.poll() is None:
                 process.kill()
@@ -124,9 +131,21 @@ def main():
     binary = Path(sys.argv[1]).resolve()
     output = Path(sys.argv[2]).resolve()
     output.mkdir(parents=True, exist_ok=True)
-    for backend in ("OpenGL", "Vulkan"):
-        for samples in (0, 4):
-            run_case(binary, output, backend, samples)
+    errors = []
+    cases = [(backend, samples, True) for backend in ("OpenGL", "Vulkan") for samples in (0, 4)]
+    cases.append(("OpenGL", 0, False))
+    for backend, samples, glass in cases:
+        try:
+            run_case(binary, output, backend, samples, glass)
+        except Exception as error:
+            case = output / f"{backend.lower()}-msaa{samples}{'' if glass else '-control'}"
+            errors.append(f"{case.name}: {error}")
+            print(errors[-1], flush=True)
+            log = case / "client.log"
+            if log.exists():
+                print("\n".join(log.read_text(errors="replace").splitlines()[-160:]), flush=True)
+    if errors:
+        raise RuntimeError("\n".join(errors))
 
 
 if __name__ == "__main__":

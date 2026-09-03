@@ -129,8 +129,8 @@ jobs:
         VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
         SDL_AUDIODRIVER: dummy
       run: |
-        sudo apt-get install -y xvfb xauth python3-pil mesa-vulkan-drivers
-        timeout 180s xvfb-run -a -s "-screen 0 1280x720x24" /usr/bin/python3 scripts/test_menu_glass.py release/DDNet release/glass-check
+        sudo apt-get install -y xvfb xauth gdb python3-pil mesa-vulkan-drivers
+        timeout 300s xvfb-run -a -s "-screen 0 1280x720x24" /usr/bin/python3 scripts/test_menu_glass.py release/DDNet release/glass-check
 
     - name: Upload glass rendering evidence
       if: always() && contains(matrix.os, 'ubuntu')
