@@ -101,6 +101,12 @@ public:
 
 	void OnInterfacesInit(CGameClient *pClient) override;
 	void OnInit() override;
+	void OnShutdown() override
+	{
+		// Release the menu's own media while the graphics interface is still alive.
+		m_BkwMediaBackground.Shutdown();
+		CBackground::OnShutdown();
+	}
 	void OnMapLoad() override;
 	void OnRender() override;
 
