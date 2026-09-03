@@ -563,7 +563,9 @@ public:
 	 * The pointer must be valid until the next swap operation.
 	 */
 	virtual void ReadPixel(ivec2 Position, ColorRGBA *pColor) = 0;
+	// Prepare the current scene for glass panels without blurring the visible frame.
 	virtual void BlurMenuBackground(int Level) = 0;
+	virtual void DrawMenuGlassRect(float x, float y, float w, float h, int Corners, float Rounding) = 0;
 	virtual void TakeScreenshot(const char *pFilename) = 0;
 	virtual void TakeCustomScreenshot(const char *pFilename) = 0;
 	virtual int GetVideoModes(CVideoMode *pModes, int MaxModes, int Screen) = 0;

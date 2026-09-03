@@ -875,6 +875,13 @@ class CCommandProcessorFragment_Vulkan : public CCommandProcessorFragment_GLBase
 		bool m_Valid = false;
 	};
 
+	struct SGlassImage
+	{
+		SFrameBlendImage m_Background;
+		// View and descriptor of mip 1 in m_Background; owns no image or memory.
+		SFrameBlendImage m_Blurred;
+	};
+
 	/************************
 	 * MEMBER VARIABLES
 	 ************************/
@@ -979,7 +986,7 @@ private:
 	std::vector<VkImageView> m_vSwapChainImageViewList;
 	std::vector<SSwapChainMultiSampleImage> m_vSwapChainMultiSamplingImages;
 	std::vector<SFrameBlendImage> m_vFrameBlendImages;
-	std::vector<SFrameBlendImage> m_vGlassImages;
+	std::vector<SGlassImage> m_vGlassImages;
 	bool m_GlassPassActive = false;
 	std::vector<VkFramebuffer> m_vFramebufferList;
 	std::vector<VkCommandBuffer> m_vMainDrawCommandBuffers;
@@ -1363,6 +1370,7 @@ protected:
 		m_aCommandCallbacks[CommandBufferCMDOff(CCommandBuffer::CMD_VSYNC)] = {false, [](SRenderCommandExecuteBuffer &ExecBuffer, const CCommandBuffer::SCommand *pBaseCommand) {}, [this](const CCommandBuffer::SCommand *pBaseCommand, SRenderCommandExecuteBuffer &ExecBuffer) { return Cmd_VSync(static_cast<const CCommandBuffer::SCommand_VSync *>(pBaseCommand)); }};
 		m_aCommandCallbacks[CommandBufferCMDOff(CCommandBuffer::CMD_MULTISAMPLING)] = {false, [](SRenderCommandExecuteBuffer &ExecBuffer, const CCommandBuffer::SCommand *pBaseCommand) {}, [this](const CCommandBuffer::SCommand *pBaseCommand, SRenderCommandExecuteBuffer &ExecBuffer) { return Cmd_MultiSampling(static_cast<const CCommandBuffer::SCommand_MultiSampling *>(pBaseCommand)); }};
 		m_aCommandCallbacks[CommandBufferCMDOff(CCommandBuffer::CMD_TRY_SWAP_AND_READ_PIXEL)] = {false, [](SRenderCommandExecuteBuffer &ExecBuffer, const CCommandBuffer::SCommand *pBaseCommand) {}, [this](const CCommandBuffer::SCommand *pBaseCommand, SRenderCommandExecuteBuffer &ExecBuffer) { return Cmd_ReadPixel(static_cast<const CCommandBuffer::SCommand_TrySwapAndReadPixel *>(pBaseCommand)); }};
+		m_aCommandCallbacks[CommandBufferCMDOff(CCommandBuffer::CMD_RENDER_MENU_GLASS)] = {true, [this](SRenderCommandExecuteBuffer &ExecBuffer, const CCommandBuffer::SCommand *pCommand) { Cmd_RenderMenuGlass_FillExecuteBuffer(ExecBuffer, static_cast<const CCommandBuffer::SCommand_RenderMenuGlass *>(pCommand)); }, [this](const CCommandBuffer::SCommand *pCommand, SRenderCommandExecuteBuffer &ExecBuffer) { return Cmd_RenderMenuGlass(static_cast<const CCommandBuffer::SCommand_RenderMenuGlass *>(pCommand), ExecBuffer); }};
 		m_aCommandCallbacks[CommandBufferCMDOff(CCommandBuffer::CMD_BLUR_MENU_BACKGROUND)] = {false, [](SRenderCommandExecuteBuffer &, const CCommandBuffer::SCommand *) {}, [this](const CCommandBuffer::SCommand *pCommand, SRenderCommandExecuteBuffer &) { return Cmd_BlurMenuBackground(static_cast<const CCommandBuffer::SCommand_BlurMenuBackground *>(pCommand)); }};
 		m_aCommandCallbacks[CommandBufferCMDOff(CCommandBuffer::CMD_TRY_SWAP_AND_SCREENSHOT)] = {false, [](SRenderCommandExecuteBuffer &ExecBuffer, const CCommandBuffer::SCommand *pBaseCommand) {}, [this](const CCommandBuffer::SCommand *pBaseCommand, SRenderCommandExecuteBuffer &ExecBuffer) { return Cmd_Screenshot(static_cast<const CCommandBuffer::SCommand_TrySwapAndScreenshot *>(pBaseCommand)); }};
 
@@ -2950,7 +2958,7 @@ protected:
 		return m_aSamplers[SamplerType];
 	}
 
-	VkImageView CreateImageView(VkImage Image, VkFormat Format, VkImageViewType ViewType, size_t Depth, size_t MipMapLevelCount, bool OpaqueAlpha = false)
+	VkImageView CreateImageView(VkImage Image, VkFormat Format, VkImageViewType ViewType, size_t Depth, size_t MipMapLevelCount, bool OpaqueAlpha = false, uint32_t BaseMipLevel = 0)
 	{
 		VkImageViewCreateInfo ViewCreateInfo{};
 		ViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -2959,7 +2967,7 @@ protected:
 		ViewCreateInfo.format = Format;
 		ViewCreateInfo.components.a = OpaqueAlpha ? VK_COMPONENT_SWIZZLE_ONE : VK_COMPONENT_SWIZZLE_IDENTITY;
 		ViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		ViewCreateInfo.subresourceRange.baseMipLevel = 0;
+		ViewCreateInfo.subresourceRange.baseMipLevel = BaseMipLevel;
 		ViewCreateInfo.subresourceRange.levelCount = MipMapLevelCount;
 		ViewCreateInfo.subresourceRange.baseArrayLayer = 0;
 		ViewCreateInfo.subresourceRange.layerCount = Depth;
@@ -4625,8 +4633,13 @@ public:
 				FreeImageMemBlock(FrameBlendImage.m_ImgMem);
 		}
 
-		for(auto &FrameBlendImage : m_vGlassImages)
+		for(auto &Glass : m_vGlassImages)
 		{
+			if(Glass.m_Blurred.m_DescriptorSet.m_Descriptor != VK_NULL_HANDLE)
+				FreeDescriptorSetFromPool(Glass.m_Blurred.m_DescriptorSet);
+			if(Glass.m_Blurred.m_ImgView != VK_NULL_HANDLE)
+				vkDestroyImageView(m_VKDevice, Glass.m_Blurred.m_ImgView, nullptr);
+			auto &FrameBlendImage = Glass.m_Background;
 			if(FrameBlendImage.m_DescriptorSet.m_Descriptor != VK_NULL_HANDLE)
 				FreeDescriptorSetFromPool(FrameBlendImage.m_DescriptorSet);
 			if(FrameBlendImage.m_ImgView != VK_NULL_HANDLE)
@@ -7163,13 +7176,17 @@ public:
 		constexpr VkFormatFeatureFlags Required = VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
 		if((Properties.optimalTilingFeatures & Required) != Required)
 			return true;
-		auto &Image = m_vGlassImages[m_CurImageIndex];
+		auto &Image = m_vGlassImages[m_CurImageIndex].m_Background;
+		auto &Blurred = m_vGlassImages[m_CurImageIndex].m_Blurred;
 		if(Image.m_Image == VK_NULL_HANDLE)
 		{
 			if(!CreateImage(Extent.width, Extent.height, 1, 5, m_VKSurfFormat.format, VK_IMAGE_TILING_OPTIMAL, Image.m_Image, Image.m_ImgMem))
 				return false;
 			Image.m_ImgView = CreateImageView(Image.m_Image, m_VKSurfFormat.format, VK_IMAGE_VIEW_TYPE_2D, 1, 1, true);
 			if(Image.m_ImgView == VK_NULL_HANDLE || !CreateFrameBlendDescriptorSet(Image))
+				return false;
+			Blurred.m_ImgView = CreateImageView(Image.m_Image, m_VKSurfFormat.format, VK_IMAGE_VIEW_TYPE_2D, 1, 1, true, 1);
+			if(Blurred.m_ImgView == VK_NULL_HANDLE || !CreateFrameBlendDescriptorSet(Blurred))
 				return false;
 		}
 		FinishRenderThreads();
@@ -7251,15 +7268,17 @@ public:
 		const int Level = std::clamp(pCommand->m_Level, 1, 4);
 		for(int i = 1; i <= Level; ++i)
 			BlitLevel(i - 1, i);
-		for(int i = Level; i > 0; --i)
+		// Preserve mip 0 to restore the sharp scene after restarting the pass.
+		// Only the mip-1 view is sampled inside glass panels.
+		for(int i = Level; i > 1; --i)
 			BlitLevel(i, i - 1);
 		Barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
 		Barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		Barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		Barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
 		Barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 		vkCmdPipelineBarrier(CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &Barrier);
 
-		// Resolve-and-restart also works with MSAA: the opaque background fills all samples.
+		// Restore the unblurred scene after the pass restart, including every MSAA sample.
 		VkRenderPassBeginInfo Begin{};
 		Begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		Begin.renderPass = m_VKRenderPass;
@@ -7274,6 +7293,35 @@ public:
 			return false;
 		m_vLastPipeline[0] = VK_NULL_HANDLE;
 		return true;
+	}
+
+	void Cmd_RenderMenuGlass_FillExecuteBuffer(SRenderCommandExecuteBuffer &ExecBuffer, const CCommandBuffer::SCommand_RenderMenuGlass *pCommand)
+	{
+		ExecBuffer.m_IndexBuffer = m_RenderIndexBuffer;
+		ExecBuffer.m_EstimatedRenderCallCount = 1;
+		ExecBufferFillDynamicStates(pCommand->m_State, ExecBuffer);
+	}
+
+	[[nodiscard]] bool Cmd_RenderMenuGlass(const CCommandBuffer::SCommand_RenderMenuGlass *pCommand, SRenderCommandExecuteBuffer &ExecBuffer)
+	{
+		if(!m_GlassPassActive || pCommand->m_PrimCount == 0)
+			return true;
+		auto State = pCommand->m_State;
+		State.m_Texture = 0; // Select the textured pipeline; descriptor is the backdrop.
+		State.m_BlendMode = EBlendMode::ALPHA;
+		State.m_WrapMode = EWrapMode::CLAMP;
+		ExecBuffer.m_aDescriptors[0] = m_vGlassImages[m_CurImageIndex].m_Blurred.m_DescriptorSet;
+		const auto Extent = m_VKSwapImgAndViewportExtent.m_SwapImageViewport;
+		const auto Presented = m_VKSwapImgAndViewportExtent.GetPresentedImageViewport();
+		const VkViewport Viewport = ExecBuffer.m_HasDynamicState ? ExecBuffer.m_Viewport : VkViewport{0.0f, 0.0f, (float)Presented.width, (float)Presented.height, 0.0f, 1.0f};
+		const size_t NumVertices = pCommand->m_PrimCount * (pCommand->m_PrimType == EPrimitiveType::QUADS ? 4 : 3);
+		std::vector<CCommandBuffer::SVertex> vVertices(pCommand->m_pVertices, pCommand->m_pVertices + NumVertices);
+		for(auto &Vertex : vVertices)
+		{
+			Vertex.m_Tex.x = (Viewport.x + Vertex.m_Tex.x * Viewport.width) / Extent.width;
+			Vertex.m_Tex.y = (Viewport.y + Vertex.m_Tex.y * Viewport.height) / Extent.height;
+		}
+		return RenderStandard<CCommandBuffer::SVertex, false>(ExecBuffer, State, pCommand->m_PrimType, vVertices.data(), pCommand->m_PrimCount);
 	}
 
 	[[nodiscard]] bool RenderFrameBlend(VkCommandBuffer &MainCommandBuffer)

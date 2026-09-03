@@ -1125,6 +1125,9 @@ ERunCommandReturnTypes CCommandProcessorFragment_OpenGL::RunCommand(const CComma
 	case CCommandBuffer::CMD_BLUR_MENU_BACKGROUND:
 		Cmd_BlurMenuBackground(static_cast<const CCommandBuffer::SCommand_BlurMenuBackground *>(pBaseCommand));
 		break;
+	case CCommandBuffer::CMD_RENDER_MENU_GLASS:
+		Cmd_RenderMenuGlass(static_cast<const CCommandBuffer::SCommand_RenderMenuGlass *>(pBaseCommand));
+		break;
 	case CCommandBuffer::CMD_SWAP:
 		Cmd_BeforeSwap();
 		return ERunCommandReturnTypes::RUN_COMMAND_COMMAND_UNHANDLED; // let SDL do the actual swap

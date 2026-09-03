@@ -1,12 +1,14 @@
 # Liquid glass and console settings
 
-Open **Settings → Graphics**. Enable **Liquid glass**, choose **Transparency**
+Open **Settings → BKW → Personalization**. Enable **Liquid glass**, choose **Transparency**
 (0–100%) and **Blur** (0–4). Changes apply immediately. Blur 0 keeps the glass
 surfaces without background filtering. Higher levels soften a wider area.
 
-The UI color picker uses RGB while glass is enabled. Its previous alpha is
+The UI color picker in Graphics uses RGB while glass is enabled. Its previous alpha is
 preserved and used again after glass is disabled. Text and color swatches stay
 sharp. Glass applies to the menu, both over the game and over menu backgrounds.
+Only the inside of each rounded glass panel samples the blurred scene. The
+background outside panels stays sharp, and scroll clipping is respected.
 The blur uses the current frame on the GPU, with a downsample/upsample pyramid;
 it does not capture screenshots to disk or blend old menu frames.
 Vulkan and OpenGL 3.3+/OpenGL ES 3 support the blur. Older renderers keep the
@@ -38,3 +40,8 @@ Before release, check the graphics effect with MSAA on/off, resizing, opening
 and closing the in-game menu, color editing, and a switch between Vulkan and
 OpenGL. Console regression tests cover aliases, change callbacks, read-only
 values, quoted strings, toggles and setting ranges.
+
+Fast Build also runs the actual client under Xvfb/Mesa with OpenGL and Vulkan,
+with MSAA off/on. `scripts/test_menu_glass.py` compares screenshots of a static
+checkerboard background: blur must change the interior and preserve the outer
+border. The `glass-rendering` artifact contains the images and client logs.

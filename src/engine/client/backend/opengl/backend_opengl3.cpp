@@ -1442,17 +1442,18 @@ void CCommandProcessorFragment_OpenGL3_3::DestroyGlassTextures()
 		m_aGlassFramebuffers[i] = 0;
 	}
 	m_GlassWidth = m_GlassHeight = 0;
+	m_GlassValid = false;
 }
 
 void CCommandProcessorFragment_OpenGL3_3::Cmd_BlurMenuBackground(const CCommandBuffer::SCommand_BlurMenuBackground *pCommand)
 {
+	m_GlassValid = false;
 	if(m_CanvasWidth < 16 || m_CanvasHeight < 16)
 		return;
-	GLint ReadFramebuffer, DrawFramebuffer, ReadBuffer, aViewport[4];
+	GLint ReadFramebuffer, DrawFramebuffer, ReadBuffer;
 	glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &ReadFramebuffer);
 	glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &DrawFramebuffer);
 	glGetIntegerv(GL_READ_BUFFER, &ReadBuffer);
-	glGetIntegerv(GL_VIEWPORT, aViewport);
 	const bool ClipEnabled = glIsEnabled(GL_SCISSOR_TEST);
 	glDisable(GL_SCISSOR_TEST);
 	glActiveTexture(GL_TEXTURE0);
@@ -1500,59 +1501,56 @@ void CCommandProcessorFragment_OpenGL3_3::Cmd_BlurMenuBackground(const CCommandB
 		BlitLevel(i - 1, i);
 	for(int i = Level; i > 0; --i)
 		BlitLevel(i, i - 1);
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, DrawFramebuffer);
-	glViewport(0, 0, m_CanvasWidth, m_CanvasHeight);
-	// The captured alpha may be zero even where the scene is visible.
-	glDisable(GL_BLEND);
-	// Textured primitive program with identity gPos (vertices in NDC)
-	UseProgram(m_pPrimitiveProgramTextured);
-	const float aIdentityPos[8] = {1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-	glUniformMatrix4x2fv(m_pPrimitiveProgramTextured->m_LocPos, 1, GL_FALSE, aIdentityPos);
-	// Invalidate program cache so next SetState re-uploads the correct matrix
-	m_pPrimitiveProgramTextured->m_LastScreenTL = vec2(0.0f, 0.0f);
-	m_pPrimitiveProgramTextured->m_LastScreenBR = vec2(0.0f, 0.0f);
-
-	// Bind the filtered background directly (no sampler object)
-	glBindSampler(0, 0);
-	glBindTexture(GL_TEXTURE_2D, m_aGlassTextures[0]);
-	glUniform1i(m_pPrimitiveProgramTextured->m_LocTextureSampler, 0);
-	m_pPrimitiveProgramTextured->m_LastTextureSampler = -1;
-
-	// Opaque redraw also works when the window framebuffer uses MSAA.
-	constexpr uint8_t Alpha = 255;
-	CCommandBuffer::SVertex aVertices[4];
-	aVertices[0].m_Pos = vec2(-1.0f, -1.0f);
-	aVertices[0].m_Tex = vec2(0.0f, 0.0f);
-	aVertices[1].m_Pos = vec2(1.0f, -1.0f);
-	aVertices[1].m_Tex = vec2(1.0f, 0.0f);
-	aVertices[2].m_Pos = vec2(1.0f, 1.0f);
-	aVertices[2].m_Tex = vec2(1.0f, 1.0f);
-	aVertices[3].m_Pos = vec2(-1.0f, 1.0f);
-	aVertices[3].m_Tex = vec2(0.0f, 1.0f);
-	for(auto &Vertex : aVertices)
-	{
-		Vertex.m_Color.r = 255;
-		Vertex.m_Color.g = 255;
-		Vertex.m_Color.b = 255;
-		Vertex.m_Color.a = Alpha;
-	}
-
-	UploadStreamBufferData(EPrimitiveType::QUADS, aVertices, sizeof(CCommandBuffer::SVertex), 1);
-	glBindVertexArray(m_aPrimitiveDrawVertexId[m_LastStreamBuffer]);
-	if(m_aLastIndexBufferBound[m_LastStreamBuffer] != m_QuadDrawIndexBufferId)
-	{
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_QuadDrawIndexBufferId);
-		m_aLastIndexBufferBound[m_LastStreamBuffer] = m_QuadDrawIndexBufferId;
-	}
-	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-	m_LastStreamBuffer = (m_LastStreamBuffer + 1 >= MAX_STREAM_BUFFER_COUNT ? 0 : m_LastStreamBuffer + 1);
-
+	// Keep the visible scene sharp. Panels composite this texture later through
+	// their rounded geometry and current scissor, before their tint and text.
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, ReadFramebuffer);
 	glReadBuffer(ReadBuffer);
-	glViewport(aViewport[0], aViewport[1], aViewport[2], aViewport[3]);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, DrawFramebuffer);
 	if(ClipEnabled)
 		glEnable(GL_SCISSOR_TEST);
+	m_GlassValid = true;
+}
+
+void CCommandProcessorFragment_OpenGL3_3::Cmd_RenderMenuGlass(const CCommandBuffer::SCommand_RenderMenuGlass *pCommand)
+{
+	if(!m_GlassValid || pCommand->m_PrimCount == 0)
+		return;
+	UseProgram(m_pPrimitiveProgramTextured);
+	SetState(pCommand->m_State, m_pPrimitiveProgramTextured);
+	// Framebuffer alpha is not scene opacity. Replace pixels only within the
+	// panel mesh; the following tint controls the material's transparency.
+	glDisable(GL_BLEND);
+	glActiveTexture(GL_TEXTURE0);
+	glBindSampler(0, 0);
+	glBindTexture(GL_TEXTURE_2D, m_aGlassTextures[0]);
+	glUniform1i(m_pPrimitiveProgramTextured->m_LocTextureSampler, 0);
+	m_pPrimitiveProgramTextured->m_LastTextureSampler = 0;
+
+	GLint aViewport[4];
+	glGetIntegerv(GL_VIEWPORT, aViewport);
+	const size_t NumVertices = pCommand->m_PrimCount * (pCommand->m_PrimType == EPrimitiveType::QUADS ? 4 : 3);
+	std::vector<CCommandBuffer::SVertex> vVertices(pCommand->m_pVertices, pCommand->m_pVertices + NumVertices);
+	for(auto &Vertex : vVertices)
+	{
+		Vertex.m_Tex.x = (aViewport[0] + Vertex.m_Tex.x * aViewport[2]) / m_GlassWidth;
+		Vertex.m_Tex.y = (aViewport[1] + (1.0f - Vertex.m_Tex.y) * aViewport[3]) / m_GlassHeight;
+	}
+	UploadStreamBufferData(pCommand->m_PrimType, vVertices.data(), sizeof(CCommandBuffer::SVertex), pCommand->m_PrimCount);
+	glBindVertexArray(m_aPrimitiveDrawVertexId[m_LastStreamBuffer]);
+	if(pCommand->m_PrimType == EPrimitiveType::QUADS)
+	{
+		if(m_aLastIndexBufferBound[m_LastStreamBuffer] != m_QuadDrawIndexBufferId)
+		{
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_QuadDrawIndexBufferId);
+			m_aLastIndexBufferBound[m_LastStreamBuffer] = m_QuadDrawIndexBufferId;
+		}
+		glDrawElements(GL_TRIANGLES, pCommand->m_PrimCount * 6, GL_UNSIGNED_INT, nullptr);
+	}
+	else
+		glDrawArrays(GL_TRIANGLES, 0, pCommand->m_PrimCount * 3);
+	m_LastStreamBuffer = (m_LastStreamBuffer + 1) % MAX_STREAM_BUFFER_COUNT;
+	glBindTexture(GL_TEXTURE_2D, 0);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	m_LastBlendMode = EBlendMode::ALPHA;

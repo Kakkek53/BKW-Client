@@ -11,6 +11,7 @@
 #include <game/client/components/bkw/ddstats_hours.h>
 #include <game/client/components/media_decoder.h>
 #include <game/gamecore.h>
+#include <game/localization.h>
 #include <game/mapitems.h>
 
 #include <algorithm>

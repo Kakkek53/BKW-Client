@@ -83,8 +83,10 @@ protected:
 	TWGLuint m_aGlassFramebuffers[5] = {};
 	uint32_t m_GlassWidth = 0;
 	uint32_t m_GlassHeight = 0;
+	bool m_GlassValid = false;
 	void DestroyGlassTextures();
 	void Cmd_BlurMenuBackground(const CCommandBuffer::SCommand_BlurMenuBackground *pCommand) override;
+	void Cmd_RenderMenuGlass(const CCommandBuffer::SCommand_RenderMenuGlass *pCommand) override;
 
 	TWGLuint m_MotionBlurTexture = 0;
 	uint32_t m_MotionBlurTexWidth = 0;

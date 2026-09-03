@@ -2838,12 +2838,39 @@ void CGraphics_Threaded::ReadPixelDirect(bool *pSwapped)
 
 void CGraphics_Threaded::BlurMenuBackground(int Level)
 {
-	if(Level <= 0 || !IsQuadBufferingEnabled())
+	m_MenuGlassReady = Level > 0 && IsQuadBufferingEnabled();
+	if(!m_MenuGlassReady)
 		return;
 	FlushVertices();
 	CCommandBuffer::SCommand_BlurMenuBackground Cmd;
 	Cmd.m_Level = std::clamp(Level, 1, 4);
 	AddCmd(Cmd);
+}
+
+void CGraphics_Threaded::DrawMenuGlassRect(float x, float y, float w, float h, int Corners, float Rounding)
+{
+	const vec2 ScreenSize = m_State.m_ScreenBR - m_State.m_ScreenTL;
+	if(!m_MenuGlassReady || w <= 0.0f || h <= 0.0f || ScreenSize.x <= 0.0f || ScreenSize.y <= 0.0f)
+		return;
+
+	// Use exactly the same rounded geometry as the panel's tint. The backdrop
+	// is sampled in screen space, never stretched independently into each panel.
+	TextureClear();
+	QuadsBegin();
+	SetColor(1.0f, 1.0f, 1.0f, 1.0f);
+	DrawRectExt(x, y, w, h, std::clamp(Rounding, 0.0f, minimum(w, h) * 0.5f), Corners);
+	for(int i = 0; i < m_NumVertices; ++i)
+	{
+		m_aVertices[i].m_Tex.x = (m_aVertices[i].m_Pos.x - m_State.m_ScreenTL.x) / ScreenSize.x;
+		m_aVertices[i].m_Tex.y = (m_aVertices[i].m_Pos.y - m_State.m_ScreenTL.y) / ScreenSize.y;
+	}
+	CCommandBuffer::SCommand_RenderMenuGlass Cmd;
+	EPrimitiveType PrimType;
+	size_t PrimCount, NumVerts;
+	FlushVerticesImpl(false, PrimType, PrimCount, NumVerts, Cmd, sizeof(CCommandBuffer::SVertex));
+	if(Cmd.m_pVertices != nullptr)
+		mem_copy(Cmd.m_pVertices, m_aVertices, sizeof(CCommandBuffer::SVertex) * NumVerts);
+	QuadsEnd();
 }
 
 void CGraphics_Threaded::TakeScreenshot(const char *pFilename)

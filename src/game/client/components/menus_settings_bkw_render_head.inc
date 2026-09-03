@@ -1,3 +1,19 @@
+void RenderBkwGlassSettings(CMenus *pMenus, CUi *pUi, CUIRect View)
+{
+	View.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.46f), IGraphics::CORNER_ALL, 8.0f);
+	View.Margin(10.0f, &View);
+	CUIRect Row;
+	View.HSplitTop(24.0f, &Row, &View);
+	if(pMenus->DoButton_CheckBox(&g_Config.m_BkwUiGlass, Localize("Liquid glass"), g_Config.m_BkwUiGlass, &Row))
+		g_Config.m_BkwUiGlass ^= 1;
+	View.HSplitTop(6.0f, nullptr, &View);
+	View.HSplitTop(24.0f, &Row, &View);
+	pUi->DoScrollbarOption(&g_Config.m_BkwUiGlassTransparency, &g_Config.m_BkwUiGlassTransparency, &Row, Localize("Transparency"), 0, 100, &CUi::ms_LinearScrollbarScale, 0, "%");
+	View.HSplitTop(6.0f, nullptr, &View);
+	View.HSplitTop(24.0f, &Row, &View);
+	pUi->DoScrollbarOption(&g_Config.m_BkwUiGlassBlur, &g_Config.m_BkwUiGlassBlur, &Row, Localize("Blur"), 0, 4, &CUi::ms_LinearScrollbarScale);
+}
+
 template<typename TLegacyRenderer>
 void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient, IInput *pInput, IHttp *pHttp, CUIRect PageView, int &LegacyTab, TLegacyRenderer &LegacyRenderer)
 {

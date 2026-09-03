@@ -122,6 +122,24 @@ jobs:
         name: ddnet-${{ matrix.os }}
         path: release/artifacts
 
+    - name: Check glass rendering with software OpenGL and Vulkan
+      if: contains(matrix.os, 'ubuntu')
+      env:
+        LIBGL_ALWAYS_SOFTWARE: "1"
+        VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+        SDL_AUDIODRIVER: dummy
+      run: |
+        sudo apt-get install -y xvfb xauth python3-pil mesa-vulkan-drivers
+        timeout 180s xvfb-run -a -s "-screen 0 1280x720x24" /usr/bin/python3 scripts/test_menu_glass.py release/DDNet release/glass-check
+
+    - name: Upload glass rendering evidence
+      if: always() && contains(matrix.os, 'ubuntu')
+      uses: actions/upload-artifact@v4
+      with:
+        name: glass-rendering
+        path: release/glass-check
+        if-no-files-found: ignore
+
   build-android:
     runs-on: ubuntu-24.04
     env:

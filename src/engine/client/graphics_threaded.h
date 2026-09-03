@@ -132,6 +132,7 @@ public:
 		CMD_RENDER,
 		CMD_RENDER_TEX3D,
 		CMD_BLUR_MENU_BACKGROUND,
+		CMD_RENDER_MENU_GLASS,
 
 		// opengl 2.0+ commands (some are just emulated and only exist in opengl 3.3+)
 		CMD_CREATE_BUFFER_OBJECT, // create vbo
@@ -228,6 +229,11 @@ public:
 		EPrimitiveType m_PrimType;
 		unsigned m_PrimCount;
 		SVertex *m_pVertices; // you should use the command buffer data to allocate vertices for this command
+	};
+
+	struct SCommand_RenderMenuGlass : public SCommand_Render
+	{
+		SCommand_RenderMenuGlass() { m_Cmd = CMD_RENDER_MENU_GLASS; }
 	};
 
 	struct SCommand_RenderTex3D : public SCommand
@@ -765,6 +771,7 @@ class CGraphics_Threaded : public IEngineGraphics
 	bool m_GLUses2DTextureArrays;
 	bool m_GLHasTextureArraysSupport;
 	bool m_GLUseTrianglesAsQuad;
+	bool m_MenuGlassReady = false;
 
 	CCommandBuffer *m_apCommandBuffers[2];
 	CCommandBuffer *m_pCommandBuffer;
@@ -1244,6 +1251,7 @@ public:
 
 	void ReadPixel(ivec2 Position, ColorRGBA *pColor) override;
 	void BlurMenuBackground(int Level) override;
+	void DrawMenuGlassRect(float x, float y, float w, float h, int Corners, float Rounding) override;
 	void TakeScreenshot(const char *pFilename) override;
 	void TakeCustomScreenshot(const char *pFilename) override;
 	void Swap() override;

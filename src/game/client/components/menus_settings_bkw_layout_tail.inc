@@ -84,6 +84,10 @@
 		CUIRect Module;
 
 		// ----- Left column -----
+		AddRect(LeftColumn, 108.0f, Module);
+		RenderBkwGlassSettings(pMenus, pUi, Module);
+		AddGap(LeftColumn);
+
 		float TeeFusionHeight = TfHeaderHeight;
 		if(g_Config.m_BkwTfMenu)
 			TeeFusionHeight += Gap + TfMenuHeight;

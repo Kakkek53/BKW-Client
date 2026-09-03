@@ -171,6 +171,8 @@ void CUIRect::Draw(ColorRGBA Color, int Corners, float Rounding) const
 {
 	if(ms_GlassOpacity >= 0.0f && Color.a > 0.0f && Color.a < 1.0f && Rounding > 0.0f)
 	{
+		Rounding = minimum(Rounding, minimum(w, h) * 0.5f);
+		ms_pGraphics->DrawMenuGlassRect(x, y, w, h, Corners, Rounding);
 		Color.a = ms_GlassOpacity * minimum(1.0f, Color.a * 2.0f);
 		ms_pGraphics->DrawRect(x, y, w, h, Color, Corners, Rounding);
 		const ColorRGBA Shine(1.0f, 1.0f, 1.0f, Color.a * 0.22f);

@@ -55,16 +55,6 @@ void CMenus::RenderSettingsGraphics(CUIRect MainView)
 
 	CUIRect ModeList, ModeLabel;
 	MainView.VSplitLeft(350.0f, &MainView, &ModeList);
-	CUIRect GlassRow;
-	ModeList.HSplitTop(22.0f, &GlassRow, &ModeList);
-	if(DoButton_CheckBox(&g_Config.m_BkwUiGlass, Localize("Liquid glass"), g_Config.m_BkwUiGlass, &GlassRow))
-		g_Config.m_BkwUiGlass ^= 1;
-	ModeList.HSplitTop(22.0f, &GlassRow, &ModeList);
-	Ui()->DoScrollbarOption(&g_Config.m_BkwUiGlassTransparency, &g_Config.m_BkwUiGlassTransparency, &GlassRow, Localize("Transparency"), 0, 100, &CUi::ms_LinearScrollbarScale, 0, "%");
-	ModeList.HSplitTop(22.0f, &GlassRow, &ModeList);
-	Ui()->DoScrollbarOption(&g_Config.m_BkwUiGlassBlur, &g_Config.m_BkwUiGlassBlur, &GlassRow, Localize("Blur"), 0, 4, &CUi::ms_LinearScrollbarScale);
-	GameClient()->m_Tooltips.DoToolTip(&g_Config.m_BkwUiGlassBlur, &GlassRow, Localize("Background blur uses Vulkan or OpenGL 3.3+. Text stays sharp."));
-	ModeList.HSplitTop(8.0f, nullptr, &ModeList);
 	ModeList.HSplitTop(24.0f, &ModeLabel, &ModeList);
 	MainView.VSplitLeft(340.0f, &MainView, nullptr);
 
