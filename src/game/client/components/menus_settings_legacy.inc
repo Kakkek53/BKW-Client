@@ -409,7 +409,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 			{
 				PageView.HSplitTop(8.0f, nullptr, &PageView);
 				CUIRect PlayerInfoCard;
-				PageView.HSplitTop(126.0f, &PlayerInfoCard, &PageView);
+				PageView.HSplitTop(146.0f, &PlayerInfoCard, &PageView);
 				PlayerInfoCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
 				PlayerInfoCard.Margin(10.0f, &PlayerInfoCard);
 
@@ -452,7 +452,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 			{
 				PageView.HSplitTop(8.0f, nullptr, &PageView);
 				CUIRect ClansCard;
-				PageView.HSplitTop(126.0f, &ClansCard, &PageView);
+				PageView.HSplitTop(146.0f, &ClansCard, &PageView);
 				ClansCard.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
 				ClansCard.Margin(10.0f, &ClansCard);
 

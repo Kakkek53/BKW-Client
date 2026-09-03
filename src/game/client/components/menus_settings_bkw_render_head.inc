@@ -132,7 +132,8 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 			CUIRect Section;
 			Column.HSplitTop(Height, &Section, &Column);
 			Column.HSplitTop(10.0f, nullptr, &Column);
-			s_MainScrollRegion.AddRect(Section);
+			if(!s_MainScrollRegion.AddRect(Section))
+				return;
 			if(SectionId == -1)
 			{
 				RenderBkwUpdateSettings(pMenus, pUi, Section);
