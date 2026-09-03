@@ -98,7 +98,7 @@ TEST_F(CBkwConfigTest, AliasesSupportToggleResetAndGlassRanges)
 	EXPECT_EQ(pOriginal->Flags(), pAlias->Flags());
 }
 
-TEST(MenuGlassBlur, PercentageUsesIncreasingFootprintAndValidMipRegions)
+TEST_F(CBkwConfigTest, BlurPercentageUsesIncreasingFootprintAndValidMipRegions)
 {
 	float PreviousScale = 0.0f;
 	for(int Percent = 1; Percent <= 100; ++Percent)
