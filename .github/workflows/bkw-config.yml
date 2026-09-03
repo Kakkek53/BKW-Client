@@ -1,6 +1,7 @@
 name: BKW Config Tests
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - 'src/engine/shared/config*'
@@ -16,6 +17,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: bkw-config-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   config-tests:

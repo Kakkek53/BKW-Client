@@ -352,18 +352,20 @@ void CMenusStart::RenderStartMenu(CUIRect MainView)
 	// Version labels + console button (bottom right)
 	{
 		CUIRect CurVersion, ConsoleButton;
-		MainView.HSplitBottom(74.0f, nullptr, &CurVersion);
+		MainView.HSplitBottom(95.0f, nullptr, &CurVersion);
 		CurVersion.VSplitRight(40.0f, &CurVersion, nullptr);
 		CurVersion.HSplitTop(20.0f, &ConsoleButton, &CurVersion);
 		CurVersion.HSplitTop(5.0f, nullptr, &CurVersion);
 		ConsoleButton.VSplitRight(40.0f, nullptr, &ConsoleButton);
 
-		CUIRect VersionLine1, VersionLine2, VersionLine3;
+		CUIRect VersionLine1, VersionLine2, VersionLine3, VersionLine4;
 		CurVersion.HSplitTop(16.0f, &VersionLine1, &CurVersion);
 		CurVersion.HSplitTop(2.0f, nullptr, &CurVersion);
 		CurVersion.HSplitTop(16.0f, &VersionLine2, &CurVersion);
 		CurVersion.HSplitTop(2.0f, nullptr, &CurVersion);
 		CurVersion.HSplitTop(16.0f, &VersionLine3, &CurVersion);
+		CurVersion.HSplitTop(2.0f, nullptr, &CurVersion);
+		CurVersion.HSplitTop(16.0f, &VersionLine4, &CurVersion);
 
 		char aDDNetBuf[64];
 		char aTClientBuf[64];
@@ -374,6 +376,7 @@ void CMenusStart::RenderStartMenu(CUIRect MainView)
 		Ui()->DoLabel(&VersionLine1, aDDNetBuf, 14.0f, TEXTALIGN_MR);
 		Ui()->DoLabel(&VersionLine2, aTClientBuf, 14.0f, TEXTALIGN_MR);
 		Ui()->DoLabel(&VersionLine3, aBestClientBuf, 14.0f, TEXTALIGN_MR);
+		Ui()->DoLabel(&VersionLine4, "BKW Client — Beta 0.3", 14.0f, TEXTALIGN_MR);
 
 		static CButtonContainer s_ConsoleButton;
 		SetIconMode();

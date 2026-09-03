@@ -1,34 +1,3 @@
-		s_MainScrollRegion.Begin(&Content, &ScrollParams);
-		Content.VSplitRight(5.0f, &Content, nullptr);
-		Content.VSplitLeft(5.0f, nullptr, &Content);
-		CUIRect LeftColumn, RightColumn;
-		Content.VSplitMid(&LeftColumn, &RightColumn, 24.0f);
-
-		auto AddMainSection = [&](CUIRect &Column, float Height, int LegacySection, bool Custom) {
-			CUIRect Section;
-			Column.HSplitTop(Height, &Section, &Column);
-			s_MainScrollRegion.AddRect(Section);
-			if(Custom)
-				RenderCheckpoints(pMenus, pUi, pGameClient, pClient, Section);
-			else if(LegacySection == LEGACY_HOURS)
-				RenderBkwHoursSettings(pMenus, pUi, pGameClient, pClient, pHttp, Section);
-			else
-				RenderLegacySection(LegacySection, Section);
-			Column.HSplitTop(Gap, nullptr, &Column);
-		};
-
-		// BestClient/TClient-style two-column layout for the Main page as well.
-		AddMainSection(LeftColumn, SavesHeight, LEGACY_SAVES, false);
-		AddMainSection(LeftColumn, PlayerHeight, LEGACY_PLAYER, false);
-		AddMainSection(LeftColumn, HoursHeight, LEGACY_HOURS, false);
-
-		AddMainSection(RightColumn, CheckpointsHeight, LEGACY_CHECKPOINTS, true);
-		AddMainSection(RightColumn, ClansHeight, LEGACY_CLANS, false);
-		AddMainSection(RightColumn, ExitHeight, LEGACY_EXIT, false);
-
-		s_MainScrollRegion.End();
-		LegacyTab = LEGACY_SAVES;
-	}
 	else if(s_CurrentTab == TAB_PERSONALIZATION)
 	{
 		// One Personalization page, no nested tabs and no +/- expand controls.

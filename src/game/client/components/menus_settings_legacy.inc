@@ -244,6 +244,11 @@ void CMenus::RenderSettings(CUIRect MainView)
 			}
 			else
 			{
+				static CScrollRegion s_SaveScroll;
+				CScrollRegionParams SaveScrollParams;
+				SaveScrollParams.m_ScrollUnit = 148.0f;
+				SaveScrollParams.m_ScrollbarThickness = 12.0f;
+				s_SaveScroll.Begin(&PageView, &SaveScrollParams);
 				const size_t MaxRendered = minimum<size_t>(s_SaveStore.Entries().size(), 256);
 				for(size_t Index = 0; Index < MaxRendered; ++Index)
 				{
@@ -257,15 +262,18 @@ void CMenus::RenderSettings(CUIRect MainView)
 					const bool CanLoad = ServerMatches && MapMatches && TeamMatches && CooldownReady;
 
 					CUIRect Card;
-					PageView.HSplitTop(104.0f, &Card, &PageView);
+					PageView.HSplitTop(140.0f, &Card, &PageView);
 					PageView.HSplitTop(8.0f, nullptr, &PageView);
+					if(!s_SaveScroll.AddRect(Card))
+						continue;
 					Card.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.42f), IGraphics::CORNER_ALL, 6.0f);
 					Card.Margin(8.0f, &Card);
 
-					CUIRect Title, Meta, Players, Buttons;
+					CUIRect Title, Meta, Players, State, Buttons;
 					Card.HSplitTop(20.0f, &Title, &Card);
 					Card.HSplitTop(22.0f, &Meta, &Card);
 					Card.HSplitTop(22.0f, &Players, &Card);
+					Card.HSplitTop(20.0f, &State, &Card);
 					Card.HSplitBottom(28.0f, &Card, &Buttons);
 
 					char aTitle[128];
@@ -274,7 +282,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 
 					char aMeta[512];
 					str_format(aMeta, sizeof(aMeta), "%s  •  %s", Entry.m_Map.c_str(), Entry.m_ServerAddress.c_str());
-					Ui()->DoLabel(&Meta, aMeta, 11.0f, TEXTALIGN_ML);
+					Ui()->DoLabel(&Meta, aMeta, 11.0f, TEXTALIGN_ML, {.m_MaxWidth = Meta.w});
 
 					std::string PlayerText;
 					for(size_t PlayerIndex = 0; PlayerIndex < Entry.m_vPlayers.size(); ++PlayerIndex)
@@ -283,13 +291,10 @@ void CMenus::RenderSettings(CUIRect MainView)
 							PlayerText += ", ";
 						PlayerText += Entry.m_vPlayers[PlayerIndex];
 					}
-					Ui()->DoLabel(&Players, PlayerText.c_str(), 11.0f, TEXTALIGN_ML);
+					Ui()->DoLabel(&Players, PlayerText.c_str(), 11.0f, TEXTALIGN_ML, {.m_MaxWidth = Players.w});
 
-					CUIRect State, LoadButton, DeleteButton;
-					Buttons.VSplitRight(90.0f, &State, &DeleteButton);
-					State.VSplitRight(10.0f, &State, nullptr);
-					State.VSplitRight(110.0f, &State, &LoadButton);
-					State.VSplitRight(10.0f, &State, nullptr);
+					CUIRect LoadButton, DeleteButton;
+					Buttons.VSplitMid(&LoadButton, &DeleteButton, 8.0f);
 
 					char aState[256];
 					if(ServerMatches && MapMatches && TeamMatches && !CooldownReady)
@@ -300,7 +305,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 						str_copy(aState, "Не подключены к серверу");
 					else
 						str_format(aState, sizeof(aState), "%s Сервер   %s Карта   %s Команда", ServerMatches ? "✓" : "✕", MapMatches ? "✓" : "✕", TeamMatches ? "✓" : "✕");
-					Ui()->DoLabel(&State, aState, 10.0f, TEXTALIGN_ML);
+					Ui()->DoLabel(&State, aState, 10.0f, TEXTALIGN_ML, {.m_MaxWidth = State.w});
 
 					if(CanLoad)
 					{
@@ -330,6 +335,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 						break;
 					}
 				}
+				s_SaveScroll.End();
 			}
 		}
 		else if(s_BkwTab == BKW_TAB_CHECKPOINTS)

@@ -64,15 +64,58 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 
 	if(s_CurrentTab == TAB_MAIN)
 	{
-		constexpr float Gap = 18.0f;
-		constexpr float SavesHeight = 1050.0f;
-		constexpr float CheckpointsHeight = 245.0f;
-		constexpr float PlayerHeight = 230.0f;
-		constexpr float ClansHeight = 230.0f;
-		constexpr float HoursHeight = 230.0f;
-		constexpr float ExitHeight = 390.0f;
 
-		CScrollRegionParams ScrollParams;
-		ScrollParams.m_ScrollUnit = 64.0f;
-		ScrollParams.m_ScrollbarThickness = 14.0f;
-		CUIRect Content = PageView;
+		static int s_Section = 0;
+		static CButtonContainer s_aSectionButtons[6];
+		const char *apSections[] = {"Сохранения", "Чекпоинты", "Игрок", "История кланов", "Игровое время", "Выход"};
+		const int aSections[] = {LEGACY_SAVES, LEGACY_CHECKPOINTS, LEGACY_PLAYER, LEGACY_CLANS, LEGACY_HOURS, LEGACY_EXIT};
+		const float aHeights[] = {0.0f, 245.0f, 250.0f, 250.0f, 260.0f, 390.0f};
+
+		CUIRect Navigation, Details;
+		PageView.VSplitLeft(minimum(160.0f, PageView.w * 0.25f), &Navigation, &Details);
+		Details.VSplitLeft(12.0f, nullptr, &Details);
+		Navigation.Draw(ColorRGBA(0.06f, 0.07f, 0.09f, 0.55f), IGraphics::CORNER_ALL, 10.0f);
+		Details.Draw(ColorRGBA(0.08f, 0.09f, 0.12f, 0.42f), IGraphics::CORNER_ALL, 10.0f);
+		Navigation.Margin(8.0f, &Navigation);
+		Details.Margin(14.0f, &Details);
+		CUIRect Caption;
+		Navigation.HSplitTop(28.0f, &Caption, &Navigation);
+		pUi->DoLabel(&Caption, "ОСНОВНОЕ", 12.0f, TEXTALIGN_ML);
+		Navigation.HSplitTop(8.0f, nullptr, &Navigation);
+		const float RowHeight = minimum(40.0f, maximum(24.0f, (Navigation.h - 30.0f) / 6.0f));
+		for(int i = 0; i < 6; ++i)
+		{
+			CUIRect Button;
+			Navigation.HSplitTop(RowHeight, &Button, &Navigation);
+			Navigation.HSplitTop(5.0f, nullptr, &Navigation);
+			if(pMenus->DoButton_Menu(&s_aSectionButtons[i], apSections[i], s_Section == i, &Button))
+			{
+				s_Section = i;
+				s_MainScrollRegion.Reset();
+				pUi->SetActiveItem(nullptr);
+			}
+		}
+
+		if(s_Section == 0)
+		{
+			// Saves owns its list scrollbar; keep its header and action visible.
+			RenderLegacySection(LEGACY_SAVES, Details);
+		}
+		else
+		{
+			CScrollRegionParams Params;
+			Params.m_ScrollUnit = 40.0f;
+			Params.m_ScrollbarThickness = 12.0f;
+			s_MainScrollRegion.Begin(&Details, &Params);
+			Details.h = maximum(Details.h, aHeights[s_Section]);
+			s_MainScrollRegion.AddRect(Details);
+			if(s_Section == 1)
+				RenderCheckpoints(pMenus, pUi, pGameClient, pClient, Details);
+			else if(s_Section == 4)
+				RenderBkwHoursSettings(pMenus, pUi, pGameClient, pClient, pHttp, Details);
+			else
+				RenderLegacySection(aSections[s_Section], Details);
+			s_MainScrollRegion.End();
+		}
+		LegacyTab = aSections[s_Section];
+	}

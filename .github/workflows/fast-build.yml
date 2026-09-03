@@ -1,9 +1,22 @@
 name: Fast Build
 
 on:
+  workflow_dispatch:
   push:
     branches-ignore:
       - gh-readonly-queue/**
+    tags-ignore:
+      - '**'
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fast-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-cmake:
