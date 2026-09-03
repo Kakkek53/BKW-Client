@@ -78,4 +78,6 @@ MACRO_CONFIG_INT(BkwVideoMapMaxSeconds, bkw_video_map_max_seconds, 15, 1, 60, CF
 // Liquid glass menu appearance. All three are also console commands.
 MACRO_CONFIG_INT(BkwUiGlass, bkw_ui_glass, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable liquid glass menus")
 MACRO_CONFIG_INT(BkwUiGlassTransparency, bkw_ui_glass_transparency, 65, 0, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Glass transparency in percent (0 opaque, 100 transparent)")
-MACRO_CONFIG_INT(BkwUiGlassBlur, bkw_ui_glass_blur, 2, 0, 4, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Glass background blur radius level (0 off, 4 strongest)")
+MACRO_CONFIG_INT(BkwUiGlassBlur, bkw_ui_glass_blur, 60, 0, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Glass background blur strength in percent (0 off, 100 strongest)")
+MACRO_CONFIG_INT(BkwUiGlassVersion, bkw_ui_glass_version, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Glass settings migration version")
+MACRO_CONFIG_COL(BkwUiGlassColor, bkw_ui_glass_color, 0x000020U, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Liquid glass tint, independent of UI color")

@@ -2845,7 +2845,7 @@ void CGraphics_Threaded::BlurMenuBackground(int Level)
 		return;
 	FlushVertices();
 	CCommandBuffer::SCommand_BlurMenuBackground Cmd;
-	Cmd.m_Level = std::clamp(Level, 1, 4);
+	Cmd.m_Level = std::clamp(Level, 1, 100);
 	AddCmd(Cmd);
 }
 

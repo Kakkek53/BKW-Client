@@ -12,11 +12,13 @@ class CUIRect
 {
 	static IGraphics *ms_pGraphics;
 	static float ms_GlassOpacity;
+	static ColorRGBA ms_GlassColor;
 
 public:
 	static void Init(IGraphics *pGraphics) { ms_pGraphics = pGraphics; }
 	// Negative opacity restores normal rendering. Scoped to menu rendering.
 	static void SetGlassOpacity(float Opacity) { ms_GlassOpacity = Opacity; }
+	static void SetGlassColor(ColorRGBA Color) { ms_GlassColor = Color; }
 
 	float x, y, w, h;
 

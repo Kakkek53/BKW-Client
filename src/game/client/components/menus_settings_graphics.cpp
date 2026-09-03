@@ -226,7 +226,14 @@ void CMenus::RenderSettingsGraphics(CUIRect MainView)
 
 	MainView.HSplitTop(2.0f, nullptr, &MainView);
 	static CButtonContainer s_UiColorResetId;
-	DoLine_ColorPicker(&s_UiColorResetId, 25.0f, 13.0f, 2.0f, &MainView, Localize("UI Color"), &g_Config.m_UiColor, color_cast<ColorRGBA>(ColorHSLA(0xE4A046AFU, true)), false, nullptr, !g_Config.m_BkwUiGlass);
+	if(g_Config.m_BkwUiGlass)
+	{
+		MainView.HSplitTop(25.0f, &Button, &MainView);
+		Ui()->DoLabel(&Button, Localize("UI Color: disabled while liquid glass is enabled"), 12.0f, TEXTALIGN_ML);
+		MainView.HSplitTop(2.0f, nullptr, &MainView);
+	}
+	else
+		DoLine_ColorPicker(&s_UiColorResetId, 25.0f, 13.0f, 2.0f, &MainView, Localize("UI Color"), &g_Config.m_UiColor, color_cast<ColorRGBA>(ColorHSLA(0xE4A046AFU, true)), false, nullptr, true);
 
 	// Backend list
 	struct SMenuBackendInfo

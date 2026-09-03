@@ -15,6 +15,7 @@
 #include <engine/client/backend/opengl/opengl_sl.h>
 #include <engine/client/backend/opengl/opengl_sl_program.h>
 #include <engine/client/backend_sdl.h>
+#include <engine/client/menu_glass.h>
 #include <engine/gfx/image_manipulation.h>
 
 #include <algorithm>
@@ -1434,9 +1435,9 @@ void CCommandProcessorFragment_OpenGL3_3::Cmd_RenderQuadContainerAsSpriteMultipl
 
 void CCommandProcessorFragment_OpenGL3_3::DestroyGlassTextures()
 {
-	glDeleteTextures(5, m_aGlassTextures);
-	glDeleteFramebuffers(5, m_aGlassFramebuffers);
-	for(int i = 0; i < 5; ++i)
+	glDeleteTextures(SMenuGlassBlur::MIP_LEVELS, m_aGlassTextures);
+	glDeleteFramebuffers(SMenuGlassBlur::MIP_LEVELS, m_aGlassFramebuffers);
+	for(int i = 0; i < SMenuGlassBlur::MIP_LEVELS; ++i)
 	{
 		m_aGlassTextures[i] = 0;
 		m_aGlassFramebuffers[i] = 0;
@@ -1462,16 +1463,16 @@ void CCommandProcessorFragment_OpenGL3_3::Cmd_BlurMenuBackground(const CCommandB
 		DestroyGlassTextures();
 		m_GlassWidth = m_CanvasWidth;
 		m_GlassHeight = m_CanvasHeight;
-		glGenTextures(5, m_aGlassTextures);
-		glGenFramebuffers(5, m_aGlassFramebuffers);
-		for(int i = 0; i < 5; ++i)
+		glGenTextures(SMenuGlassBlur::MIP_LEVELS, m_aGlassTextures);
+		glGenFramebuffers(SMenuGlassBlur::MIP_LEVELS, m_aGlassFramebuffers);
+		for(int i = 0; i < SMenuGlassBlur::MIP_LEVELS; ++i)
 		{
 			glBindTexture(GL_TEXTURE_2D, m_aGlassTextures[i]);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_GlassWidth >> i, m_GlassHeight >> i, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, std::max(1u, m_GlassWidth >> i), std::max(1u, m_GlassHeight >> i), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 			glBindFramebuffer(GL_FRAMEBUFFER, m_aGlassFramebuffers[i]);
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_aGlassTextures[i], 0);
 			if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
@@ -1491,11 +1492,12 @@ void CCommandProcessorFragment_OpenGL3_3::Cmd_BlurMenuBackground(const CCommandB
 	glReadBuffer(DrawFramebuffer == 0 ? GL_BACK : GL_COLOR_ATTACHMENT0);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_aGlassFramebuffers[0]);
 	glBlitFramebuffer(0, 0, m_CanvasWidth, m_CanvasHeight, 0, 0, m_CanvasWidth, m_CanvasHeight, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-	const int Level = std::clamp(pCommand->m_Level, 1, 4);
+	const SMenuGlassBlur Blur(pCommand->m_Level);
+	const int Level = Blur.m_LastMip;
 	auto BlitLevel = [&](int From, int To) {
 		glBindFramebuffer(GL_READ_FRAMEBUFFER, m_aGlassFramebuffers[From]);
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_aGlassFramebuffers[To]);
-		glBlitFramebuffer(0, 0, m_GlassWidth >> From, m_GlassHeight >> From, 0, 0, m_GlassWidth >> To, m_GlassHeight >> To, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+		glBlitFramebuffer(0, 0, Blur.Size(m_GlassWidth, From), Blur.Size(m_GlassHeight, From), 0, 0, Blur.Size(m_GlassWidth, To), Blur.Size(m_GlassHeight, To), GL_COLOR_BUFFER_BIT, GL_LINEAR);
 	};
 	for(int i = 1; i <= Level; ++i)
 		BlitLevel(i - 1, i);
@@ -1679,7 +1681,8 @@ void CCommandProcessorFragment_OpenGL3_3::RenderMotionBlurGL()
 
 void CCommandProcessorFragment_OpenGL3_3::Cmd_BeforeSwap()
 {
-	const bool Enabled = g_Config.m_BcMotionBlur != 0 && g_Config.m_BcMotionBlurStrength > 0;
+	const bool Enabled = !m_GlassValid && g_Config.m_BcMotionBlur != 0 && g_Config.m_BcMotionBlurStrength > 0;
+	m_GlassValid = false;
 	if(Enabled != m_MotionBlurEnabledLastFrame)
 	{
 		m_MotionBlurHistoryValid = false;

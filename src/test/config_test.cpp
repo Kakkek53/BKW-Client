@@ -1,5 +1,6 @@
 #include "test.h"
 
+#include <engine/client/menu_glass.h>
 #include <engine/kernel.h>
 #include <engine/shared/config.h>
 #include <engine/storage.h>
@@ -86,11 +87,47 @@ TEST_F(CBkwConfigTest, AliasesSupportToggleResetAndGlassRanges)
 	EXPECT_EQ(g_Config.m_BkwUiGlassTransparency, 100);
 	Execute("bkw_ui_glass_blur -1");
 	EXPECT_EQ(g_Config.m_BkwUiGlassBlur, 0);
-	Execute("bkw_ui_glass_blur 9");
-	EXPECT_EQ(g_Config.m_BkwUiGlassBlur, 4);
+	Execute("bkw_ui_glass_blur 150");
+	EXPECT_EQ(g_Config.m_BkwUiGlassBlur, 100);
+	Execute("bkw_ui_glass_blur 50");
+	EXPECT_EQ(g_Config.m_BkwUiGlassBlur, 50);
 	const auto *pOriginal = m_pConsole->GetCommandInfo("cl_languagefile", CFGFLAG_CLIENT, false);
 	const auto *pAlias = m_pConsole->GetCommandInfo("bkw_cl_languagefile", CFGFLAG_CLIENT, false);
 	ASSERT_NE(pOriginal, nullptr);
 	ASSERT_NE(pAlias, nullptr);
 	EXPECT_EQ(pOriginal->Flags(), pAlias->Flags());
+}
+
+TEST(MenuGlassBlur, PercentageUsesIncreasingFootprintAndValidMipRegions)
+{
+	float PreviousScale = 0.0f;
+	for(int Percent = 1; Percent <= 100; ++Percent)
+	{
+		const SMenuGlassBlur Blur(Percent);
+		EXPECT_GT(Blur.m_Scale, PreviousScale);
+		PreviousScale = Blur.m_Scale;
+		EXPECT_GE(Blur.m_LastMip, 2);
+		EXPECT_LT(Blur.m_LastMip, SMenuGlassBlur::MIP_LEVELS);
+		for(int Size : {1, 17, 64, 719, 1080, 3840})
+		{
+			for(int Mip = 0; Mip <= Blur.m_LastMip; ++Mip)
+			{
+				EXPECT_GE(Blur.Size(Size, Mip), 1);
+				EXPECT_LE(Blur.Size(Size, Mip), std::max(1, Size >> Mip));
+			}
+			EXPECT_EQ(Blur.Size(Size, 0), Size);
+			EXPECT_EQ(Blur.Size(Size, 1), std::max(1, Size >> 1));
+		}
+	}
+	EXPECT_FLOAT_EQ(SMenuGlassBlur(100).m_Scale, 64.0f);
+}
+
+TEST_F(CBkwConfigTest, GlassColorIsIndependentOfUiColor)
+{
+	const unsigned UiColor = g_Config.m_UiColor;
+	Execute("bkw_ui_glass_color 65408");
+	EXPECT_EQ(g_Config.m_UiColor, UiColor);
+	const unsigned GlassColor = g_Config.m_BkwUiGlassColor;
+	Execute("ui_color 123456");
+	EXPECT_EQ(g_Config.m_BkwUiGlassColor, GlassColor);
 }

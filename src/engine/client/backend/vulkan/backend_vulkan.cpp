@@ -10,6 +10,7 @@
 #include <engine/client/backend/vulkan/backend_vulkan.h>
 #include <engine/client/backend_sdl.h>
 #include <engine/client/graphics_threaded.h>
+#include <engine/client/menu_glass.h>
 #include <engine/gfx/image_manipulation.h>
 #include <engine/graphics.h>
 #include <engine/shared/config.h>
@@ -2350,7 +2351,7 @@ protected:
 			}
 		}
 
-		const bool FrameBlendEnabled = IsFrameBlendEnabled();
+		const bool FrameBlendEnabled = !m_GlassPassActive && IsFrameBlendEnabled();
 		if(FrameBlendEnabled != m_FrameBlendEnabledLastFrame)
 		{
 			ResetFrameBlendHistory();
@@ -7169,7 +7170,7 @@ public:
 	[[nodiscard]] bool Cmd_BlurMenuBackground(const CCommandBuffer::SCommand_BlurMenuBackground *pCommand)
 	{
 		const auto Extent = m_VKSwapImgAndViewportExtent.m_SwapImageViewport;
-		if(m_RenderingPaused || m_GlassPassActive || Extent.width < 16 || Extent.height < 16 || m_vGlassImages.empty())
+		if(m_RenderingPaused || m_GlassPassActive || std::max(Extent.width, Extent.height) < 64 || m_vGlassImages.empty())
 			return true;
 		VkFormatProperties Properties;
 		vkGetPhysicalDeviceFormatProperties(m_VKGPU, m_VKSurfFormat.format, &Properties);
@@ -7180,7 +7181,7 @@ public:
 		auto &Blurred = m_vGlassImages[m_CurImageIndex].m_Blurred;
 		if(Image.m_Image == VK_NULL_HANDLE)
 		{
-			if(!CreateImage(Extent.width, Extent.height, 1, 5, m_VKSurfFormat.format, VK_IMAGE_TILING_OPTIMAL, Image.m_Image, Image.m_ImgMem))
+			if(!CreateImage(Extent.width, Extent.height, 1, SMenuGlassBlur::MIP_LEVELS, m_VKSurfFormat.format, VK_IMAGE_TILING_OPTIMAL, Image.m_Image, Image.m_ImgMem))
 				return false;
 			Image.m_ImgView = CreateImageView(Image.m_Image, m_VKSurfFormat.format, VK_IMAGE_VIEW_TYPE_2D, 1, 1, true);
 			if(Image.m_ImgView == VK_NULL_HANDLE || !CreateFrameBlendDescriptorSet(Image))
@@ -7236,7 +7237,7 @@ public:
 		Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		Barrier.image = Image.m_Image;
-		Barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 5, 0, 1};
+		Barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, SMenuGlassBlur::MIP_LEVELS, 0, 1};
 		Barrier.srcAccessMask = 0;
 		Barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 		vkCmdPipelineBarrier(CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &Barrier);
@@ -7256,16 +7257,17 @@ public:
 			Barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
 			vkCmdPipelineBarrier(CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &Barrier);
 		};
+		const SMenuGlassBlur Blur(pCommand->m_Level);
 		auto BlitLevel = [&](uint32_t From, uint32_t To) {
 			TransferBarrier();
 			VkImageBlit Blit{};
 			Blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, From, 0, 1};
 			Blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, To, 0, 1};
-			Blit.srcOffsets[1] = {(int32_t)(Extent.width >> From), (int32_t)(Extent.height >> From), 1};
-			Blit.dstOffsets[1] = {(int32_t)(Extent.width >> To), (int32_t)(Extent.height >> To), 1};
+			Blit.srcOffsets[1] = {Blur.Size(Extent.width, From), Blur.Size(Extent.height, From), 1};
+			Blit.dstOffsets[1] = {Blur.Size(Extent.width, To), Blur.Size(Extent.height, To), 1};
 			vkCmdBlitImage(CommandBuffer, Image.m_Image, VK_IMAGE_LAYOUT_GENERAL, Image.m_Image, VK_IMAGE_LAYOUT_GENERAL, 1, &Blit, VK_FILTER_LINEAR);
 		};
-		const int Level = std::clamp(pCommand->m_Level, 1, 4);
+		const int Level = Blur.m_LastMip;
 		for(int i = 1; i <= Level; ++i)
 			BlitLevel(i - 1, i);
 		// Preserve mip 0 to restore the sharp scene after restarting the pass.

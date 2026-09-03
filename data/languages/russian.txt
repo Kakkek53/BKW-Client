@@ -2788,3 +2788,12 @@ Blur
 
 Background blur uses Vulkan or OpenGL 3.3+. Text stays sharp.
 == Для размытия нужен Vulkan или OpenGL 3.3+. Текст остаётся чётким.
+
+Glass color
+== Цвет стекла
+
+UI Color: disabled while liquid glass is enabled
+== Цвет интерфейса: отключён при включённом стекле
+
+Blur requires OpenGL 3.3+ or Vulkan
+== Для размытия нужен OpenGL 3.3+ или Vulkan

@@ -2765,6 +2765,7 @@ if(CLIENT)
     input.h
     keynames.cpp
     keynames.h
+    menu_glass.h
     notifications.cpp
     notifications.h
     serverbrowser.cpp

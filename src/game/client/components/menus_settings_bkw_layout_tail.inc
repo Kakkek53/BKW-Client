@@ -84,7 +84,7 @@
 		CUIRect Module;
 
 		// ----- Left column -----
-		AddRect(LeftColumn, 108.0f, Module);
+		AddRect(LeftColumn, 140.0f + (g_Config.m_BkwUiGlass && !pUi->Graphics()->IsQuadBufferingEnabled() ? 24.0f : 0.0f), Module);
 		RenderBkwGlassSettings(pMenus, pUi, Module);
 		AddGap(LeftColumn);
 

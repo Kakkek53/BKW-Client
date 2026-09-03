@@ -53,10 +53,10 @@ def run_case(binary, output, backend, samples, glass=True):
     case.mkdir(parents=True, exist_ok=True)
     backdrop = Image.new("RGBA", (1280, 720))
     draw = ImageDraw.Draw(backdrop)
-    for y in range(0, 720, 8):
-        for x in range(0, 1280, 8):
-            color = (225, 240, 255) if (x // 8 + y // 8) % 2 else (25, 45, 65)
-            draw.rectangle((x, y, x + 7, y + 7), fill=color)
+    for y in range(0, 720, 64):
+        for x in range(0, 1280, 64):
+            color = (225, 240, 255) if (x // 64 + y // 64) % 2 else (25, 45, 65)
+            draw.rectangle((x, y, x + 63, y + 63), fill=color)
     backdrop.save(case / "backdrop.png")
     (case / "storage.cfg").write_text(f"add_path {case}\nadd_path {binary.parent / 'data'}\nadd_path {binary.parent}\n")
     fifo = case / "console.fifo"
@@ -104,10 +104,28 @@ def run_case(binary, output, backend, samples, glass=True):
 
             if glass:
                 sharp = snapshot(0, "sharp")
-                blurred = snapshot(4, "blurred")
+                weak = snapshot(1, "weak")
+                medium = snapshot(50, "medium")
+                blurred = snapshot(100, "blurred")
                 restored = snapshot(0, "restored")
                 check_pair(sharp, blurred)
                 check_pair(restored, blurred)
+                center = (60, 120, blurred.width - 60, blurred.height - 80)
+                assert mean_difference(weak.crop(center), blurred.crop(center)) > 8, "100% blur is not stronger than 1%"
+                assert mean_difference(medium.crop(center), blurred.crop(center)) > 1, "50% and 100% blur look identical"
+                if samples == 0:
+                    send("bkw_ui_glass_transparency 50")
+                    tinted = snapshot(100, "tinted")
+                    send("ui_color 65408")
+                    ui_color_changed = snapshot(100, "ui-color-ignored")
+                    assert mean_difference(tinted, ui_color_changed) < 0.3, "UI color still affects glass"
+                    send("bkw_ui_glass_color 65408")
+                    color_changed = snapshot(100, "glass-color")
+                    assert mean_difference(tinted.crop(center), color_changed.crop(center)) > 3, "Glass color has no effect"
+                    send("bc_motion_blur 1")
+                    send("bc_motion_blur_strength 95")
+                    motion_enabled = snapshot(100, "motion-blur-isolated")
+                    assert mean_difference(color_changed, motion_enabled) < 0.3, "Motion blur changes glass menus"
             else:
                 snapshot(0, "control")
             # Confirm the requested backend wasn't silently replaced at startup.

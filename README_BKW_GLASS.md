@@ -1,7 +1,7 @@
 # Liquid glass and console settings
 
 Open **Settings → BKW → Personalization**. Enable **Liquid glass**, choose **Transparency**
-(0–100%) and **Blur** (0–4). Changes apply immediately. Blur 0 keeps the glass
+(0–100%) and **Blur** (0–100%). Changes apply immediately. Blur 0 keeps the glass
 surfaces without background filtering. Higher levels soften a wider area.
 
 The material follows the BKW-CLOUD config card: a faint diagonal white wash,
@@ -12,8 +12,15 @@ parent's blurred backdrop instead of replacing its tint with the raw scene.
 Backdrop coverage resets each frame and whenever the viewport changes; clipped
 panels are reused only under the same clip, and rounded edges remain separate.
 
-The UI color picker in Graphics uses RGB while glass is enabled. Its previous alpha is
-preserved and used again after glass is disabled. Text and color swatches stay
+Choose **Glass color** in the same module. While glass is enabled, the UI color
+control in Graphics is disabled and its saved value is not used for menus or
+loading backgrounds. Turning glass off restores the previous UI color.
+Old saved blur levels 0–4 migrate once to 0/25/50/75/100 percent. The new default
+is 60%. The shared OpenGL/Vulkan filter varies its final downsample region with
+percentage, reaching a 64x reduction at 100% (previously 16x). Motion blur history
+is suspended and invalidated on frames with an active glass backdrop, so old menu
+frames cannot smear the glass and text.
+Text and color swatches stay
 sharp. Glass applies to the menu, both over the game and over menu backgrounds.
 Only the inside of each rounded glass panel samples the blurred scene. The
 background outside panels stays sharp, and scroll clipping is respected.
@@ -25,7 +32,8 @@ translucent surfaces. The effect is off by default.
 ```text
 bkw_ui_glass 1
 bkw_ui_glass_transparency 65
-bkw_ui_glass_blur 2
+bkw_ui_glass_blur 60
+bkw_ui_glass_color 32
 ```
 
 Every client config variable also has a `bkw_` console name. Existing names that
@@ -51,5 +59,6 @@ values, quoted strings, toggles and setting ranges.
 
 Fast Build also runs the actual client under Xvfb/Mesa with OpenGL and Vulkan,
 with MSAA off/on. `scripts/test_menu_glass.py` compares screenshots of a static
-checkerboard background: blur must change the interior and preserve the outer
-border. The `glass-rendering` artifact contains the images and client logs.
+64-pixel checkerboard background: blur must change the interior and preserve the outer
+border. It also compares 1/50/100%, independent tint and UI colors, and motion
+blur isolation. The `glass-rendering` artifact contains the images and client logs.

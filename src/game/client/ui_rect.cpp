@@ -6,6 +6,7 @@
 
 IGraphics *CUIRect::ms_pGraphics = nullptr;
 float CUIRect::ms_GlassOpacity = -1.0f;
+ColorRGBA CUIRect::ms_GlassColor(0.125f, 0.125f, 0.125f, 1.0f);
 
 namespace
 {
@@ -219,6 +220,7 @@ void CUIRect::Draw(ColorRGBA Color, int Corners, float Rounding) const
 		Rounding = minimum(Rounding, minimum(w, h) * 0.5f);
 		ms_pGraphics->DrawMenuGlassRect(x, y, w, h, Corners, Rounding);
 		const float Strength = minimum(1.0f, Color.a * 2.0f);
+		Color = ms_GlassColor;
 		// BKW-CLOUD's config card uses a faint diagonal white wash, a clear
 		// center and a stronger upper rim. Keep tint separate from reflections.
 		Color.a = ms_GlassOpacity * ms_GlassOpacity * Strength;

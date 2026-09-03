@@ -12,6 +12,8 @@
 
 #include "backend_opengl.h"
 
+#include <engine/client/menu_glass.h>
+
 class CGLSLPrimitiveExProgram;
 class CGLSLQuadProgram;
 class CGLSLSpriteMultipleProgram;
@@ -79,8 +81,8 @@ protected:
 	void UploadStreamBufferData(EPrimitiveType PrimitiveType, const void *pVertices, size_t VertSize, unsigned int PrimitiveCount, bool AsTex3D = false);
 	void RenderText(const CCommandBuffer::SState &State, int DrawNum, int TextTextureIndex, int TextOutlineTextureIndex, int TextureSize, const ColorRGBA &TextColor, const ColorRGBA &TextOutlineColor);
 
-	TWGLuint m_aGlassTextures[5] = {};
-	TWGLuint m_aGlassFramebuffers[5] = {};
+	TWGLuint m_aGlassTextures[SMenuGlassBlur::MIP_LEVELS] = {};
+	TWGLuint m_aGlassFramebuffers[SMenuGlassBlur::MIP_LEVELS] = {};
 	uint32_t m_GlassWidth = 0;
 	uint32_t m_GlassHeight = 0;
 	bool m_GlassValid = false;

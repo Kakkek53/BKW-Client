@@ -11,7 +11,16 @@ void RenderBkwGlassSettings(CMenus *pMenus, CUi *pUi, CUIRect View)
 	pUi->DoScrollbarOption(&g_Config.m_BkwUiGlassTransparency, &g_Config.m_BkwUiGlassTransparency, &Row, Localize("Transparency"), 0, 100, &CUi::ms_LinearScrollbarScale, 0, "%");
 	View.HSplitTop(6.0f, nullptr, &View);
 	View.HSplitTop(24.0f, &Row, &View);
-	pUi->DoScrollbarOption(&g_Config.m_BkwUiGlassBlur, &g_Config.m_BkwUiGlassBlur, &Row, Localize("Blur"), 0, 4, &CUi::ms_LinearScrollbarScale);
+	pUi->DoScrollbarOption(&g_Config.m_BkwUiGlassBlur, &g_Config.m_BkwUiGlassBlur, &Row, Localize("Blur"), 0, 100, &CUi::ms_LinearScrollbarScale, 0, "%");
+	View.HSplitTop(6.0f, nullptr, &View);
+	static CButtonContainer s_GlassColorReset;
+	pMenus->DoLine_ColorPicker(&s_GlassColorReset, 24.0f, 13.0f, 0.0f, &View, Localize("Glass color"), &g_Config.m_BkwUiGlassColor, color_cast<ColorRGBA>(ColorHSLA(0x000020U)), false);
+	if(g_Config.m_BkwUiGlass && !pUi->Graphics()->IsQuadBufferingEnabled())
+	{
+		View.HSplitTop(6.0f, nullptr, &View);
+		View.HSplitTop(18.0f, &Row, &View);
+		pUi->DoLabel(&Row, Localize("Blur requires OpenGL 3.3+ or Vulkan"), 11.0f, TEXTALIGN_ML);
+	}
 }
 
 template<typename TLegacyRenderer>

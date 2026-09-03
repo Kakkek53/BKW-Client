@@ -810,7 +810,7 @@ void CMenus::RenderLoading(const char *pCaption, const char *pContent, int Incre
 		return;
 
 	// need up date this here to get correct
-	ms_GuiColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_UiColor, true));
+	UpdateColors();
 
 	Ui()->MapScreen();
 
@@ -966,6 +966,14 @@ void CMenus::OnInterfacesInit(CGameClient *pClient)
 
 void CMenus::OnInit()
 {
+	// Old saved values 0..4 were pyramid levels, not percentages. Migrate once
+	// so an existing default of 2 does not silently become almost no blur.
+	if(g_Config.m_BkwUiGlassVersion == 0)
+	{
+		if(g_Config.m_BkwUiGlassBlur <= 4)
+			g_Config.m_BkwUiGlassBlur *= 25;
+		g_Config.m_BkwUiGlassVersion = 1;
+	}
 	if(g_Config.m_ClShowWelcome)
 	{
 		m_Popup = POPUP_LANGUAGE;
@@ -1235,6 +1243,7 @@ void CMenus::Render()
 	if(g_Config.m_BkwUiGlass && IsActive())
 	{
 		Graphics()->BlurMenuBackground(g_Config.m_BkwUiGlassBlur);
+		CUIRect::SetGlassColor(color_cast<ColorRGBA>(ColorHSLA(g_Config.m_BkwUiGlassColor)));
 		CUIRect::SetGlassOpacity(1.0f - g_Config.m_BkwUiGlassTransparency / 100.0f);
 	}
 
@@ -3002,9 +3011,10 @@ void CMenus::OnRender()
 
 void CMenus::UpdateColors()
 {
-	ms_GuiColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_UiColor, true));
 	if(g_Config.m_BkwUiGlass)
-		ms_GuiColor.a = 0.5f;
+		ms_GuiColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_BkwUiGlassColor)).WithAlpha(0.5f);
+	else
+		ms_GuiColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_UiColor, true));
 
 	ms_ColorTabbarInactiveOutgame = ColorRGBA(0.0f, 0.0f, 0.0f, 0.25f);
 	ms_ColorTabbarActiveOutgame = ColorRGBA(0.0f, 0.0f, 0.0f, 0.5f);
