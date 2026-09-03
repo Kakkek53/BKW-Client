@@ -1,4 +1,5 @@
 #include "test.h"
+#include <base/str.h>
 
 #include <engine/client/menu_glass.h>
 #include <engine/kernel.h>
