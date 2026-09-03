@@ -113,62 +113,52 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 		pUi->ClipDisable();
 	};
 
+
 	if(s_CurrentTab == TAB_MAIN)
 	{
-
-		static int s_Section = 0;
-		static CButtonContainer s_aSectionButtons[7];
-		const char *apSections[] = {"Сохранения", "Чекпоинты", "Игрок", "История кланов", "Игровое время", "Выход", "Обновления"};
-		const int aSections[] = {LEGACY_SAVES, LEGACY_CHECKPOINTS, LEGACY_PLAYER, LEGACY_CLANS, LEGACY_HOURS, LEGACY_EXIT, LEGACY_SAVES};
-		const float aHeights[] = {0.0f, 245.0f, 250.0f, 250.0f, 260.0f, 390.0f, 155.0f};
-
-		CUIRect Navigation, Details;
-		PageView.VSplitLeft(minimum(160.0f, PageView.w * 0.25f), &Navigation, &Details);
-		Details.VSplitLeft(12.0f, nullptr, &Details);
-		Navigation.Draw(ColorRGBA(0.06f, 0.07f, 0.09f, 0.55f), IGraphics::CORNER_ALL, 10.0f);
-		Details.Draw(ColorRGBA(0.08f, 0.09f, 0.12f, 0.42f), IGraphics::CORNER_ALL, 10.0f);
-		Navigation.Margin(8.0f, &Navigation);
-		Details.Margin(14.0f, &Details);
-		CUIRect Caption;
-		Navigation.HSplitTop(28.0f, &Caption, &Navigation);
-		pUi->DoLabel(&Caption, "ОСНОВНОЕ", 12.0f, TEXTALIGN_ML);
-		Navigation.HSplitTop(8.0f, nullptr, &Navigation);
-		const float RowHeight = minimum(40.0f, maximum(20.0f, (Navigation.h - 35.0f) / 7.0f));
-		for(int i = 0; i < 7; ++i)
-		{
-			CUIRect Button;
-			Navigation.HSplitTop(RowHeight, &Button, &Navigation);
-			Navigation.HSplitTop(5.0f, nullptr, &Navigation);
-			if(pMenus->DoButton_Menu(&s_aSectionButtons[i], apSections[i], s_Section == i, &Button))
+		// Match Personalization: one scrollable page of grouped cards, no sidebar.
+		CScrollRegionParams Params;
+		Params.m_ScrollUnit = 46.0f;
+		Params.m_ScrollbarThickness = 12.0f;
+		Params.m_ScrollbarMargin = 5.0f;
+		CUIRect Content = PageView;
+		s_MainScrollRegion.Begin(&Content, &Params);
+		Content.VMargin(5.0f, &Content);
+		const bool TwoColumns = Content.w >= 620.0f;
+		CUIRect Left = Content, Right = Content;
+		if(TwoColumns)
+			Content.VSplitMid(&Left, &Right, 18.0f);
+		auto Card = [&](CUIRect &Column, float Height, int SectionId) {
+			CUIRect Section;
+			Column.HSplitTop(Height, &Section, &Column);
+			Column.HSplitTop(10.0f, nullptr, &Column);
+			s_MainScrollRegion.AddRect(Section);
+			if(SectionId == -1)
 			{
-				s_Section = i;
-				s_MainScrollRegion.Reset();
-				pUi->SetActiveItem(nullptr);
+				RenderBkwUpdateSettings(pMenus, pUi, Section);
+				return;
 			}
-		}
-
-		if(s_Section == 0)
-		{
-			// Saves owns its list scrollbar; keep its header and action visible.
-			RenderLegacySection(LEGACY_SAVES, Details);
-		}
-		else
-		{
-			CScrollRegionParams Params;
-			Params.m_ScrollUnit = 40.0f;
-			Params.m_ScrollbarThickness = 12.0f;
-			s_MainScrollRegion.Begin(&Details, &Params);
-			Details.h = maximum(Details.h, aHeights[s_Section]);
-			s_MainScrollRegion.AddRect(Details);
-			if(s_Section == 1)
-				RenderCheckpoints(pMenus, pUi, pGameClient, pClient, Details);
-			else if(s_Section == 4)
-				RenderBkwHoursSettings(pMenus, pUi, pGameClient, pClient, pHttp, Details);
-			else if(s_Section == 6)
-				RenderBkwUpdateSettings(pMenus, pUi, Details);
+			Section.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.46f), IGraphics::CORNER_ALL, 8.0f);
+			Section.Margin(12.0f, &Section);
+			if(SectionId == LEGACY_CHECKPOINTS)
+				RenderCheckpoints(pMenus, pUi, pGameClient, pClient, Section);
+			else if(SectionId == LEGACY_HOURS)
+				RenderBkwHoursSettings(pMenus, pUi, pGameClient, pClient, pHttp, Section);
 			else
-				RenderLegacySection(aSections[s_Section], Details);
-			s_MainScrollRegion.End();
-		}
-		LegacyTab = aSections[s_Section];
+				RenderLegacySection(SectionId, Section);
+		};
+
+		Card(Left, 155.0f, -1);
+		Card(TwoColumns ? Right : Left, 280.0f, LEGACY_CHECKPOINTS);
+		Card(Left, 260.0f, LEGACY_PLAYER);
+		Card(TwoColumns ? Right : Left, 260.0f, LEGACY_CLANS);
+		Card(Left, 280.0f, LEGACY_HOURS);
+		Card(TwoColumns ? Right : Left, 420.0f, LEGACY_EXIT);
+
+		// Give saved teams the full page width: status and action rows need room.
+		CUIRect Saves = Content;
+		Saves.y = TwoColumns ? maximum(Left.y, Right.y) : Left.y;
+		Card(Saves, 440.0f, LEGACY_SAVES);
+		s_MainScrollRegion.End();
+		LegacyTab = LEGACY_SAVES;
 	}
