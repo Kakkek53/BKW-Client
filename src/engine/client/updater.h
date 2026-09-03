@@ -63,6 +63,8 @@ class CUpdater : public IUpdater
 	std::shared_ptr<IHttpRequest> m_pCurrentTask;
 	ETaskKind m_TaskKind = ETaskKind::NONE;
 	bool m_bAutoCheckPending = false;
+	bool m_FetchReleaseList = false;
+	int m_CheckedChannel = -1;
 
 	char m_aLatestVersion[64];
 	char m_aArchiveName[128];
@@ -70,7 +72,7 @@ class CUpdater : public IUpdater
 	char m_aArchivePath[IO_MAX_PATH_LENGTH];
 
 	void ResetTask() REQUIRES(!m_Lock);
-	void StartReleaseFetch() REQUIRES(!m_Lock);
+	void StartReleaseFetch(bool List = false) REQUIRES(!m_Lock);
 	void ParseReleaseTask() REQUIRES(!m_Lock);
 	void StartArchiveDownload() REQUIRES(!m_Lock);
 	bool LaunchApplyScriptAndQuit() REQUIRES(!m_Lock);

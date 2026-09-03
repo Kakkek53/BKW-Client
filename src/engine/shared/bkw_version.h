@@ -1,0 +1,8 @@
+#ifndef ENGINE_SHARED_BKW_VERSION_H
+#define ENGINE_SHARED_BKW_VERSION_H
+
+#define BKW_VERSION "b0.3"
+#define BKW_VERSION_LABEL "BKW Client — Beta 0.3"
+#define BKW_DEFAULT_UPDATE_CHANNEL 0
+
+#endif

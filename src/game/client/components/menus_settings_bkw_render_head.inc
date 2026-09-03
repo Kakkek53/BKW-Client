@@ -1,3 +1,54 @@
+void RenderBkwUpdateSettings(CMenus *pMenus, CUi *pUi, CUIRect View)
+{
+	View.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.46f), IGraphics::CORNER_ALL, 8.0f);
+	View.Margin(10.0f, &View);
+	CUIRect Row;
+	View.HSplitTop(24.0f, &Row, &View);
+	pUi->DoLabel(&Row, BKW_VERSION_LABEL, 16.0f, TEXTALIGN_ML);
+	static int s_aChannels[2];
+	View.HSplitTop(28.0f, &Row, &View);
+	CUIRect Beta, Release;
+	Row.VSplitMid(&Beta, &Release, 8.0f);
+	if(pMenus->DoButton_CheckBox(&s_aChannels[0], "Только Beta", g_Config.m_BkwUpdateChannel == 0, &Beta))
+		g_Config.m_BkwUpdateChannel = 0;
+	if(pMenus->DoButton_CheckBox(&s_aChannels[1], "Только Release", g_Config.m_BkwUpdateChannel == 1, &Release))
+		g_Config.m_BkwUpdateChannel = 1;
+	View.HSplitTop(24.0f, &Row, &View);
+	static int s_AutoDownload;
+	if(pMenus->DoButton_CheckBox(&s_AutoDownload, "Скачивать обновления автоматически", g_Config.m_BcAutoUpdate, &Row))
+		g_Config.m_BcAutoUpdate ^= 1;
+#if defined(CONF_AUTOUPDATE)
+	IUpdater *pUpdater = pMenus->BkwUpdater();
+	char aStatus[256];
+	pUpdater->GetCurrentFile(aStatus, sizeof(aStatus));
+	View.HSplitTop(24.0f, &Row, &View);
+	pUi->DoLabel(&Row, aStatus, 11.0f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
+	View.HSplitTop(26.0f, &Row, &View);
+	static CButtonContainer s_Check, s_Action;
+	CUIRect Check, Action;
+	Row.VSplitMid(&Check, &Action, 8.0f);
+	const auto State = pUpdater->GetCurrentState();
+	if(State != IUpdater::GETTING_MANIFEST && State != IUpdater::DOWNLOADING)
+	{
+		if(pMenus->DoButton_Menu(&s_Check, "Проверить", 0, &Check))
+			pUpdater->CheckForUpdate();
+		if(State == IUpdater::VERSION_AVAILABLE && pMenus->DoButton_Menu(&s_Action, "Скачать", 0, &Action))
+			pUpdater->InitiateUpdate();
+		else if(State == IUpdater::NEED_RESTART && pMenus->DoButton_Menu(&s_Action, "Установить", 0, &Action))
+			pUpdater->ApplyUpdateAndRestart();
+	}
+	else
+	{
+		char aProgress[64];
+		str_format(aProgress, sizeof(aProgress), State == IUpdater::DOWNLOADING ? "Загрузка: %d%%" : "Проверка…", pUpdater->GetCurrentPercent());
+		pUi->DoLabel(&Row, aProgress, 12.0f, TEXTALIGN_ML);
+	}
+#else
+	View.HSplitTop(28.0f, &Row, &View);
+	pUi->DoLabel(&Row, "Обновление вручную: github.com/Kakkek53/test", 11.0f, TEXTALIGN_ML, {.m_MaxWidth = Row.w});
+#endif
+}
+
 void RenderBkwGlassSettings(CMenus *pMenus, CUi *pUi, CUIRect View)
 {
 	View.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.46f), IGraphics::CORNER_ALL, 8.0f);
@@ -66,10 +117,10 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 	{
 
 		static int s_Section = 0;
-		static CButtonContainer s_aSectionButtons[6];
-		const char *apSections[] = {"Сохранения", "Чекпоинты", "Игрок", "История кланов", "Игровое время", "Выход"};
-		const int aSections[] = {LEGACY_SAVES, LEGACY_CHECKPOINTS, LEGACY_PLAYER, LEGACY_CLANS, LEGACY_HOURS, LEGACY_EXIT};
-		const float aHeights[] = {0.0f, 245.0f, 250.0f, 250.0f, 260.0f, 390.0f};
+		static CButtonContainer s_aSectionButtons[7];
+		const char *apSections[] = {"Сохранения", "Чекпоинты", "Игрок", "История кланов", "Игровое время", "Выход", "Обновления"};
+		const int aSections[] = {LEGACY_SAVES, LEGACY_CHECKPOINTS, LEGACY_PLAYER, LEGACY_CLANS, LEGACY_HOURS, LEGACY_EXIT, LEGACY_SAVES};
+		const float aHeights[] = {0.0f, 245.0f, 250.0f, 250.0f, 260.0f, 390.0f, 155.0f};
 
 		CUIRect Navigation, Details;
 		PageView.VSplitLeft(minimum(160.0f, PageView.w * 0.25f), &Navigation, &Details);
@@ -82,8 +133,8 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 		Navigation.HSplitTop(28.0f, &Caption, &Navigation);
 		pUi->DoLabel(&Caption, "ОСНОВНОЕ", 12.0f, TEXTALIGN_ML);
 		Navigation.HSplitTop(8.0f, nullptr, &Navigation);
-		const float RowHeight = minimum(40.0f, maximum(24.0f, (Navigation.h - 30.0f) / 6.0f));
-		for(int i = 0; i < 6; ++i)
+		const float RowHeight = minimum(40.0f, maximum(20.0f, (Navigation.h - 35.0f) / 7.0f));
+		for(int i = 0; i < 7; ++i)
 		{
 			CUIRect Button;
 			Navigation.HSplitTop(RowHeight, &Button, &Navigation);
@@ -113,6 +164,8 @@ void Render(CMenus *pMenus, CUi *pUi, CGameClient *pGameClient, IClient *pClient
 				RenderCheckpoints(pMenus, pUi, pGameClient, pClient, Details);
 			else if(s_Section == 4)
 				RenderBkwHoursSettings(pMenus, pUi, pGameClient, pClient, pHttp, Details);
+			else if(s_Section == 6)
+				RenderBkwUpdateSettings(pMenus, pUi, Details);
 			else
 				RenderLegacySection(aSections[s_Section], Details);
 			s_MainScrollRegion.End();

@@ -96,7 +96,9 @@ jobs:
 
     - name: Test shop naming and scoped menu styles
       if: contains(matrix.os, 'ubuntu')
-      run: python3 scripts/test_skinshop.py
+      run: |
+        python3 scripts/test_skinshop.py
+        python3 scripts/test_bkw_updater.py
 
     - name: Build in release mode
       env:
@@ -131,6 +133,9 @@ jobs:
         ${{ matrix.cmake-path }}cmake --build . --config Release --target package_default ${{ matrix.build-args }}
         mkdir artifacts
         mv ${{ matrix.package-file }} artifacts
+
+    - name: Name BKW release packages
+      run: python3 scripts/name_bkw_artifacts.py release/artifacts
 
     - name: Upload Artifacts
       continue-on-error: ${{ contains(matrix.os, 'macOS') }}
@@ -213,6 +218,7 @@ jobs:
         scripts/android/cmake_android.sh all DDNet org.ddnet.client Release build-android
         mkdir artifacts
         mv build-android/DDNet.apk artifacts
+        python3 scripts/name_bkw_artifacts.py artifacts
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4

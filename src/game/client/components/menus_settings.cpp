@@ -6,6 +6,8 @@
 
 #include <engine/shared/datafile.h>
 #include <engine/storage.h>
+#include <engine/updater.h>
+#include <engine/shared/bkw_version.h>
 
 #include <game/client/components/bkw/cloud_account.h>
 #include <game/client/components/bkw/ddstats_hours.h>

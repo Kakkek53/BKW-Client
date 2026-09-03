@@ -81,3 +81,5 @@ MACRO_CONFIG_INT(BkwUiGlassTransparency, bkw_ui_glass_transparency, 65, 0, 100, 
 MACRO_CONFIG_INT(BkwUiGlassBlur, bkw_ui_glass_blur, 60, 0, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Glass background blur strength in percent (0 off, 100 strongest)")
 MACRO_CONFIG_INT(BkwUiGlassVersion, bkw_ui_glass_version, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Glass settings migration version")
 MACRO_CONFIG_COL(BkwUiGlassColor, bkw_ui_glass_color, 0x000020U, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Liquid glass tint, independent of UI color")
+#include <engine/shared/bkw_version.h>
+MACRO_CONFIG_INT(BkwUpdateChannel, bkw_update_channel, BKW_DEFAULT_UPDATE_CHANNEL, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "BKW update channel: 0 Beta, 1 Release")

@@ -19,6 +19,7 @@
 #include <game/client/ui.h>
 #include <game/localization.h>
 #include <game/version.h>
+#include <engine/shared/bkw_version.h>
 
 #if defined(CONF_PLATFORM_ANDROID)
 #include <android/android_main.h>
@@ -277,7 +278,7 @@ void CMenusStart::RenderStartMenu(CUIRect MainView)
 
 			if(ShowDownloadButton)
 			{
-				str_format(aUpdateBuf, sizeof(aUpdateBuf), Localize("BestClient %s is out!"), Updater()->GetLatestVersionString());
+				str_format(aUpdateBuf, sizeof(aUpdateBuf), "BKW Client %s", Updater()->GetLatestVersionString());
 				TextRender()->TextColor(1.0f, 0.4f, 0.4f, 1.0f);
 			}
 			else if(ShowUpdateProgress)
@@ -376,7 +377,7 @@ void CMenusStart::RenderStartMenu(CUIRect MainView)
 		Ui()->DoLabel(&VersionLine1, aDDNetBuf, 14.0f, TEXTALIGN_MR);
 		Ui()->DoLabel(&VersionLine2, aTClientBuf, 14.0f, TEXTALIGN_MR);
 		Ui()->DoLabel(&VersionLine3, aBestClientBuf, 14.0f, TEXTALIGN_MR);
-		Ui()->DoLabel(&VersionLine4, "BKW Client — Beta 0.3", 14.0f, TEXTALIGN_MR);
+		Ui()->DoLabel(&VersionLine4, BKW_VERSION_LABEL, 14.0f, TEXTALIGN_MR);
 
 		static CButtonContainer s_ConsoleButton;
 		SetIconMode();

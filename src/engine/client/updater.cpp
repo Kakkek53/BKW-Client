@@ -1,5 +1,7 @@
 /* Copyright © 2026 BestProject Team */
 #include "updater.h"
+#include "bkw_update_version.h"
+#include <engine/shared/bkw_version.h>
 
 #include <base/math.h>
 #include <base/process.h>
@@ -39,18 +41,14 @@ static bool StrEndsWithNoCase(const char *pStr, const char *pSuffix)
 	return str_comp_nocase(pStr + StrLen - SuffixLen, pSuffix) == 0;
 }
 
-static constexpr const char *GITHUB_RELEASES_URL = "https://api.github.com/repos/BestProjectTeam/BestClient/releases?per_page=10";
-static constexpr const char *GITHUB_LATEST_RELEASE_URL = "https://github.com/BestProjectTeam/BestClient/releases/latest";
+static constexpr const char *GITHUB_RELEASES_URL = "https://api.github.com/repos/Kakkek53/test/releases?per_page=100";
+static constexpr const char *GITHUB_LATEST_RELEASE_URL = "https://github.com/Kakkek53/test/releases";
 #if defined(CONF_PLATFORM_ANDROID)
 static constexpr const char *UPDATE_ARCHIVE_PATH = "update/bestclient-release.apk";
 #else
 static constexpr const char *UPDATE_ARCHIVE_PATH = "update/bestclient-release.zip";
 #endif
 
-static void BuildGitHubReleasesUrl(char *pBuf, int BufSize)
-{
-	str_format(pBuf, BufSize, "%s&t=%lld", GITHUB_RELEASES_URL, (long long)time_timestamp());
-}
 
 static std::string ToLowerAscii(const char *pStr)
 {
@@ -65,84 +63,11 @@ static std::string ToLowerAscii(const char *pStr)
 
 static const char *GetReleaseVersionString(const json_value *pJson)
 {
-	if(!pJson || pJson->type != json_object)
+	if(!pJson || pJson->type != json_object || json_boolean_get(json_object_get(pJson, "draft")))
 		return nullptr;
-
-	const char *pVersion = json_string_get(json_object_get(pJson, "tag_name"));
-	if(!pVersion)
-		pVersion = json_string_get(json_object_get(pJson, "name"));
-	return pVersion;
-}
-
-static void NormalizeVersionString(const char *pVersion, char *pBuf, int BufSize)
-{
-	if(BufSize <= 0)
-		return;
-
-	if(!pVersion)
-	{
-		pBuf[0] = '\0';
-		return;
-	}
-
-	while(*pVersion != '\0' && std::isspace(static_cast<unsigned char>(*pVersion)))
-		++pVersion;
-
-	if((pVersion[0] == 'v' || pVersion[0] == 'V') && std::isdigit(static_cast<unsigned char>(pVersion[1])))
-		++pVersion;
-
-	str_copy(pBuf, pVersion, BufSize);
-}
-
-static std::vector<int> ExtractVersionNumbers(const char *pVersion)
-{
-	std::vector<int> vNumbers;
-	if(!pVersion)
-		return vNumbers;
-
-	int Current = -1;
-	for(const unsigned char *p = reinterpret_cast<const unsigned char *>(pVersion); *p != '\0'; ++p)
-	{
-		if(std::isdigit(*p))
-		{
-			if(Current < 0)
-				Current = 0;
-			Current = Current * 10 + (*p - '0');
-		}
-		else if(Current >= 0)
-		{
-			vNumbers.push_back(Current);
-			Current = -1;
-		}
-	}
-
-	if(Current >= 0)
-		vNumbers.push_back(Current);
-
-	return vNumbers;
-}
-
-static int CompareVersionStrings(const char *pLeft, const char *pRight)
-{
-	char aLeftNormalized[64];
-	char aRightNormalized[64];
-	NormalizeVersionString(pLeft, aLeftNormalized, sizeof(aLeftNormalized));
-	NormalizeVersionString(pRight, aRightNormalized, sizeof(aRightNormalized));
-
-	const std::vector<int> vLeft = ExtractVersionNumbers(aLeftNormalized);
-	const std::vector<int> vRight = ExtractVersionNumbers(aRightNormalized);
-	const size_t Num = maximum(vLeft.size(), vRight.size());
-	for(size_t i = 0; i < Num; ++i)
-	{
-		const int Left = i < vLeft.size() ? vLeft[i] : 0;
-		const int Right = i < vRight.size() ? vRight[i] : 0;
-		if(Left < Right)
-			return -1;
-		if(Left > Right)
-			return 1;
-	}
-
-	return str_comp_nocase(aLeftNormalized, aRightNormalized);
+	const char *pVersion = json_string_get(json_object_get(pJson, "name"));
+	BkwUpdate::CVersion Version;
+	return pVersion && Version.Parse(pVersion) && Version.m_Channel == g_Config.m_BkwUpdateChannel ? pVersion : nullptr;
 }
 
 static int ScoreArchiveAsset(const char *pAssetName)
@@ -151,7 +76,7 @@ static int ScoreArchiveAsset(const char *pAssetName)
 		return -1;
 
 	const std::string Lower = ToLowerAscii(pAssetName);
-	if(Lower.find("bestclient") == std::string::npos)
+	if(Lower.find("bestclient") == std::string::npos && Lower.find("bkw") == std::string::npos)
 		return -1;
 
 #if defined(CONF_FAMILY_WINDOWS)
@@ -176,6 +101,14 @@ static int ScoreArchiveAsset(const char *pAssetName)
 	if(Lower.find("debug") != std::string::npos || Lower.find("symbols") != std::string::npos || Lower.find("source") != std::string::npos)
 		return -1;
 
+	// Never install an archive for another CPU architecture.
+#if defined(CONF_ARCH_AMD64)
+	if(Lower.find("arm") != std::string::npos || Lower.find("win32") != std::string::npos || Lower.find("i686") != std::string::npos)
+		return -1;
+#elif defined(CONF_ARCH_IA32)
+	if(Lower.find("64") != std::string::npos || Lower.find("arm") != std::string::npos)
+		return -1;
+#endif
 	int Score = 100;
 
 #if defined(CONF_FAMILY_WINDOWS)
@@ -207,9 +140,7 @@ static bool ParseReleaseObject(const json_value *pJson, char *pVersion, int Vers
 	if(!pJson || pJson->type != json_object)
 		return false;
 
-	const char *pReleaseVersion = json_string_get(json_object_get(pJson, "tag_name"));
-	if(!pReleaseVersion)
-		pReleaseVersion = json_string_get(json_object_get(pJson, "name"));
+	const char *pReleaseVersion = GetReleaseVersionString(pJson);
 	if(!pReleaseVersion)
 		return false;
 
@@ -230,7 +161,7 @@ static bool ParseReleaseObject(const json_value *pJson, char *pVersion, int Vers
 		const char *pName = json_string_get(json_object_get(pAsset, "name"));
 		const char *pUrl = json_string_get(json_object_get(pAsset, "browser_download_url"));
 		const int Score = ScoreArchiveAsset(pName);
-		if(!pName || !pUrl || Score < BestScore)
+		if(!pName || !pUrl || Score < 0 || Score <= BestScore || !str_startswith(pUrl, "https://github.com/Kakkek53/test/releases/download/"))
 			continue;
 
 		BestScore = Score;
@@ -266,7 +197,13 @@ static bool ParseLatestRelease(json_value *pJson, char *pVersion, int VersionSiz
 			if(!pReleaseVersion)
 				continue;
 
-			if(!pBestRelease || CompareVersionStrings(pReleaseVersion, aBestVersion) > 0)
+			char aCandidateVersion[64], aCandidateName[128], aCandidateUrl[2048];
+			if(!ParseReleaseObject(pRelease, aCandidateVersion, sizeof(aCandidateVersion), aCandidateName, sizeof(aCandidateName), aCandidateUrl, sizeof(aCandidateUrl)))
+				continue;
+			BkwUpdate::CVersion Candidate, Best;
+			Candidate.Parse(pReleaseVersion);
+			Best.Parse(aBestVersion);
+			if(!pBestRelease || Candidate.m_Numbers > Best.m_Numbers)
 			{
 				pBestRelease = pRelease;
 				str_copy(aBestVersion, pReleaseVersion, sizeof(aBestVersion));
@@ -317,10 +254,8 @@ void CUpdater::Init()
 	m_pStorage = Kernel()->RequestInterface<IStorage>();
 	m_pHttp = Kernel()->RequestInterface<IHttp>();
 
-	// BKW temporarily disables the inherited BestClient startup update check.
-	// Keep the updater implementation intact so it can later be pointed at a
-	// dedicated BKW release channel without rebuilding the updater architecture.
-	m_bAutoCheckPending = false;
+	// Check BKW releases on startup, without replacing a running game automatically.
+	m_bAutoCheckPending = true;
 }
 
 void CUpdater::SetCurrentState(EUpdaterState NewState)
@@ -374,7 +309,7 @@ void CUpdater::ResetTask()
 	m_TaskKind = ETaskKind::NONE;
 }
 
-void CUpdater::StartReleaseFetch()
+void CUpdater::StartReleaseFetch(bool List)
 {
 	ResetTask();
 	SetStatus("Checking latest release");
@@ -382,7 +317,9 @@ void CUpdater::StartReleaseFetch()
 	SetCurrentState(IUpdater::GETTING_MANIFEST);
 
 	char aUrl[2304];
-	BuildGitHubReleasesUrl(aUrl, sizeof(aUrl));
+	m_FetchReleaseList = List;
+	m_CheckedChannel = g_Config.m_BkwUpdateChannel;
+	str_copy(aUrl, List ? GITHUB_RELEASES_URL : "https://api.github.com/repos/Kakkek53/test/releases/latest");
 	m_TaskKind = ETaskKind::FETCH_RELEASE;
 	m_pCurrentTask = HttpGet(aUrl);
 	m_pCurrentTask->HeaderString("Accept", "application/vnd.github+json");
@@ -390,7 +327,7 @@ void CUpdater::StartReleaseFetch()
 	m_pCurrentTask->HeaderString("X-GitHub-Api-Version", "2022-11-28");
 	m_pCurrentTask->HeaderString("Cache-Control", "no-cache");
 	m_pCurrentTask->HeaderString("Pragma", "no-cache");
-	m_pCurrentTask->Timeout(CTimeout{10000, 0, 500, 10});
+	m_pCurrentTask->Timeout(CTimeout{10000, 60000, 500, 10});
 	m_pCurrentTask->IpResolve(IPRESOLVE::V4);
 	m_pHttp->Run(m_pCurrentTask);
 }
@@ -412,7 +349,7 @@ void CUpdater::ParseReleaseTask()
 	const bool Parsed = ParseLatestRelease(pJson, aVersion, sizeof(aVersion), aArchiveName, sizeof(aArchiveName), aArchiveUrl, sizeof(aArchiveUrl));
 	json_value_free(pJson);
 
-	if(!Parsed || CompareVersionStrings(aVersion, BESTCLIENT_VERSION) <= 0)
+	if(!Parsed || !BkwUpdate::IsNewer(aVersion, BKW_VERSION, m_CheckedChannel))
 	{
 		m_aLatestVersion[0] = '\0';
 		m_aArchiveName[0] = '\0';
@@ -432,8 +369,11 @@ void CUpdater::ParseReleaseTask()
 void CUpdater::StartArchiveDownload()
 {
 	ResetTask();
-	str_copy(m_aArchivePath, UPDATE_ARCHIVE_PATH, sizeof(m_aArchivePath));
-	m_pStorage->RemoveBinaryFile(m_aArchivePath);
+	char aUpdateDir[IO_MAX_PATH_LENGTH];
+	m_pStorage->GetBinaryPathAbsolute("update", aUpdateDir, sizeof(aUpdateDir));
+	m_pStorage->CreateFolder(aUpdateDir, IStorage::TYPE_ABSOLUTE);
+	m_pStorage->GetBinaryPathAbsolute(UPDATE_ARCHIVE_PATH, m_aArchivePath, sizeof(m_aArchivePath));
+	m_pStorage->RemoveFile(m_aArchivePath, IStorage::TYPE_ABSOLUTE);
 
 	SetStatus(m_aArchiveName);
 	SetPercent(0);
@@ -456,7 +396,7 @@ bool CUpdater::LaunchApplyScriptAndQuit()
 	char aExePath[IO_MAX_PATH_LENGTH];
 	char aPid[32];
 
-	m_pStorage->GetBinaryPath(m_aArchivePath, aArchivePath, sizeof(aArchivePath));
+	str_copy(aArchivePath, m_aArchivePath, sizeof(aArchivePath));
 	if(!m_pStorage->FileExists(aArchivePath, IStorage::TYPE_ABSOLUTE))
 	{
 		SetStatus("Downloaded archive missing");
@@ -482,7 +422,7 @@ bool CUpdater::LaunchApplyScriptAndQuit()
 #elif defined(CONF_PLATFORM_ANDROID)
 	char aArchivePath[IO_MAX_PATH_LENGTH];
 
-	m_pStorage->GetBinaryPath(m_aArchivePath, aArchivePath, sizeof(aArchivePath));
+	str_copy(aArchivePath, m_aArchivePath, sizeof(aArchivePath));
 	if(!m_pStorage->FileExists(aArchivePath, IStorage::TYPE_ABSOLUTE))
 	{
 		SetStatus("Downloaded archive missing");
@@ -490,7 +430,7 @@ bool CUpdater::LaunchApplyScriptAndQuit()
 	}
 
 	char aAbsoluteArchivePath[IO_MAX_PATH_LENGTH];
-	m_pStorage->GetBinaryPathAbsolute(m_aArchivePath, aAbsoluteArchivePath, sizeof(aAbsoluteArchivePath));
+	str_copy(aAbsoluteArchivePath, m_aArchivePath, sizeof(aAbsoluteArchivePath));
 
 	if(!InstallAndroidApk(aAbsoluteArchivePath))
 	{
@@ -508,7 +448,7 @@ bool CUpdater::LaunchApplyScriptAndQuit()
 	char aExePath[IO_MAX_PATH_LENGTH];
 	char aPid[32];
 
-	m_pStorage->GetBinaryPath(m_aArchivePath, aArchivePath, sizeof(aArchivePath));
+	str_copy(aArchivePath, m_aArchivePath, sizeof(aArchivePath));
 	if(!m_pStorage->FileExists(aArchivePath, IStorage::TYPE_ABSOLUTE))
 	{
 		SetStatus("Downloaded archive missing");
@@ -581,13 +521,21 @@ void CUpdater::ApplyUpdateAndRestart()
 
 void CUpdater::Update()
 {
+	if(m_CheckedChannel >= 0 && m_CheckedChannel != g_Config.m_BkwUpdateChannel)
+	{
+		ResetTask();
+		m_aLatestVersion[0] = '\0';
+		m_aArchiveUrl[0] = '\0';
+		m_aArchiveName[0] = '\0';
+		SetCurrentState(CLEAN);
+		m_bAutoCheckPending = true;
+	}
+
 	if(g_Config.m_BcAutoUpdate != 0)
 	{
 		const EUpdaterState State = GetCurrentState();
 		if(State == IUpdater::VERSION_AVAILABLE)
 			InitiateUpdate();
-		else if(State == IUpdater::NEED_RESTART)
-			ApplyUpdateAndRestart();
 	}
 
 	if(m_bAutoCheckPending && m_pHttp && GetCurrentState() == CLEAN)
@@ -603,6 +551,15 @@ void CUpdater::Update()
 	{
 		if(GetCurrentState() == IUpdater::DOWNLOADING)
 			SetPercent(m_pCurrentTask->Progress());
+		return;
+	}
+
+	// /latest omits GitHub prereleases. Follow with the channel-aware list,
+	// including when /latest returns 404 because only beta releases exist.
+	if(m_TaskKind == ETaskKind::FETCH_RELEASE && !m_FetchReleaseList &&
+		((m_pCurrentTask->State() == EHttpState::DONE && m_pCurrentTask->StatusCode() < 400) || m_pCurrentTask->StatusCode() == 404))
+	{
+		StartReleaseFetch(true);
 		return;
 	}
 
