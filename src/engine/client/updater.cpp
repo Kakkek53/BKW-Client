@@ -4,6 +4,7 @@
 #include <engine/shared/bkw_version.h>
 
 #include <base/math.h>
+#include <base/fs.h>
 #include <base/process.h>
 #include <base/str.h>
 #include <base/time.h>
@@ -374,7 +375,14 @@ void CUpdater::StartArchiveDownload()
 	ResetTask();
 	char aUpdateDir[IO_MAX_PATH_LENGTH];
 	m_pStorage->GetBinaryPathAbsolute("update", aUpdateDir, sizeof(aUpdateDir));
-	m_pStorage->CreateFolder(aUpdateDir, IStorage::TYPE_ABSOLUTE);
+	// CreateFolder does not accept TYPE_ABSOLUTE. The update directory lives
+	// next to the client binary, so create its resolved absolute path directly.
+	if(fs_makedir(aUpdateDir) != 0 && !fs_is_dir(aUpdateDir))
+	{
+		SetStatus("Failed to create update directory");
+		SetCurrentState(IUpdater::FAIL);
+		return;
+	}
 	m_pStorage->GetBinaryPathAbsolute(UPDATE_ARCHIVE_PATH, m_aArchivePath, sizeof(m_aArchivePath));
 	m_pStorage->RemoveFile(m_aArchivePath, IStorage::TYPE_ABSOLUTE);
 
