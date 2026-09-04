@@ -554,10 +554,10 @@ void CUpdater::Update()
 		return;
 	}
 
-	// /latest omits GitHub prereleases. Follow with the channel-aware list,
-	// including when /latest returns 404 because only beta releases exist.
-	if(m_TaskKind == ETaskKind::FETCH_RELEASE && !m_FetchReleaseList &&
-		((m_pCurrentTask->State() == EHttpState::DONE && m_pCurrentTask->StatusCode() < 400) || m_pCurrentTask->StatusCode() == 404))
+	// /latest omits GitHub prereleases and libcurl reports its 404 as ERROR.
+	// Do not call StatusCode or ResultJson for that request: both assert unless
+	// the request state is DONE. The channel-aware list is authoritative.
+	if(m_TaskKind == ETaskKind::FETCH_RELEASE && !m_FetchReleaseList)
 	{
 		StartReleaseFetch(true);
 		return;

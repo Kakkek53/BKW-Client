@@ -5,6 +5,13 @@ import subprocess
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+UPDATER_SOURCE = (ROOT / "src/engine/client/updater.cpp").read_text()
+FIRST_PROBE = UPDATER_SOURCE[
+    UPDATER_SOURCE.index("if(m_TaskKind == ETaskKind::FETCH_RELEASE && !m_FetchReleaseList)") :
+    UPDATER_SOURCE.index("if(m_pCurrentTask->State() != EHttpState::DONE")
+]
+assert "StatusCode()" not in FIRST_PROBE
+assert "StartReleaseFetch(true)" in FIRST_PROBE
 SOURCE = r'''
 #include <engine/client/updater.cpp>
 #include <cassert>
