@@ -12,6 +12,7 @@ FIRST_PROBE = UPDATER_SOURCE[
 ]
 assert "StatusCode()" not in FIRST_PROBE
 assert "StartReleaseFetch(true)" in FIRST_PROBE
+assert "m_pCurrentTask->FailOnErrorStatus(false);" in UPDATER_SOURCE
 SOURCE = r'''
 #include <engine/client/updater.cpp>
 #include <cassert>

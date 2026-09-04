@@ -322,6 +322,9 @@ void CUpdater::StartReleaseFetch(bool List)
 	str_copy(aUrl, List ? GITHUB_RELEASES_URL : "https://api.github.com/repos/Kakkek53/test/releases/latest");
 	m_TaskKind = ETaskKind::FETCH_RELEASE;
 	m_pCurrentTask = HttpGet(aUrl);
+	// A repository with only prereleases legitimately returns 404 for /latest.
+	// Keep the HTTP response available so the updater can fall back quietly.
+	m_pCurrentTask->FailOnErrorStatus(false);
 	m_pCurrentTask->HeaderString("Accept", "application/vnd.github+json");
 	m_pCurrentTask->HeaderString("User-Agent", CLIENT_NAME);
 	m_pCurrentTask->HeaderString("X-GitHub-Api-Version", "2022-11-28");
