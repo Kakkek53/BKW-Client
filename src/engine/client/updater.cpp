@@ -4,7 +4,6 @@
 #include <engine/shared/bkw_version.h>
 
 #include <base/math.h>
-#include <base/fs.h>
 #include <base/process.h>
 #include <base/str.h>
 #include <base/time.h>
@@ -373,16 +372,6 @@ void CUpdater::ParseReleaseTask()
 void CUpdater::StartArchiveDownload()
 {
 	ResetTask();
-	char aUpdateDir[IO_MAX_PATH_LENGTH];
-	m_pStorage->GetBinaryPathAbsolute("update", aUpdateDir, sizeof(aUpdateDir));
-	// CreateFolder does not accept TYPE_ABSOLUTE. The update directory lives
-	// next to the client binary, so create its resolved absolute path directly.
-	if(fs_makedir(aUpdateDir) != 0 && !fs_is_dir(aUpdateDir))
-	{
-		SetStatus("Failed to create update directory");
-		SetCurrentState(IUpdater::FAIL);
-		return;
-	}
 	m_pStorage->GetBinaryPathAbsolute(UPDATE_ARCHIVE_PATH, m_aArchivePath, sizeof(m_aArchivePath));
 	m_pStorage->RemoveFile(m_aArchivePath, IStorage::TYPE_ABSOLUTE);
 
@@ -391,7 +380,9 @@ void CUpdater::StartArchiveDownload()
 	SetCurrentState(IUpdater::DOWNLOADING);
 
 	m_TaskKind = ETaskKind::DOWNLOAD_ARCHIVE;
-	m_pCurrentTask = HttpGetFile(m_aArchiveUrl, m_pStorage, m_aArchivePath, IStorage::TYPE_ABSOLUTE);
+	// TYPE_ABSOLUTE selects the binary storage location in HttpGetFile. Pass the
+	// relative binary path so the binary directory is not prepended twice.
+	m_pCurrentTask = HttpGetFile(m_aArchiveUrl, m_pStorage, UPDATE_ARCHIVE_PATH, IStorage::TYPE_ABSOLUTE);
 	m_pCurrentTask->HeaderString("User-Agent", CLIENT_NAME);
 	m_pCurrentTask->Timeout(CTimeout{10000, 0, 500, 10});
 	m_pCurrentTask->IpResolve(IPRESOLVE::V4);
