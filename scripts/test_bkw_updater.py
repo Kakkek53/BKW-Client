@@ -14,7 +14,8 @@ assert "StatusCode()" not in FIRST_PROBE
 assert "StartReleaseFetch(true)" in FIRST_PROBE
 assert "m_pCurrentTask->FailOnErrorStatus(false);" in UPDATER_SOURCE
 assert 'CreateFolder(aUpdateDir, IStorage::TYPE_ABSOLUTE)' not in UPDATER_SOURCE
-assert 'fs_makedir(aUpdateDir)' in UPDATER_SOURCE
+assert 'HttpGetFile(m_aArchiveUrl, m_pStorage, UPDATE_ARCHIVE_PATH, IStorage::TYPE_ABSOLUTE)' in UPDATER_SOURCE
+assert 'HttpGetFile(m_aArchiveUrl, m_pStorage, m_aArchivePath, IStorage::TYPE_ABSOLUTE)' not in UPDATER_SOURCE
 SOURCE = r'''
 #include <engine/client/updater.cpp>
 #include <cassert>
